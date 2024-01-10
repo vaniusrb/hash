@@ -499,6 +499,8 @@ mod hook;
 #[cfg(feature = "serde")]
 mod serde;
 
+#[cfg(feature = "std")]
+pub use self::report::CloneReport;
 pub use self::{
     compat::IntoReportCompat,
     context::Context,

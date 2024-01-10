@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, vec, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 #[cfg(nightly)]
 use core::error::Error;
 use core::{fmt, marker::PhantomData, mem, panic::Location};
@@ -8,6 +8,8 @@ use std::backtrace::{Backtrace, BacktraceStatus};
 use std::error::Error;
 #[cfg(feature = "std")]
 use std::process::ExitCode;
+#[cfg(feature = "std")]
+use std::sync::Mutex;
 
 #[cfg(feature = "spantrace")]
 use tracing_error::{SpanTrace, SpanTraceStatus};
@@ -644,6 +646,51 @@ impl<C> Report<C> {
         C: 'static,
     {
         crate::error::ReportError::from_ref(self)
+    }
+
+    pub fn move_report<T>(&mut self) -> Report<T> {
+        let frame = mem::replace(self.frames.as_mut(), Vec::with_capacity(1));
+        Report {
+            frames: Box::new(frame),
+            _context: PhantomData,
+        }
+    }
+}
+
+impl<C: PartialEq> PartialEq for Report<C> {
+    fn eq(&self, other: &Self) -> bool {
+        self._context == other._context
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone)]
+pub struct CloneReport<C> {
+    inner: Arc<Mutex<Report<C>>>,
+}
+
+#[cfg(feature = "std")]
+impl<C> From<CloneReport<C>> for Report<C> {
+    fn from(value: CloneReport<C>) -> Self {
+        let mut report = value.inner.lock().expect("mutex lock failed");
+        report.move_report()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<C> From<Report<C>> for CloneReport<C> {
+    fn from(value: Report<C>) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(value)),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<C: PartialEq> PartialEq for CloneReport<C> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.lock().expect("mutex lock failed")._context
+            == other.inner.lock().expect("mutex lock failed")._context
     }
 }
 
