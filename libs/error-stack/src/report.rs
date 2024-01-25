@@ -268,6 +268,13 @@ impl<C> Report<C> {
         Self::from_frame(Frame::from_context(context, Box::new([])))
     }
 
+    pub(crate) fn empty() -> Self {
+        Self {
+            frames: Box::<Vec<Frame>>::default(),
+            _context: PhantomData,
+        }
+    }
+
     #[track_caller]
     pub(crate) fn from_frame(frame: Frame) -> Self {
         #[cfg(nightly)]
@@ -647,14 +654,6 @@ impl<C> Report<C> {
     {
         crate::error::ReportError::from_ref(self)
     }
-
-    pub fn move_report<T>(&mut self) -> Report<T> {
-        let frame = mem::replace(self.frames.as_mut(), Vec::with_capacity(1));
-        Report {
-            frames: Box::new(frame),
-            _context: PhantomData,
-        }
-    }
 }
 
 impl<C: PartialEq> PartialEq for Report<C> {
@@ -670,10 +669,26 @@ pub struct CloneReport<C> {
 }
 
 #[cfg(feature = "std")]
+impl<C> core::fmt::Display for CloneReport<C> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let report = self.inner.lock().expect("mutex lock failed");
+        report.fmt(f)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<C> core::fmt::Debug for CloneReport<C> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let report = self.inner.lock().expect("mutex lock failed");
+        report.fmt(f)
+    }
+}
+
+#[cfg(feature = "std")]
 impl<C> From<CloneReport<C>> for Report<C> {
     fn from(value: CloneReport<C>) -> Self {
         let mut report = value.inner.lock().expect("mutex lock failed");
-        report.move_report()
+        mem::replace(&mut report, Self::empty())
     }
 }
 
