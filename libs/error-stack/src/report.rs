@@ -1,5 +1,7 @@
+#[cfg(feature = "std")]
+use alloc::sync::Arc;
 #[cfg_attr(feature = "std", allow(unused_imports))]
-use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, vec, vec::Vec};
 #[cfg(rust_1_81)]
 use core::error::Error;
 use core::{fmt, marker::PhantomData, mem, panic::Location};
@@ -682,59 +684,6 @@ impl<C> Report<C> {
         C: 'static,
     {
         crate::error::ReportError::from_ref(self)
-    }
-}
-
-impl<C: PartialEq> PartialEq for Report<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self._context == other._context
-    }
-}
-
-#[cfg(feature = "std")]
-#[derive(Clone)]
-pub struct CloneReport<C> {
-    inner: Arc<Mutex<Report<C>>>,
-}
-
-#[cfg(feature = "std")]
-impl<C> core::fmt::Display for CloneReport<C> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let report = self.inner.lock().expect("mutex lock failed");
-        report.fmt(f)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<C> core::fmt::Debug for CloneReport<C> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let report = self.inner.lock().expect("mutex lock failed");
-        report.fmt(f)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<C> From<CloneReport<C>> for Report<C> {
-    fn from(value: CloneReport<C>) -> Self {
-        let mut report = value.inner.lock().expect("mutex lock failed");
-        mem::replace(&mut report, Self::empty())
-    }
-}
-
-#[cfg(feature = "std")]
-impl<C> From<Report<C>> for CloneReport<C> {
-    fn from(value: Report<C>) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(value)),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl<C: PartialEq> PartialEq for CloneReport<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner.lock().expect("mutex lock failed")._context
-            == other.inner.lock().expect("mutex lock failed")._context
     }
 }
 
