@@ -1,13 +1,15 @@
-import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import {
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { GraphResolveDepths } from "@local/hash-subgraph";
+
+import { simplifyProperties } from "./simplify-properties.js";
+import type {
   HasSpatiallyPositionedContent,
   HasSpatiallyPositionedContentProperties,
-} from "@local/hash-isomorphic-utils/system-types/canvas";
-import {
+} from "./system-types/canvas.js";
+import type {
   HasIndexedContent,
   HasIndexedContentProperties,
-} from "@local/hash-isomorphic-utils/system-types/shared";
-import { GraphResolveDepths } from "@local/hash-subgraph";
+} from "./system-types/shared.js";
 
 /**
  * Get the `hasLeftEntity` and `hasRightEntity` resolve depths for a block
@@ -36,10 +38,11 @@ const isSpatiallyPositionedProperties = (
 };
 
 export const sortBlockCollectionLinks = <
-  LinkEntity extends HasSpatiallyPositionedContent | HasIndexedContent,
+  Left extends Entity<HasSpatiallyPositionedContent | HasIndexedContent>,
+  Right extends Entity<HasSpatiallyPositionedContent | HasIndexedContent>,
 >(
-  a: LinkEntity,
-  b: LinkEntity,
+  a: Left,
+  b: Right,
 ) => {
   if (
     isSpatiallyPositionedProperties(a.properties) ||

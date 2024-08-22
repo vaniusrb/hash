@@ -2,22 +2,30 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   ObjectDataType,
+  ObjectDataTypeWithMetadata,
   Text,
   TextDataType,
+  TextDataTypeWithMetadata,
   TextOutgoingLinkAndTarget,
   TextOutgoingLinksByLinkEntityTypeId,
   TextProperties,
+  TextPropertiesWithMetadata,
   TextualContentPropertyValue,
-} from "./shared";
+  TextualContentPropertyValueWithMetadata,
+} from "./shared.js";
 
 export type {
   ObjectDataType,
+  ObjectDataTypeWithMetadata,
   Text,
   TextDataType,
+  TextDataTypeWithMetadata,
   TextOutgoingLinkAndTarget,
   TextOutgoingLinksByLinkEntityTypeId,
   TextProperties,
+  TextPropertiesWithMetadata,
   TextualContentPropertyValue,
+  TextualContentPropertyValueWithMetadata,
 };

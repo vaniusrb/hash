@@ -1,9 +1,5 @@
-import { BlockMetadata, BlockVariant } from "@blockprotocol/core";
-import { EntityType, VersionedUrl } from "@blockprotocol/type-system";
-
-/** @todo: might need refactor: https://github.com/hashintel/dev/pull/206#discussion_r723210329 */
-// eslint-disable-next-line global-require
-const fetch = (globalThis as any).fetch ?? require("node-fetch");
+import type { BlockMetadata, BlockVariant } from "@blockprotocol/core";
+import type { EntityType, VersionedUrl } from "@blockprotocol/type-system";
 
 export interface HashBlockMeta extends BlockMetadata {
   componentId: string;
@@ -55,7 +51,6 @@ const configureAppReloadWhenBlockChanges = (
             window.location.reload();
           }
         } catch {
-          // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- error stringification may need improvement
           reportProblem(`Could not parse socket message: ${data}`);
         }
       });
@@ -217,7 +212,6 @@ export const fetchBlock = async (
 
 /**
  * @todo-0.3 replace this temporary domain with blockprotocol.org
- * https://app.asana.com/0/1203358502199087/1203788113163116/f
  */
 export const blockProtocolHubOrigin =
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- we don't want empty strings either

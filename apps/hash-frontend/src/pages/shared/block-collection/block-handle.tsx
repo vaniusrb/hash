@@ -1,14 +1,13 @@
-import { JsonObject } from "@blockprotocol/core";
+import type { JsonObject } from "@blockprotocol/core";
 import { faEllipsisVertical } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon, IconButton } from "@hashintel/design-system";
-import {
-  EntityStore,
-  isBlockEntity,
-} from "@local/hash-isomorphic-utils/entity-store";
+import type { EntityStore } from "@local/hash-isomorphic-utils/entity-store";
+import { isBlockEntity } from "@local/hash-isomorphic-utils/entity-store";
 import { Box } from "@mui/material";
 import { bindTrigger } from "material-ui-popup-state";
 import { usePopupState } from "material-ui-popup-state/hooks";
-import { forwardRef, ForwardRefRenderFunction } from "react";
+import type { ForwardRefRenderFunction } from "react";
+import { forwardRef } from "react";
 
 import { BlockConfigMenu } from "./block-config-menu/block-config-menu";
 import { useBlockContext } from "./block-context";
@@ -45,7 +44,7 @@ const BlockHandle: ForwardRefRenderFunction<
    * This lag will be eliminated when all updates are sent via collab, rather than some via the API.
    * @todo remove this comment when all updates are sent via collab
    */
-  const blockEntity = draftId ? entityStore.draft[draftId] ?? null : null;
+  const blockEntity = draftId ? (entityStore.draft[draftId] ?? null) : null;
 
   if (blockEntity && !isBlockEntity(blockEntity)) {
     throw new Error(`Non-block entity ${draftId} loaded into BlockView.`);
@@ -54,7 +53,10 @@ const BlockHandle: ForwardRefRenderFunction<
   const blockView = useBlockView();
 
   const updateChildEntity = (properties: JsonObject) => {
-    /** @todo properly type this part of the DraftEntity type https://app.asana.com/0/0/1203099452204542/f */
+    /**
+     *  @todo properly type this part of the DraftEntity type
+     *  @see https://linear.app/hash/issue/H-3000
+     */
     const childEntity = blockEntity?.blockChildEntity;
     if (!childEntity) {
       throw new Error(`No child entity on block to update`);

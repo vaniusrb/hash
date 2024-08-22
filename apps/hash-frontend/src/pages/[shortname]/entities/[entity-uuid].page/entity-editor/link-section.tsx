@@ -1,6 +1,7 @@
+import { LinkEntity } from "@local/hash-graph-sdk/entity";
 import { getRoots } from "@local/hash-subgraph/stdlib";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
-import { FunctionComponent, useMemo } from "react";
+import type { FunctionComponent } from "react";
+import { useMemo } from "react";
 
 import { LinkLabelWithSourceAndDestination } from "../../../../shared/link-label-with-source-and-destination";
 import { SectionWrapper } from "../../../shared/section-wrapper";
@@ -16,11 +17,7 @@ export const LinkSection: FunctionComponent = () => {
       throw new Error("No root entity found in entity editor subgraph.");
     }
 
-    if (!rootEntity.linkData) {
-      throw new Error("Link entity has no link data.");
-    }
-
-    return rootEntity as LinkEntity;
+    return new LinkEntity(rootEntity);
   }, [entitySubgraph]);
 
   return (

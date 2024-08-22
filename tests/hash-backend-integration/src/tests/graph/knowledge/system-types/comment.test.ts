@@ -1,29 +1,26 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import { createEntity } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
-import {
-  Block,
-  createBlock,
-} from "@apps/hash-api/src/graph/knowledge/system-types/block";
+import type { Block } from "@apps/hash-api/src/graph/knowledge/system-types/block";
+import { createBlock } from "@apps/hash-api/src/graph/knowledge/system-types/block";
 import {
   createComment,
   getCommentAuthor,
   getCommentParent,
   getCommentText,
 } from "@apps/hash-api/src/graph/knowledge/system-types/comment";
+import type { Page } from "@apps/hash-api/src/graph/knowledge/system-types/page";
 import {
   createPage,
   getPageBlocks,
-  Page,
 } from "@apps/hash-api/src/graph/knowledge/system-types/page";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { createDefaultAuthorizationRelationships } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { TextProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import { OwnedById } from "@local/hash-subgraph";
+import type { Text } from "@local/hash-isomorphic-utils/system-types/shared";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import {
@@ -32,15 +29,13 @@ import {
   waitForAfterHookTriggerToComplete,
 } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("Comment", () => {
   let testUser: User;
@@ -48,7 +43,6 @@ describe("Comment", () => {
   let testPage: Page;
 
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "commentTest", logger);
@@ -60,16 +54,18 @@ describe("Comment", () => {
       {
         ownedById: testUser.accountId as OwnedById,
         componentId: "text",
-        blockData: await createEntity(
+        blockData: await createEntity<Text>(
           graphContext,
           { actorId: testUser.accountId },
           {
             ownedById: testUser.accountId as OwnedById,
             entityTypeId: systemEntityTypes.text.entityTypeId,
             properties: {
-              "https://blockprotocol.org/@blockprotocol/types/property-type/textual-content/":
-                [],
-            } as TextProperties,
+              value: {
+                "https://blockprotocol.org/@blockprotocol/types/property-type/textual-content/":
+                  { value: [] },
+              },
+            },
             relationships: createDefaultAuthorizationRelationships({
               actorId: testUser.accountId,
             }),
@@ -91,14 +87,14 @@ describe("Comment", () => {
     });
 
     testBlock = pageBlocks[0]!.rightEntity;
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   it("createComment method can create a comment", async () => {

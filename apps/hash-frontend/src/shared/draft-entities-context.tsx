@@ -1,25 +1,22 @@
 import { useQuery } from "@apollo/client";
+import type { Entity } from "@local/hash-graph-sdk/entity";
 import {
   currentTimeInstantTemporalAxes,
   mapGqlSubgraphFieldsFragmentToSubgraph,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
-import { Entity, EntityRootType, Subgraph } from "@local/hash-subgraph/.";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
-import {
-  createContext,
-  FunctionComponent,
-  PropsWithChildren,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import type { FunctionComponent, PropsWithChildren } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
-import {
-  StructuralQueryEntitiesQuery,
-  StructuralQueryEntitiesQueryVariables,
+import type {
+  GetEntitySubgraphQuery,
+  GetEntitySubgraphQueryVariables,
 } from "../graphql/api-types.gen";
-import { structuralQueryEntitiesQuery } from "../graphql/queries/knowledge/entity.queries";
+import { getEntitySubgraphQuery } from "../graphql/queries/knowledge/entity.queries";
+import { useAuthInfo } from "../pages/shared/auth-info-context";
+import { pollInterval } from "./poll-interval";
 
 export type DraftEntitiesContextValue = {
   draftEntities?: Entity[];
@@ -41,53 +38,56 @@ export const useDraftEntities = () => {
   return draftEntitiesContext;
 };
 
-const draftEntitiesPollingInterval = 10_000;
-
 export const DraftEntitiesContextProvider: FunctionComponent<
   PropsWithChildren
 > = ({ children }) => {
   const [
     previouslyFetchedDraftEntitiesData,
     setPreviouslyFetchedDraftEntitiesData,
-  ] = useState<StructuralQueryEntitiesQuery>();
+  ] = useState<GetEntitySubgraphQuery>();
+
+  const { authenticatedUser } = useAuthInfo();
 
   const {
     data: draftEntitiesData,
     refetch,
     loading,
-  } = useQuery<
-    StructuralQueryEntitiesQuery,
-    StructuralQueryEntitiesQueryVariables
-  >(structuralQueryEntitiesQuery, {
-    variables: {
-      query: {
-        filter: {
-          all: [
-            {
-              equal: [{ path: ["draft"] }, { parameter: true }],
-            },
-            {
-              equal: [{ path: ["archived"] }, { parameter: false }],
-            },
-          ],
+  } = useQuery<GetEntitySubgraphQuery, GetEntitySubgraphQueryVariables>(
+    getEntitySubgraphQuery,
+    {
+      variables: {
+        request: {
+          filter: {
+            all: [
+              {
+                // @ts-expect-error -- Support null in Path parameter in structural queries in Node
+                //                     @see https://linear.app/hash/issue/H-1207
+                notEqual: [{ path: ["draftId"] }, null],
+              },
+              {
+                equal: [{ path: ["archived"] }, { parameter: false }],
+              },
+            ],
+          },
+          temporalAxes: currentTimeInstantTemporalAxes,
+          graphResolveDepths: zeroedGraphResolveDepths,
+          includeDrafts: true,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        graphResolveDepths: zeroedGraphResolveDepths,
-        includeDrafts: true,
+        includePermissions: false,
       },
-      includePermissions: false,
+      onCompleted: (data) => setPreviouslyFetchedDraftEntitiesData(data),
+      pollInterval,
+      fetchPolicy: "network-only",
+      skip: !authenticatedUser,
     },
-    onCompleted: (data) => setPreviouslyFetchedDraftEntitiesData(data),
-    pollInterval: draftEntitiesPollingInterval,
-    fetchPolicy: "network-only",
-  });
+  );
 
   const draftEntitiesSubgraph = useMemo(
     () =>
-      draftEntitiesData || previouslyFetchedDraftEntitiesData
+      (draftEntitiesData ?? previouslyFetchedDraftEntitiesData)
         ? mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
             (draftEntitiesData ?? previouslyFetchedDraftEntitiesData)!
-              .structuralQueryEntities.subgraph,
+              .getEntitySubgraph.subgraph,
           )
         : undefined,
     [draftEntitiesData, previouslyFetchedDraftEntitiesData],

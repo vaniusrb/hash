@@ -3,7 +3,7 @@ import {
   useEntitySubgraph,
   useGraphBlockModule,
 } from "@blockprotocol/graph/react";
-import { AutofillSuggestion } from "@blockprotocol/service/dist/mapbox-types";
+import type { AutofillSuggestion } from "@blockprotocol/service/dist/mapbox-types";
 import { faSearch } from "@fortawesome/free-solid-svg-icons";
 import {
   BlockErrorMessage,
@@ -28,7 +28,7 @@ import { SizeMe } from "react-sizeme";
 import { AddressCard, AddressCardLoading } from "./address-card";
 import { MapboxIcon } from "./icons/mapbox-icon";
 import { TriangleExclamationIcon } from "./icons/triangle-exclamation-icon";
-import {
+import type {
   Address as AddressEntity,
   AddressBlock,
   AddressBlockHasAddressLink,
@@ -40,7 +40,8 @@ import {
   HasMapImage,
   Image,
 } from "./types/generated/block-entity";
-import { Address, useMapbox } from "./use-mapbox";
+import type { Address } from "./use-mapbox";
+import { useMapbox } from "./use-mapbox";
 
 const INPUT_MAX_WIDTH = 420;
 const DEFAULT_ZOOM_LEVEL = 16;
@@ -90,7 +91,7 @@ export const addressTypeId =
   "https://blockprotocol.org/@hash/types/entity-type/address/v/2";
 
 const getOptionLabel = (option: AutofillSuggestion | string) =>
-  typeof option === "string" ? option : option.place_name ?? "";
+  typeof option === "string" ? option : (option.place_name ?? "");
 
 export const App: BlockComponent<BlockEntity> = ({
   graph: { blockEntitySubgraph, readonly },
@@ -292,7 +293,7 @@ export const App: BlockComponent<BlockEntity> = ({
   };
 
   const updateAddress = async (address?: Address) => {
-    if (readonly || !address) {
+    if (readonly ?? !address) {
       return;
     }
 

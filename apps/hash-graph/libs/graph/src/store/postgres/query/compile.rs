@@ -1,21 +1,28 @@
+use alloc::borrow::Cow;
+use core::iter::once;
 use std::collections::{HashMap, HashSet};
 
 use postgres_types::ToSql;
 use temporal_versioning::TimeAxis;
+use tracing::instrument;
 
 use crate::{
     store::{
         postgres::query::{
+            expression::{GroupByExpression, PostgresType},
+            statement::FromItem,
             table::{
-                EntityEditions, EntityEmbeddings, EntityTemporalMetadata, OntologyIds,
-                OntologyTemporalMetadata,
+                DataTypeEmbeddings, DatabaseColumn, EntityEmbeddings, EntityTemporalMetadata,
+                EntityTypeEmbeddings, JsonField, OntologyIds, OntologyTemporalMetadata,
+                PropertyTypeEmbeddings,
             },
-            Alias, AliasedColumn, AliasedTable, Column, Condition, Constant, Distinctness,
-            EqualityOperator, Expression, Function, JoinExpression, OrderByExpression, Ordering,
-            PostgresQueryPath, PostgresRecord, SelectExpression, SelectStatement, Table, Transpile,
-            WhereExpression, WindowStatement, WithExpression,
+            Alias, AliasedTable, Column, Condition, Distinctness, EqualityOperator, Expression,
+            Function, JoinExpression, OrderByExpression, PostgresQueryPath, PostgresRecord,
+            SelectExpression, SelectStatement, Table, Transpile, WhereExpression, WindowStatement,
+            WithExpression,
         },
-        query::{Filter, FilterExpression, Parameter, ParameterList, ParameterType},
+        query::{Filter, FilterExpression, Parameter, ParameterList, ParameterType, PathToken},
+        NullOrdering, Ordering, QueryRecord,
     },
     subgraph::temporal_axes::QueryTemporalAxes,
 };
@@ -24,6 +31,11 @@ use crate::{
 // - 'c relates to the lifetime of the `SelectCompiler` (most constrained by the SelectStatement)
 // - 'p relates to the lifetime of the parameters, should be the longest living as they have to
 //   outlive the transpiling process
+
+pub struct AppliedFilters {
+    draft: bool,
+    temporal_axes: bool,
+}
 
 pub struct TableInfo {
     tables: HashSet<AliasedTable>,
@@ -39,27 +51,35 @@ pub struct CompilerArtifacts<'p> {
     uses_cursor: bool,
 }
 
-pub struct SelectCompiler<'p, T> {
+struct PathSelection {
+    column: Expression,
+    index: usize,
+    distinctness: Distinctness,
+    ordering: Option<(Ordering, Option<NullOrdering>)>,
+}
+
+pub struct SelectCompiler<'p, 'q: 'p, T: QueryRecord> {
     statement: SelectStatement,
     artifacts: CompilerArtifacts<'p>,
     temporal_axes: Option<&'p QueryTemporalAxes>,
+    include_drafts: bool,
     table_hooks: HashMap<Table, fn(&mut Self, Alias)>,
+    selections: HashMap<&'p T::QueryPath<'q>, PathSelection>,
 }
 
-impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
+impl<'p, 'q: 'p, R: PostgresRecord> SelectCompiler<'p, 'q, R> {
     /// Creates a new, empty compiler.
     pub fn new(temporal_axes: Option<&'p QueryTemporalAxes>, include_drafts: bool) -> Self {
         let mut table_hooks = HashMap::<_, fn(&mut Self, Alias)>::new();
 
         if temporal_axes.is_some() {
-            table_hooks.insert(
-                Table::EntityTemporalMetadata,
-                Self::pin_entity_temporal_metadata_table,
-            );
             table_hooks.insert(Table::OntologyTemporalMetadata, Self::pin_ontology_table);
         }
-        if !include_drafts {
-            table_hooks.insert(Table::EntityEditions, Self::filter_drafts);
+        if temporal_axes.is_some() || !include_drafts {
+            table_hooks.insert(
+                Table::EntityTemporalMetadata,
+                Self::filter_temporal_metadata,
+            );
         }
 
         Self {
@@ -67,14 +87,18 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                 with: WithExpression::default(),
                 distinct: Vec::new(),
                 selects: Vec::new(),
-                from: R::base_table().aliased(Alias {
-                    condition_index: 0,
-                    chain_depth: 0,
-                    number: 0,
-                }),
+                from: FromItem::Table {
+                    table: R::base_table(),
+                    alias: Some(Alias {
+                        condition_index: 0,
+                        chain_depth: 0,
+                        number: 0,
+                    }),
+                },
                 joins: Vec::new(),
                 where_expression: WhereExpression::default(),
                 order_by_expression: OrderByExpression::default(),
+                group_by_expression: GroupByExpression::default(),
                 limit: None,
             },
             artifacts: CompilerArtifacts {
@@ -90,6 +114,8 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
             },
             temporal_axes,
             table_hooks,
+            include_drafts,
+            selections: HashMap::new(),
         }
     }
 
@@ -163,12 +189,12 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                     QueryTemporalAxes::DecisionTime { .. } => {
                         self.statement.where_expression.add_condition(
                             Condition::TimeIntervalContainsTimestamp(
-                                Expression::Column(
-                                    Column::OntologyTemporalMetadata(
+                                Expression::ColumnReference {
+                                    column: Column::OntologyTemporalMetadata(
                                         OntologyTemporalMetadata::TransactionTime,
-                                    )
-                                    .aliased(alias),
-                                ),
+                                    ),
+                                    table_alias: Some(alias),
+                                },
                                 Expression::Parameter(transaction_time_index),
                             ),
                         );
@@ -177,12 +203,12 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                         self.statement
                             .where_expression
                             .add_condition(Condition::Overlap(
-                                Expression::Column(
-                                    Column::OntologyTemporalMetadata(
+                                Expression::ColumnReference {
+                                    column: Column::OntologyTemporalMetadata(
                                         OntologyTemporalMetadata::TransactionTime,
-                                    )
-                                    .aliased(alias),
-                                ),
+                                    ),
+                                    table_alias: Some(alias),
+                                },
                                 Expression::Parameter(transaction_time_index),
                             ));
                     }
@@ -191,32 +217,26 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
         }
     }
 
-    fn filter_drafts(&mut self, alias: Alias) {
+    fn filter_temporal_metadata(&mut self, alias: Alias) {
         if self
             .artifacts
             .table_info
             .tables
-            .insert(Table::EntityEditions.aliased(alias))
+            .insert(Table::EntityTemporalMetadata.aliased(alias))
         {
-            self.statement
-                .where_expression
-                .add_condition(Condition::Equal(
-                    Some(Expression::Column(
-                        Column::EntityEditions(EntityEditions::Draft).aliased(alias),
-                    )),
-                    Some(Expression::Constant(Constant::Boolean(false))),
-                ));
-        }
-    }
+            if !self.include_drafts {
+                self.statement
+                    .where_expression
+                    .add_condition(Condition::Equal(
+                        Some(Expression::ColumnReference {
+                            column: Column::EntityTemporalMetadata(EntityTemporalMetadata::DraftId),
+                            table_alias: Some(alias),
+                        }),
+                        None,
+                    ));
+            }
 
-    fn pin_entity_temporal_metadata_table(&mut self, alias: Alias) {
-        if let Some(temporal_axes) = self.temporal_axes {
-            if self
-                .artifacts
-                .table_info
-                .tables
-                .insert(Table::EntityTemporalMetadata.aliased(alias))
-            {
+            if let Some(temporal_axes) = self.temporal_axes {
                 let pinned_axis = temporal_axes.pinned_time_axis();
                 let variable_axis = temporal_axes.variable_time_axis();
                 let pinned_time_index = self.time_index(temporal_axes, pinned_axis);
@@ -226,24 +246,24 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                 // the transaction time and vice versa.
                 self.statement.where_expression.add_condition(
                     Condition::TimeIntervalContainsTimestamp(
-                        Expression::Column(
-                            Column::EntityTemporalMetadata(EntityTemporalMetadata::from_time_axis(
-                                pinned_axis,
-                            ))
-                            .aliased(alias),
-                        ),
+                        Expression::ColumnReference {
+                            column: Column::EntityTemporalMetadata(
+                                EntityTemporalMetadata::from_time_axis(pinned_axis),
+                            ),
+                            table_alias: Some(alias),
+                        },
                         Expression::Parameter(pinned_time_index),
                     ),
                 );
                 self.statement
                     .where_expression
                     .add_condition(Condition::Overlap(
-                        Expression::Column(
-                            Column::EntityTemporalMetadata(EntityTemporalMetadata::from_time_axis(
-                                variable_axis,
-                            ))
-                            .aliased(alias),
-                        ),
+                        Expression::ColumnReference {
+                            column: Column::EntityTemporalMetadata(
+                                EntityTemporalMetadata::from_time_axis(variable_axis),
+                            ),
+                            table_alias: Some(alias),
+                        },
                         Expression::Parameter(variable_time_index),
                     ));
             }
@@ -254,70 +274,99 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
     ///
     /// Optionally, the added selection can be distinct or ordered by providing [`Distinctness`]
     /// and [`Ordering`].
-    pub fn add_selection_path<'q>(&mut self, path: &'p R::QueryPath<'q>) -> usize
+    pub fn add_selection_path(&mut self, path: &'p R::QueryPath<'q>) -> usize
     where
         R::QueryPath<'q>: PostgresQueryPath,
     {
-        let column = self.compile_path_column(path);
-        self.statement
-            .selects
-            .push(SelectExpression::from_column(column, None));
-        self.statement.selects.len() - 1
+        self.add_distinct_selection_with_ordering(path, Distinctness::Indistinct, None)
     }
 
     /// Adds a new path to the selection.
     ///
     /// Optionally, the added selection can be distinct or ordered by providing [`Distinctness`]
     /// and [`Ordering`].
-    pub fn add_distinct_selection_with_ordering<'q>(
+    pub fn add_distinct_selection_with_ordering(
         &mut self,
         path: &'p R::QueryPath<'q>,
         distinctness: Distinctness,
-        ordering: Option<Ordering>,
+        ordering: Option<(Ordering, Option<NullOrdering>)>,
     ) -> usize
     where
         R::QueryPath<'q>: PostgresQueryPath,
     {
-        let column = self.compile_path_column(path);
-        if distinctness == Distinctness::Distinct {
-            self.statement.distinct.push(column);
+        if let Some(stored) = self.selections.get_mut(path) {
+            if distinctness == Distinctness::Distinct
+                && stored.distinctness == Distinctness::Indistinct
+            {
+                self.statement.distinct.push(stored.column.clone());
+                stored.distinctness = Distinctness::Distinct;
+            }
+            if stored.ordering.is_none()
+                && let Some((ordering, nulls)) = ordering
+            {
+                self.statement
+                    .order_by_expression
+                    .push(stored.column.clone(), ordering, nulls);
+                stored.ordering = Some((ordering, nulls));
+            }
+            stored.index
+        } else {
+            let expression = self.compile_path_column(path);
+            self.statement
+                .selects
+                .push(SelectExpression::new(expression.clone(), None));
+
+            if distinctness == Distinctness::Distinct {
+                self.statement.distinct.push(expression.clone());
+            }
+            if let Some((ordering, nulls)) = ordering {
+                self.statement
+                    .order_by_expression
+                    .push(expression.clone(), ordering, nulls);
+            }
+
+            let index = self.statement.selects.len() - 1;
+            self.selections.insert(
+                path,
+                PathSelection {
+                    column: expression,
+                    index,
+                    distinctness,
+                    ordering,
+                },
+            );
+            index
         }
-        if let Some(ordering) = ordering {
-            self.statement.order_by_expression.push(column, ordering);
-        }
-        self.statement
-            .selects
-            .push(SelectExpression::from_column(column, None));
-        self.statement.selects.len() - 1
     }
 
     /// Adds a new path to the selection which can be used as cursor.
-    pub fn add_cursor_selection<'q: 'p>(
+    pub fn add_cursor_selection(
         &mut self,
         path: &'p R::QueryPath<'q>,
+        lhs: impl FnOnce(Expression) -> Expression,
+        rhs: Option<Expression>,
         ordering: Ordering,
-        condition: impl FnOnce(Expression) -> Condition,
+        null_ordering: Option<NullOrdering>,
     ) -> usize
     where
         R::QueryPath<'q>: PostgresQueryPath,
     {
         let column = self.compile_path_column(path);
-        self.statement.distinct.push(column);
-        self.statement.order_by_expression.push(column, ordering);
         self.statement
             .where_expression
-            .add_condition(condition(Expression::Column(column)));
-        self.statement
-            .selects
-            .push(SelectExpression::from_column(column, None));
+            .add_cursor(lhs(column), rhs, ordering, null_ordering);
         self.artifacts.uses_cursor = true;
-        self.statement.selects.len() - 1
+        self.add_distinct_selection_with_ordering(
+            path,
+            Distinctness::Distinct,
+            Some((ordering, null_ordering)),
+        )
     }
 
     /// Adds a new filter to the selection.
-    pub fn add_filter<'f: 'p>(&mut self, filter: &'p Filter<'f, R>)
+    pub fn add_filter(&mut self, filter: &'p Filter<'q, R>)
     where
-        R::QueryPath<'f>: PostgresQueryPath,
+        R::QueryPath<'q>: PostgresQueryPath,
     {
         let condition = self.compile_filter(filter);
         self.artifacts.condition_index += 1;
@@ -325,6 +374,7 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
     }
 
     /// Transpiles the statement into SQL and the parameter to be passed to a prepared statement.
+    #[instrument(level = "info", skip(self))]
     pub fn compile(&self) -> (String, &[&'p (dyn ToSql + Sync)]) {
         (
             self.statement.transpile_to_string(),
@@ -334,9 +384,9 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
 
     /// Compiles a [`Filter`] to a `Condition`.
     #[expect(clippy::too_many_lines)]
-    pub fn compile_filter<'f: 'p>(&mut self, filter: &'p Filter<'f, R>) -> Condition
+    pub fn compile_filter(&mut self, filter: &'p Filter<'q, R>) -> Condition
     where
-        R::QueryPath<'f>: PostgresQueryPath,
+        R::QueryPath<'q>: PostgresQueryPath,
     {
         if let Some(condition) = self.compile_special_filter(filter) {
             return condition;
@@ -368,6 +418,22 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                 rhs.as_ref()
                     .map(|expression| self.compile_filter_expression(expression).0),
             ),
+            Filter::Greater(lhs, rhs) => Condition::Greater(
+                self.compile_filter_expression(lhs).0,
+                self.compile_filter_expression(rhs).0,
+            ),
+            Filter::GreaterOrEqual(lhs, rhs) => Condition::GreaterOrEqual(
+                self.compile_filter_expression(lhs).0,
+                self.compile_filter_expression(rhs).0,
+            ),
+            Filter::Less(lhs, rhs) => Condition::Less(
+                self.compile_filter_expression(lhs).0,
+                self.compile_filter_expression(rhs).0,
+            ),
+            Filter::LessOrEqual(lhs, rhs) => Condition::LessOrEqual(
+                self.compile_filter_expression(lhs).0,
+                self.compile_filter_expression(rhs).0,
+            ),
             Filter::CosineDistance(lhs, rhs, max) => match (lhs, rhs) {
                 (FilterExpression::Path(path), FilterExpression::Parameter(parameter))
                 | (FilterExpression::Parameter(parameter), FilterExpression::Path(path)) => {
@@ -379,62 +445,125 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                         "Cannot use distance function with limit or cursor",
                     );
 
-                    let path_column = self.compile_path_column(path);
+                    let path_alias = self.add_join_statements(path);
                     let parameter_expression = self.compile_parameter(parameter).0;
                     let maximum_expression = self.compile_filter_expression(max).0;
 
-                    let distance_column = Column::EntityEmbeddings(EntityEmbeddings::Distance)
-                        .aliased(path_column.alias);
+                    let (embeddings_column, None) = path.terminating_column() else {
+                        panic!("Only embeddings are supported for cosine distance");
+                    };
+                    let embeddings_table = embeddings_column.table();
+                    let embeddings_alias = Alias {
+                        condition_index: 0,
+                        chain_depth: 0,
+                        number: 0,
+                    };
+                    let distance_expression = Expression::ColumnReference {
+                        column: match embeddings_table {
+                            Table::DataTypeEmbeddings => {
+                                Column::DataTypeEmbeddings(DataTypeEmbeddings::Distance)
+                            }
+                            Table::PropertyTypeEmbeddings => {
+                                Column::PropertyTypeEmbeddings(PropertyTypeEmbeddings::Distance)
+                            }
+                            Table::EntityTypeEmbeddings => {
+                                Column::EntityTypeEmbeddings(EntityTypeEmbeddings::Distance)
+                            }
+                            Table::EntityEmbeddings => {
+                                Column::EntityEmbeddings(EntityEmbeddings::Distance)
+                            }
+                            _ => panic!("Only embeddings are supported for cosine distance"),
+                        },
+                        table_alias: Some(path_alias),
+                    };
 
                     if let Some(last_join) = self.statement.joins.last_mut() {
                         assert!(
-                            last_join.table.table == Table::EntityEmbeddings
-                                || last_join.statement.is_some(),
+                            matches!(
+                                last_join.table.table,
+                                Table::DataTypeEmbeddings
+                                    | Table::PropertyTypeEmbeddings
+                                    | Table::EntityTypeEmbeddings
+                                    | Table::EntityEmbeddings
+                            ) || last_join.statement.is_some(),
                             "Only a single embedding for the same path is allowed"
                         );
 
-                        let table = AliasedTable {
-                            table: Table::EntityEmbeddings,
-                            alias: Alias {
-                                condition_index: 0,
-                                chain_depth: 0,
-                                number: 0,
-                            },
-                        };
-                        let embeddings_column = AliasedColumn {
-                            column: Column::EntityEmbeddings(EntityEmbeddings::Embedding),
-                            alias: table.alias,
+                        let select_columns = match embeddings_table {
+                            Table::DataTypeEmbeddings => {
+                                &[Column::DataTypeEmbeddings(DataTypeEmbeddings::OntologyId)]
+                                    as &[_]
+                            }
+                            Table::PropertyTypeEmbeddings => &[Column::PropertyTypeEmbeddings(
+                                PropertyTypeEmbeddings::OntologyId,
+                            )],
+                            Table::EntityTypeEmbeddings => &[Column::EntityTypeEmbeddings(
+                                EntityTypeEmbeddings::OntologyId,
+                            )],
+                            Table::EntityEmbeddings => &[
+                                Column::EntityEmbeddings(EntityEmbeddings::WebId),
+                                Column::EntityEmbeddings(EntityEmbeddings::EntityUuid),
+                            ],
+                            _ => unreachable!(),
                         };
 
                         last_join.statement = Some(SelectStatement {
                             with: WithExpression::default(),
                             distinct: vec![],
-                            selects: vec![
-                                SelectExpression::new(Expression::Asterisk, None),
-                                SelectExpression::new(
-                                    Expression::CosineDistance(
-                                        Box::new(Expression::Column(embeddings_column)),
-                                        Box::new(parameter_expression),
-                                    ),
+                            selects: select_columns
+                                .iter()
+                                .map(|&column| {
+                                    SelectExpression::new(
+                                        Expression::ColumnReference {
+                                            column,
+                                            table_alias: Some(embeddings_alias),
+                                        },
+                                        None,
+                                    )
+                                })
+                                .chain(once(SelectExpression::new(
+                                    Expression::Function(Function::Min(Box::new(
+                                        Expression::CosineDistance(
+                                            Box::new(Expression::ColumnReference {
+                                                column: embeddings_column,
+                                                table_alias: Some(embeddings_alias),
+                                            }),
+                                            Box::new(parameter_expression),
+                                        ),
+                                    ))),
                                     Some("distance"),
-                                ),
-                            ],
-                            from: table,
+                                )))
+                                .collect(),
+                            from: FromItem::Table {
+                                table: embeddings_table,
+                                alias: Some(embeddings_alias),
+                            },
                             joins: vec![],
                             where_expression: WhereExpression::default(),
                             order_by_expression: OrderByExpression::default(),
+                            group_by_expression: GroupByExpression {
+                                expressions: select_columns
+                                    .iter()
+                                    .map(|&column| Expression::ColumnReference {
+                                        column,
+                                        table_alias: Some(embeddings_alias),
+                                    })
+                                    .collect(),
+                            },
                             limit: None,
                         });
                     }
 
-                    self.statement
-                        .order_by_expression
-                        .push(distance_column, Ordering::Ascending);
+                    self.statement.order_by_expression.insert_front(
+                        distance_expression.clone(),
+                        Ordering::Ascending,
+                        None,
+                    );
                     self.statement
                         .selects
-                        .push(SelectExpression::from_column(distance_column, None));
-                    self.statement.distinct.push(distance_column);
-                    Condition::LessOrEqual(Expression::Column(distance_column), maximum_expression)
+                        .push(SelectExpression::new(distance_expression.clone(), None));
+                    self.statement.distinct.push(distance_expression.clone());
+                    Condition::LessOrEqual(distance_expression, maximum_expression)
                 }
                 _ => panic!(
                     "Cosine distance is only supported with exactly one `path` and one \
@@ -509,7 +638,7 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
     //          statement to ensure compatibility
     // TODO: Remove CTE to allow limit or cursor selection
     //   see https://linear.app/hash/issue/H-1442
-    fn compile_latest_ontology_version_filter<'q>(
+    fn compile_latest_ontology_version_filter(
         &mut self,
         path: &R::QueryPath<'q>,
         operator: EqualityOperator,
@@ -522,11 +651,12 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
             "Cannot use latest version filter with limit or cursor",
         );
 
-        let version_column = Column::OntologyIds(OntologyIds::Version).aliased(Alias {
+        let version_column = Column::OntologyIds(OntologyIds::Version);
+        let alias = Alias {
             condition_index: 0,
             chain_depth: 0,
             number: 0,
-        });
+        };
 
         // Add a WITH expression selecting the partitioned version
         self.statement.with.add_statement(
@@ -539,30 +669,41 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                     SelectExpression::new(
                         Expression::Window(
                             Box::new(Expression::Function(Function::Max(Box::new(
-                                Expression::Column(version_column),
+                                Expression::ColumnReference {
+                                    column: version_column,
+                                    table_alias: Some(alias),
+                                },
                             )))),
-                            WindowStatement::partition_by(
-                                Column::OntologyIds(OntologyIds::BaseUrl)
-                                    .aliased(version_column.alias),
-                            ),
+                            WindowStatement::partition_by(Expression::ColumnReference {
+                                column: Column::OntologyIds(OntologyIds::BaseUrl),
+                                table_alias: Some(alias),
+                            }),
                         ),
                         Some("latest_version"),
                     ),
                 ],
-                from: version_column.table(),
+                from: FromItem::Table {
+                    table: version_column.table(),
+                    alias: Some(alias),
+                },
                 joins: vec![],
                 where_expression: WhereExpression::default(),
                 order_by_expression: OrderByExpression::default(),
+                group_by_expression: GroupByExpression::default(),
                 limit: None,
             },
         );
 
         let alias = self.add_join_statements(path);
         // Join the table of `path` and compare the version to the latest version
-        let latest_version_expression = Some(Expression::Column(
-            Column::OntologyIds(OntologyIds::LatestVersion).aliased(alias),
-        ));
-        let version_expression = Some(Expression::Column(version_column.column.aliased(alias)));
+        let latest_version_expression = Some(Expression::ColumnReference {
+            column: Column::OntologyIds(OntologyIds::LatestVersion),
+            table_alias: Some(alias),
+        });
+        let version_expression = Some(Expression::ColumnReference {
+            column: version_column,
+            table_alias: Some(alias),
+        });
 
         match operator {
             EqualityOperator::Equal => {
@@ -579,9 +720,9 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
     ///
     /// The following [`Filter`]s will be special cased:
     /// - Comparing the `"version"` field on [`Table::OntologyIds`] with `"latest"` for equality.
-    fn compile_special_filter<'f: 'p>(&mut self, filter: &Filter<'f, R>) -> Option<Condition>
+    fn compile_special_filter(&mut self, filter: &'p Filter<'q, R>) -> Option<Condition>
     where
-        R::QueryPath<'f>: PostgresQueryPath,
+        R::QueryPath<'q>: PostgresQueryPath,
     {
         match filter {
             Filter::Equal(lhs, rhs) | Filter::NotEqual(lhs, rhs) => match (lhs, rhs) {
@@ -592,7 +733,7 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                 | (
                     Some(FilterExpression::Parameter(Parameter::Text(parameter))),
                     Some(FilterExpression::Path(path)),
-                ) => match (path.terminating_column(), filter, parameter.as_ref()) {
+                ) => match (path.terminating_column().0, filter, parameter.as_ref()) {
                     (Column::OntologyIds(OntologyIds::Version), Filter::Equal(..), "latest") => {
                         Some(
                             self.compile_latest_ontology_version_filter(
@@ -615,17 +756,18 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
         }
     }
 
-    pub fn compile_path_column<'q>(&mut self, path: &'p R::QueryPath<'q>) -> AliasedColumn
+    pub fn compile_path_column(&mut self, path: &'p R::QueryPath<'q>) -> Expression
     where
         R::QueryPath<'q>: PostgresQueryPath,
     {
-        let (column, parameter) = path
-            .terminating_column()
-            .into_owned(self.artifacts.parameters.len() + 1);
-
-        if let Some(parameter) = parameter {
-            self.artifacts.parameters.push(parameter);
-        };
+        let (column, json_field) = path.terminating_column();
+        let parameter = json_field.map(|field| {
+            let (field, parameter) = field.into_owned(self.artifacts.parameters.len() + 1);
+            if let Some(parameter) = parameter {
+                self.artifacts.parameters.push(parameter);
+            }
+            field
+        });
 
         let alias = self.add_join_statements(path);
 
@@ -633,7 +775,40 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
             hook(self, alias);
         }
 
-        column.aliased(alias)
+        let column_expression = Expression::ColumnReference {
+            column,
+            table_alias: Some(alias),
+        };
+
+        match parameter {
+            None => column_expression,
+            Some(JsonField::JsonPath(path)) => {
+                unreachable!("JsonPath `{path}` should be handled by now")
+            }
+            Some(JsonField::JsonPathParameter(index)) => {
+                Expression::Function(Function::JsonPathQueryFirst(
+                    Box::new(column_expression),
+                    Box::new(Expression::Cast(
+                        Box::new(Expression::Cast(
+                            Box::new(Expression::Parameter(index)),
+                            PostgresType::Text,
+                        )),
+                        PostgresType::JsonPath,
+                    )),
+                ))
+            }
+            Some(JsonField::StaticText(field)) => {
+                Expression::Function(Function::JsonExtractAsText(
+                    Box::new(column_expression),
+                    PathToken::Field(Cow::Borrowed(field)),
+                ))
+            }
+        }
+    }
+
+    pub fn add_parameter(&mut self, parameter: &'p (dyn ToSql + Sync)) -> Expression {
+        self.artifacts.parameters.push(parameter);
+        Expression::Parameter(self.artifacts.parameters.len())
     }
 
     pub fn compile_parameter<'f: 'p>(
@@ -659,7 +834,7 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
             }
             Parameter::Vector(vector) => {
                 self.artifacts.parameters.push(vector);
-                ParameterType::Vector
+                ParameterType::Vector(Box::new(ParameterType::F64))
             }
             Parameter::Any(json) => {
                 self.artifacts.parameters.push(json);
@@ -685,18 +860,22 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
         )
     }
 
-    pub fn compile_filter_expression<'f: 'p>(
+    pub fn compile_filter_expression(
         &mut self,
-        expression: &'p FilterExpression<'f, R>,
+        expression: &'p FilterExpression<'q, R>,
     ) -> (Expression, ParameterType)
     where
-        R::QueryPath<'f>: PostgresQueryPath,
+        R::QueryPath<'q>: PostgresQueryPath,
     {
         match expression {
             FilterExpression::Path(path) => {
-                let column = self.compile_path_column(path);
-                let parameter_type = column.column.parameter_type();
-                (Expression::Column(column), parameter_type)
+                let (column, json_field) = path.terminating_column();
+                let parameter_type = if let Some(JsonField::StaticText(_)) = json_field {
+                    ParameterType::Text
+                } else {
+                    column.parameter_type()
+                };
+                (self.compile_path_column(path), parameter_type)
             }
             FilterExpression::Parameter(parameter) => self.compile_parameter(parameter),
         }
@@ -707,7 +886,19 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
         parameters: &'p ParameterList<'f>,
     ) -> (Expression, ParameterType) {
         let parameter_type = match parameters {
-            ParameterList::Uuid(uuids) => {
+            ParameterList::DataTypeIds(uuids) => {
+                self.artifacts.parameters.push(uuids);
+                ParameterType::Uuid
+            }
+            ParameterList::PropertyTypeIds(uuids) => {
+                self.artifacts.parameters.push(uuids);
+                ParameterType::Uuid
+            }
+            ParameterList::EntityTypeIds(uuids) => {
+                self.artifacts.parameters.push(uuids);
+                ParameterType::Uuid
+            }
+            ParameterList::EntityEditionIds(uuids) => {
                 self.artifacts.parameters.push(uuids);
                 ParameterType::Uuid
             }
@@ -724,11 +915,18 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
     /// compiled, each subsequent call will result in a new join-chain.
     ///
     /// [`Relation`]: super::table::Relation
-    fn add_join_statements<'q>(&mut self, path: &R::QueryPath<'q>) -> Alias
+    fn add_join_statements(&mut self, path: &R::QueryPath<'q>) -> Alias
     where
         R::QueryPath<'q>: PostgresQueryPath,
     {
-        let mut current_table = self.statement.from;
+        let mut current_table = AliasedTable {
+            table: R::base_table(),
+            alias: Alias {
+                condition_index: 0,
+                chain_depth: 0,
+                number: 0,
+            },
+        };
 
         if let Some(hook) = self.table_hooks.get(&current_table.table) {
             hook(self, current_table.alias);
@@ -755,7 +953,7 @@ impl<'p, R: PostgresRecord> SelectCompiler<'p, R> {
                 //       We, however, need to make sure, that we only alter a join statement with a
                 //       table we don't require anymore.
                 //       The following code is a first attempt at this, but it is not working yet.
-                //  see: https://app.asana.com/0/0/1204165137291093/f
+                //   see https://linear.app/hash/issue/H-3015
                 // if let Some(last_join) = self.statement.joins.pop() {
                 //     // Check if we are joining on the same column as the previous join
                 //     if last_join.join == current_column

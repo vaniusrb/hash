@@ -1,12 +1,15 @@
 import { OntologyChip } from "@hashintel/design-system";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { PropertyObject } from "@local/hash-graph-types/entity";
 import { frontendDomain } from "@local/hash-isomorphic-utils/environment";
 import { blockProtocolPropertyTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { Entity, EntityPropertiesObject } from "@local/hash-subgraph";
 import { NextSeo } from "next-seo";
-import { ReactNode, useState } from "react";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { useSnackbar } from "../../../../components/hooks/use-snackbar";
-import { EntityEditor, EntityEditorProps } from "./entity-editor";
+import type { EntityEditorProps } from "./entity-editor";
+import { EntityEditor } from "./entity-editor";
 import { EntityPageWrapper } from "./entity-page-wrapper";
 import { EntityPageHeader } from "./entity-page-wrapper/entity-page-header";
 import { QueryEditorPage } from "./query-editor-page";
@@ -21,9 +24,7 @@ interface EntityEditorPageProps extends EntityEditorProps {
   isQueryEntity?: boolean;
   isDraft?: boolean;
   isModifyingEntity?: boolean;
-  handleSaveChanges: (
-    overrideProperties?: EntityPropertiesObject,
-  ) => Promise<void>;
+  handleSaveChanges: (overrideProperties?: PropertyObject) => Promise<void>;
 }
 
 export const EntityEditorPage = ({
@@ -41,7 +42,7 @@ export const EntityEditorPage = ({
   const [shouldShowQueryEditor, setShouldShowQueryEditor] = useState(true);
   const { triggerSnackbar } = useSnackbar();
 
-  const { entitySubgraph, replaceWithLatestDbVersion } = entityEditorProps;
+  const { entitySubgraph, onEntityUpdated } = entityEditorProps;
 
   return (
     <>
@@ -80,7 +81,7 @@ export const EntityEditorPage = ({
               entitySubgraph={entitySubgraph}
               isModifyingEntity={isModifyingEntity}
               /** @todo: figure out how to replace the entity in the form state directly */
-              onEntityUpdated={() => replaceWithLatestDbVersion()}
+              onEntityUpdated={onEntityUpdated}
               entityLabel={entityLabel}
               editBar={editBar}
               chip={
@@ -89,6 +90,7 @@ export const EntityEditorPage = ({
                   path={`${owner}/entities/${entityUuid}`}
                 />
               }
+              showTabs
             />
           }
         >

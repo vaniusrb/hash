@@ -1,5 +1,6 @@
-import { EntityType, PropertyType } from "@blockprotocol/type-system/slim";
-import { BaseUrl, EntityId } from "@local/hash-subgraph";
+import type { EntityType, PropertyType } from "@blockprotocol/type-system/slim";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 
 export type TextToken =
   | {
@@ -26,8 +27,6 @@ export type TextToken =
       linkEntityTypeBaseUrl?: BaseUrl;
     };
 
-export type UnknownEntityProperties = {};
-
 export type SystemDefinedProperties = "$schema" | "kind" | "$id";
 
 export type ConstructPropertyTypeParams = Omit<
@@ -47,6 +46,16 @@ export type UserPermissions = {
   editPermissions: boolean;
 };
 
+export type UserPermissionsOnEntityType = {
+  view: boolean;
+  edit: boolean;
+  instantiate: boolean;
+};
+
 export type UserPermissionsOnEntities = {
   [key: EntityId]: UserPermissions | undefined;
+};
+
+export const isNotNullish = <T>(value: T): value is NonNullable<T> => {
+  return value !== null && value !== undefined;
 };

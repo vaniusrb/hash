@@ -1,25 +1,71 @@
 import { useQuery } from "@apollo/client";
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
+  currentTimeInstantTemporalAxes,
   mapGqlSubgraphFieldsFragmentToSubgraph,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
-import {
-  BaseUrl,
-  EntityRootType,
-  GraphResolveDepths,
-  OwnedById,
-} from "@local/hash-subgraph";
+import type { EntityRootType, GraphResolveDepths } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
 import { useMemo } from "react";
 
-import {
-  QueryEntitiesQuery,
+import type {
+  GetEntitySubgraphQuery,
+  GetEntitySubgraphQueryVariables,
   QueryEntitiesQueryVariables,
 } from "../graphql/api-types.gen";
-import { queryEntitiesQuery } from "../graphql/queries/knowledge/entity.queries";
+import {
+  getEntitySubgraphQuery,
+  queryEntitiesQuery,
+} from "../graphql/queries/knowledge/entity.queries";
 import { apolloClient } from "../lib/apollo-client";
-import { EntityTypeEntitiesContextValue } from "./entity-type-entities-context";
+import type { EntityTypeEntitiesContextValue } from "./entity-type-entities-context";
+
+export const generateUseEntityTypeEntitiesQueryVariables = (params: {
+  ownedById?: OwnedById;
+  entityTypeBaseUrl?: BaseUrl;
+  entityTypeId?: VersionedUrl;
+  graphResolveDepths?: Partial<GraphResolveDepths>;
+}): QueryEntitiesQueryVariables => ({
+  operation: {
+    multiFilter: {
+      filters: [
+        ...(params.ownedById
+          ? [
+              {
+                field: ["ownedById"],
+                operator: "EQUALS" as const,
+                value: params.ownedById,
+              },
+            ]
+          : []),
+        ...(params.entityTypeBaseUrl
+          ? [
+              {
+                field: ["metadata", "entityTypeBaseUrl"],
+                operator: "EQUALS" as const,
+                value: params.entityTypeBaseUrl,
+              },
+            ]
+          : params.entityTypeId
+            ? [
+                {
+                  field: ["metadata", "entityTypeId"],
+                  operator: "EQUALS" as const,
+                  value: params.entityTypeId,
+                },
+              ]
+            : []),
+      ],
+      operator: "AND",
+    },
+  },
+  ...zeroedGraphResolveDepths,
+  ...params.graphResolveDepths,
+  includePermissions: false,
+});
 
 export const useEntityTypeEntities = (params: {
   entityTypeBaseUrl?: BaseUrl;
@@ -30,52 +76,55 @@ export const useEntityTypeEntities = (params: {
   const { entityTypeBaseUrl, entityTypeId, ownedById, graphResolveDepths } =
     params;
 
-  const variables = useMemo<QueryEntitiesQueryVariables>(
+  const variables = useMemo<GetEntitySubgraphQueryVariables>(
     () => ({
-      operation: {
-        multiFilter: {
-          filters: [
+      request: {
+        filter: {
+          all: [
             ...(ownedById
               ? [
                   {
-                    field: ["ownedById"],
-                    operator: "EQUALS" as const,
-                    value: ownedById,
+                    equal: [{ path: ["ownedById"] }, { parameter: ownedById }],
                   },
                 ]
               : []),
             ...(entityTypeBaseUrl
               ? [
                   {
-                    field: ["metadata", "entityTypeBaseUrl"],
-                    operator: "EQUALS" as const,
-                    value: entityTypeBaseUrl,
+                    equal: [
+                      { path: ["type", "baseUrl"] },
+                      { parameter: entityTypeBaseUrl },
+                    ],
                   },
                 ]
               : entityTypeId
                 ? [
                     {
-                      field: ["metadata", "entityTypeId"],
-                      operator: "EQUALS" as const,
-                      value: entityTypeId,
+                      equal: [
+                        { path: ["type", "versionedUrl"] },
+                        { parameter: entityTypeId },
+                      ],
                     },
                   ]
                 : []),
           ],
-          operator: "AND",
         },
+        graphResolveDepths: {
+          ...zeroedGraphResolveDepths,
+          ...graphResolveDepths,
+        },
+        includeDrafts: false,
+        temporalAxes: currentTimeInstantTemporalAxes,
       },
-      ...zeroedGraphResolveDepths,
-      ...graphResolveDepths,
       includePermissions: false,
     }),
     [entityTypeBaseUrl, graphResolveDepths, entityTypeId, ownedById],
   );
 
   const { data, loading, refetch } = useQuery<
-    QueryEntitiesQuery,
-    QueryEntitiesQueryVariables
-  >(queryEntitiesQuery, {
+    GetEntitySubgraphQuery,
+    GetEntitySubgraphQueryVariables
+  >(getEntitySubgraphQuery, {
     fetchPolicy: "cache-and-network",
     variables,
   });
@@ -85,11 +134,15 @@ export const useEntityTypeEntities = (params: {
     [variables],
   );
 
-  const subgraph = data?.queryEntities.subgraph
-    ? mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
-        data.queryEntities.subgraph,
-      )
-    : undefined;
+  const subgraph = useMemo(
+    () =>
+      data?.getEntitySubgraph.subgraph
+        ? mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
+            data.getEntitySubgraph.subgraph,
+          )
+        : undefined,
+    [data?.getEntitySubgraph.subgraph],
+  );
 
   const entities = useMemo(
     () => (subgraph ? getRoots(subgraph) : undefined),

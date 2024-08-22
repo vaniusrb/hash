@@ -1,11 +1,15 @@
-import { BaseUrl, VersionedUrl } from "@blockprotocol/type-system";
-import { faAdd, faLink } from "@fortawesome/free-solid-svg-icons";
+import type { BaseUrl, VersionedUrl } from "@blockprotocol/type-system";
+import { faAdd, faLink, faList } from "@fortawesome/free-solid-svg-icons";
 import { ArrowUpRightIcon } from "@hashintel/design-system";
 import { pluralize } from "@local/hash-isomorphic-utils/pluralize";
+import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
 import { Menu } from "@mui/material";
-import { bindMenu, PopupState } from "material-ui-popup-state/hooks";
-import { FunctionComponent, useState } from "react";
+import type { PopupState } from "material-ui-popup-state/hooks";
+import { bindMenu } from "material-ui-popup-state/hooks";
+import type { FunctionComponent } from "react";
+import { useState } from "react";
 
+import { useEntityTypesContextRequired } from "../../../entity-types-context/hooks/use-entity-types-context-required";
 import { useFrozenValue } from "../../../frozen";
 import { EntityTypeMenuItem } from "./entity-type-menu-item";
 
@@ -26,14 +30,20 @@ export const EntityTypeMenu: FunctionComponent<EntityTypeMenuProps> = ({
   const [copied, setCopied] = useState(false);
   const copiedFrozen = useFrozenValue(copied, !popupState.isOpen);
 
+  const { isSpecialEntityTypeLookup } = useEntityTypesContextRequired();
+
+  const isLinkEntityType = isSpecialEntityTypeLookup?.[entityTypeId]?.isLink;
+
   return (
     <Menu {...bindMenu(popupState)}>
-      <EntityTypeMenuItem
-        title={`Create new ${pluralize.singular(title)}`}
-        icon={faAdd}
-        href={`/new/entity?entity-type-id=${entityTypeId}`}
-        popupState={popupState}
-      />
+      {isLinkEntityType ? null : (
+        <EntityTypeMenuItem
+          title={`Create new ${pluralize.singular(title)}`}
+          icon={faAdd}
+          href={`/new/entity?entity-type-id=${entityTypeId}`}
+          popupState={popupState}
+        />
+      )}
       <EntityTypeMenuItem
         title={copiedFrozen ? "Copied!" : `Copy link to ${title}`}
         icon={faLink}
@@ -52,6 +62,12 @@ export const EntityTypeMenu: FunctionComponent<EntityTypeMenuProps> = ({
         icon={<ArrowUpRightIcon sx={{ fontSize: 16 }} />}
         href={`/new/types/entity-type?extends=${entityTypeId}`}
         popupState={popupState}
+      />
+      <EntityTypeMenuItem
+        title={`View all ${pluralize(title)}`}
+        icon={faList}
+        popupState={popupState}
+        href={`/entities?entityTypeIdOrBaseUrl=${extractBaseUrl(entityTypeId)}`}
       />
     </Menu>
   );

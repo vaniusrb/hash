@@ -2,13 +2,10 @@
 //!
 //! Handler methods are grouped by routes that make up the REST API.
 
-#[cfg(feature = "test-server")]
-pub mod test_server;
-
 mod api_resource;
 mod json;
-mod middleware;
-mod status;
+pub mod middleware;
+pub mod status;
 mod utoipa_typedef;
 
 mod account;
@@ -18,18 +15,19 @@ mod entity_type;
 mod property_type;
 mod web;
 
-use std::{borrow::Cow, fs, io, str::FromStr, sync::Arc};
+use alloc::{borrow::Cow, sync::Arc};
+use core::str::FromStr;
+use std::{fs, io};
 
 use async_trait::async_trait;
-use authorization::{AuthorizationApi, AuthorizationApiPool};
+use authorization::AuthorizationApiPool;
 use axum::{
     extract::{FromRequestParts, Path},
-    http::{request::Parts, uri::PathAndQuery, HeaderValue, StatusCode},
+    http::{request::Parts, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Extension, Json, Router,
 };
-use base64::Engine;
 use error_stack::{Report, ResultExt};
 use graph::{
     ontology::{domain_validator::DomainValidator, Selector},
@@ -52,21 +50,22 @@ use graph::{
 use graph_types::{
     account::{AccountId, CreatedById, EditionArchivedById, EditionCreatedById},
     ontology::{
-        DataTypeMetadata, EntityTypeMetadata, OntologyEditionProvenanceMetadata,
-        OntologyProvenanceMetadata, OntologyTemporalMetadata, OntologyTypeMetadata,
-        OntologyTypeRecordId, OntologyTypeReference, OntologyTypeVersion, PropertyTypeMetadata,
+        DataTypeMetadata, EntityTypeMetadata, OntologyEditionProvenance, OntologyProvenance,
+        OntologyTemporalMetadata, OntologyTypeMetadata, OntologyTypeRecordId,
+        OntologyTypeReference, PropertyTypeMetadata, ProvidedOntologyEditionProvenance,
     },
     owned_by_id::OwnedById,
 };
 use hash_status::Status;
-use hyper::Uri;
 use include_dir::{include_dir, Dir};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::Serialize;
+use temporal_client::TemporalClient;
 use temporal_versioning::{
     ClosedTemporalBound, DecisionTime, LeftClosedTemporalInterval, LimitedTemporalBound,
     OpenTemporalBound, RightBoundedTemporalInterval, TemporalBound, Timestamp, TransactionTime,
 };
+use type_system::url::{BaseUrl, OntologyTypeVersion, VersionedUrl};
 use utoipa::{
     openapi::{
         self, schema, ArrayBuilder, KnownFormat, Object, ObjectBuilder, OneOfBuilder, Ref, RefOr,
@@ -78,7 +77,7 @@ use uuid::Uuid;
 
 use self::{
     api_resource::RoutedResource,
-    middleware::{log_request_and_response, span_trace_layer},
+    middleware::span_trace_layer,
     status::{report_to_response, status_to_response},
     utoipa_typedef::{
         subgraph::{
@@ -118,74 +117,11 @@ impl<S> FromRequestParts<S> for AuthenticatedUserHeader {
 pub struct PermissionResponse {
     has_permission: bool,
 }
-
-#[derive(Debug)]
-pub struct Cursor<T>(pub T);
-
-impl<T: Serialize> Cursor<T> {
-    fn link_header(
-        &self,
-        relation: &'static str,
-        uri: Uri,
-        limit: usize,
-    ) -> Result<HeaderValue, Response> {
-        let mut uri_parts = uri.into_parts();
-        let json = serde_json::to_string(&self.0).map_err(report_to_response)?;
-        let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json);
-        uri_parts.path_and_query = Some(
-            PathAndQuery::try_from(format!(
-                "{}?after={encoded}&limit={limit}",
-                uri_parts.path_and_query.expect("path is missing").path(),
-            ))
-            .map_err(report_to_response)?,
-        );
-        let uri = Uri::from_parts(uri_parts).map_err(report_to_response)?;
-        HeaderValue::from_str(&format!(r#"<{uri}>; rel="{relation}""#)).map_err(report_to_response)
-    }
-}
-
-impl<T> Serialize for Cursor<T>
-where
-    T: Serialize,
-{
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let json = serde_json::to_string(&self.0).map_err(serde::ser::Error::custom)?;
-        let base64_encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json);
-        serializer.serialize_str(&base64_encoded)
-    }
-}
-
-impl<'de, T> Deserialize<'de> for Cursor<T>
-where
-    T: DeserializeOwned,
-{
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let json = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .decode(String::deserialize(deserializer)?)
-            .map_err(serde::de::Error::custom)?;
-        serde_json::from_slice(&json)
-            .map_err(serde::de::Error::custom)
-            .map(Self)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(
-    rename_all = "camelCase",
-    deny_unknown_fields,
-    bound(deserialize = "T: DeserializeOwned")
-)]
-struct Pagination<T> {
-    after: Option<Cursor<T>>,
-    limit: Option<usize>,
-}
-
 #[async_trait]
 pub trait RestApiStore: Store + TypeFetcher {
-    async fn load_external_type<A: AuthorizationApi + Send + Sync>(
+    async fn load_external_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
         domain_validator: &DomainValidator,
         reference: OntologyTypeReference<'_>,
     ) -> Result<OntologyTypeMetadata, Response>;
@@ -196,10 +132,9 @@ impl<S> RestApiStore for S
 where
     S: Store + TypeFetcher + Send,
 {
-    async fn load_external_type<A: AuthorizationApi + Send + Sync>(
+    async fn load_external_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
         domain_validator: &DomainValidator,
         reference: OntologyTypeReference<'_>,
     ) -> Result<OntologyTypeMetadata, Response> {
@@ -213,7 +148,7 @@ where
             )));
         }
 
-        self.insert_external_ontology_type(actor_id, authorization_api, reference)
+        self.insert_external_ontology_type(actor_id, reference)
             .await
             .attach_printable("Could not insert external type")
             .attach_printable_lazy(|| reference.url().clone())
@@ -233,7 +168,7 @@ fn api_resources<S, A>() -> Vec<Router>
 where
     S: StorePool + Send + Sync + 'static,
     A: AuthorizationApiPool + Send + Sync + 'static,
-    for<'pool> S::Store<'pool>: RestApiStore,
+    for<'pool> S::Store<'pool, A::Api<'pool>>: RestApiStore,
 {
     vec![
         account::AccountResource::routes::<S, A>(),
@@ -263,6 +198,7 @@ where
 {
     pub store: Arc<S>,
     pub authorization_api: Arc<A>,
+    pub temporal_client: Option<TemporalClient>,
     pub domain_regex: DomainValidator,
 }
 
@@ -284,12 +220,16 @@ pub fn rest_api_router<S, A>(dependencies: RestRouterDependencies<S, A>) -> Rout
 where
     S: StorePool + Send + Sync + 'static,
     A: AuthorizationApiPool + Send + Sync + 'static,
-    for<'pool> S::Store<'pool>: RestApiStore,
+    for<'pool> S::Store<'pool, A::Api<'pool>>: RestApiStore,
 {
     // All api resources are merged together into a super-router.
     let merged_routes = api_resources::<S, A>()
         .into_iter()
-        .fold(Router::new(), Router::merge);
+        .fold(Router::new(), Router::merge)
+        .fallback(|| {
+            tracing::error!("404: Not found");
+            async { StatusCode::NOT_FOUND }
+        });
 
     // super-router can then be used as any other router.
     // Make sure extensions are added at the end so they are made available to merged routers.
@@ -299,8 +239,8 @@ where
         .layer(SentryHttpLayer::with_transaction())
         .layer(Extension(dependencies.store))
         .layer(Extension(dependencies.authorization_api))
+        .layer(Extension(dependencies.temporal_client.map(Arc::new)))
         .layer(Extension(dependencies.domain_regex))
-        .layer(axum::middleware::from_fn(log_request_and_response))
         .layer(span_trace_layer())
         .merge(openapi_only_router())
 }
@@ -339,12 +279,15 @@ async fn serve_static_schema(Path(path): Path<String>) -> Result<Response, Statu
         schemas(
             PermissionResponse,
 
+            BaseUrl,
+            VersionedUrl,
             OwnedById,
             CreatedById,
             EditionCreatedById,
             EditionArchivedById,
-            OntologyProvenanceMetadata,
-            OntologyEditionProvenanceMetadata,
+            OntologyProvenance,
+            OntologyEditionProvenance,
+            ProvidedOntologyEditionProvenance,
             OntologyTypeRecordId,
             OntologyTemporalMetadata,
             DataTypeMetadata,
@@ -545,7 +488,6 @@ fn modify_schema_references(schema_component: &mut RefOr<openapi::Schema>) {
 
 fn modify_reference(reference: &mut openapi::Ref) {
     static REF_PREFIX_MODELS: &str = "#/components/schemas/VAR_";
-    static REF_PREFIX_SHARED: &str = "#/components/schemas/SHARED_";
 
     if reference.ref_location.starts_with(REF_PREFIX_MODELS) {
         reference
@@ -553,13 +495,6 @@ fn modify_reference(reference: &mut openapi::Ref) {
             .replace_range(0..REF_PREFIX_MODELS.len(), "./models/");
         reference.ref_location.make_ascii_lowercase();
         reference.ref_location.push_str(".json");
-    };
-
-    if reference.ref_location.starts_with(REF_PREFIX_SHARED) {
-        reference.ref_location.replace_range(
-            0..REF_PREFIX_SHARED.len(),
-            "./models/shared.json#/definitions/",
-        );
     };
 }
 
@@ -660,6 +595,54 @@ impl Modify for FilterSchemaAddon {
                         )
                         .item(
                             ObjectBuilder::new()
+                                .title(Some("GreaterFilter"))
+                                .property(
+                                    "greater",
+                                    ArrayBuilder::new()
+                                        .items(Ref::from_schema_name("FilterExpression"))
+                                        .min_items(Some(2))
+                                        .max_items(Some(2)),
+                                )
+                                .required("notEqual"),
+                        )
+                        .item(
+                            ObjectBuilder::new()
+                                .title(Some("GreaterOrEqualFilter"))
+                                .property(
+                                    "greaterOrEqual",
+                                    ArrayBuilder::new()
+                                        .items(Ref::from_schema_name("FilterExpression"))
+                                        .min_items(Some(2))
+                                        .max_items(Some(2)),
+                                )
+                                .required("notEqual"),
+                        )
+                        .item(
+                            ObjectBuilder::new()
+                                .title(Some("LessFilter"))
+                                .property(
+                                    "less",
+                                    ArrayBuilder::new()
+                                        .items(Ref::from_schema_name("FilterExpression"))
+                                        .min_items(Some(2))
+                                        .max_items(Some(2)),
+                                )
+                                .required("notEqual"),
+                        )
+                        .item(
+                            ObjectBuilder::new()
+                                .title(Some("LessOrEqualFilter"))
+                                .property(
+                                    "lessOrEqual",
+                                    ArrayBuilder::new()
+                                        .items(Ref::from_schema_name("FilterExpression"))
+                                        .min_items(Some(2))
+                                        .max_items(Some(2)),
+                                )
+                                .required("notEqual"),
+                        )
+                        .item(
+                            ObjectBuilder::new()
                                 .title(Some("CosineDistanceFilter"))
                                 .property(
                                     "cosineDistance",
@@ -743,6 +726,20 @@ impl Modify for FilterSchemaAddon {
                                 .title(Some("ParameterExpression"))
                                 .property("parameter", Any::schema().1)
                                 .required("parameter"),
+                        )
+                        .build(),
+                )
+                .into(),
+            );
+            components.schemas.insert(
+                "EntityQuerySortingPath".to_owned(),
+                schema::Schema::Array(
+                    ArrayBuilder::new()
+                        .items(
+                            OneOfBuilder::new()
+                                .item(Ref::from_schema_name("EntityQuerySortingToken"))
+                                .item(ObjectBuilder::new().schema_type(SchemaType::String))
+                                .item(ObjectBuilder::new().schema_type(SchemaType::Number)),
                         )
                         .build(),
                 )

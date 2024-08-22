@@ -1,19 +1,48 @@
-use std::fmt::{self, Write};
+use core::fmt::{self, Write};
 
 use crate::store::postgres::query::{
-    expression::OrderByExpression, AliasedColumn, AliasedTable, JoinExpression, SelectExpression,
-    Transpile, WhereExpression, WithExpression,
+    expression::{GroupByExpression, OrderByExpression},
+    Alias, AliasedTable, Expression, Function, JoinExpression, SelectExpression, Table, Transpile,
+    WhereExpression, WithExpression,
 };
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FromItem {
+    Table { table: Table, alias: Option<Alias> },
+    Function(Function),
+}
+
+impl Transpile for FromItem {
+    fn transpile(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Table { table, alias } => {
+                table.transpile(fmt)?;
+                if let Some(alias) = *alias {
+                    fmt.write_str(" AS ")?;
+                    AliasedTable {
+                        table: *table,
+                        alias,
+                    }
+                    .transpile(fmt)
+                } else {
+                    Ok(())
+                }
+            }
+            Self::Function(function) => function.transpile(fmt),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SelectStatement {
     pub with: WithExpression,
-    pub distinct: Vec<AliasedColumn>,
+    pub distinct: Vec<Expression>,
     pub selects: Vec<SelectExpression>,
-    pub from: AliasedTable,
+    pub from: FromItem,
     pub joins: Vec<JoinExpression>,
     pub where_expression: WhereExpression,
     pub order_by_expression: OrderByExpression,
+    pub group_by_expression: GroupByExpression,
     pub limit: Option<usize>,
 }
 
@@ -51,8 +80,6 @@ impl Transpile for SelectStatement {
             condition.transpile(fmt)?;
         }
         fmt.write_str("\nFROM ")?;
-        self.from.table.transpile(fmt)?;
-        fmt.write_str(" AS ")?;
         self.from.transpile(fmt)?;
 
         for join in &self.joins {
@@ -70,6 +97,11 @@ impl Transpile for SelectStatement {
             self.order_by_expression.transpile(fmt)?;
         }
 
+        if !self.group_by_expression.expressions.is_empty() {
+            fmt.write_char('\n')?;
+            self.group_by_expression.transpile(fmt)?;
+        }
+
         if let Some(limit) = self.limit {
             fmt.write_char('\n')?;
             write!(fmt, "LIMIT {limit}")?;
@@ -81,7 +113,7 @@ impl Transpile for SelectStatement {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use alloc::borrow::Cow;
 
     use graph_types::{
         knowledge::entity::Entity,
@@ -96,10 +128,10 @@ mod tests {
         ontology::{DataTypeQueryPath, EntityTypeQueryPath, PropertyTypeQueryPath},
         store::{
             postgres::query::{
-                test_helper::trim_whitespace, Distinctness, Ordering, PostgresRecord,
-                SelectCompiler,
+                test_helper::trim_whitespace, Distinctness, PostgresRecord, SelectCompiler,
             },
             query::{Filter, FilterExpression, JsonPath, Parameter, PathToken},
+            NullOrdering, Ordering,
         },
         subgraph::{
             edges::{EdgeDirection, KnowledgeGraphEdgeKind, OntologyEdgeKind, SharedEdgeKind},
@@ -107,8 +139,8 @@ mod tests {
         },
     };
 
-    fn test_compilation<'p, T: PostgresRecord + 'static>(
-        compiler: &SelectCompiler<'p, T>,
+    fn test_compilation<'p, 'q: 'p, T: PostgresRecord + 'static>(
+        compiler: &SelectCompiler<'p, 'q, T>,
         expected_statement: &'static str,
         expected_parameters: &[&'p dyn ToSql],
     ) {
@@ -184,7 +216,8 @@ mod tests {
             r#"
             SELECT *
             FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
               AND "entity_temporal_metadata_0_0_0"."entity_uuid" = $3
             "#,
@@ -209,7 +242,8 @@ mod tests {
             r#"
             SELECT *
             FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
-            WHERE "entity_temporal_metadata_0_0_0"."entity_uuid" = $1
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."entity_uuid" = $1
             "#,
             &[&Uuid::nil()],
         );
@@ -600,7 +634,8 @@ mod tests {
             r#"
             SELECT *
             FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
               AND "entity_temporal_metadata_0_0_0"."entity_uuid" = $3
             "#,
@@ -620,17 +655,17 @@ mod tests {
         compiler.add_distinct_selection_with_ordering(
             &EntityQueryPath::Uuid,
             Distinctness::Distinct,
-            Some(Ordering::Ascending),
+            Some((Ordering::Ascending, None)),
         );
         compiler.add_distinct_selection_with_ordering(
             &EntityQueryPath::DecisionTime,
             Distinctness::Distinct,
-            Some(Ordering::Descending),
+            Some((Ordering::Descending, Some(NullOrdering::Last))),
         );
         compiler.add_selection_path(&EntityQueryPath::Properties(None));
 
         let filter = Filter::Equal(
-            Some(FilterExpression::Path(EntityQueryPath::EditionCreatedById)),
+            Some(FilterExpression::Path(EntityQueryPath::DraftId)),
             Some(FilterExpression::Parameter(Parameter::Uuid(Uuid::nil()))),
         );
         compiler.add_filter(&filter);
@@ -648,9 +683,9 @@ mod tests {
               ON "entity_editions_0_1_0"."entity_edition_id" = "entity_temporal_metadata_0_0_0"."entity_edition_id"
             WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
-              AND "entity_editions_0_1_0"."edition_created_by_id" = $3
+              AND "entity_temporal_metadata_0_0_0"."draft_id" = $3
             ORDER BY "entity_temporal_metadata_0_0_0"."entity_uuid" ASC,
-                     "entity_temporal_metadata_0_0_0"."decision_time" DESC
+                     "entity_temporal_metadata_0_0_0"."decision_time" DESC NULLS LAST
             "#,
             &[
                 &pinned_timestamp,
@@ -686,10 +721,10 @@ mod tests {
             FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
             INNER JOIN "entity_editions" AS "entity_editions_0_1_0"
               ON "entity_editions_0_1_0"."entity_edition_id" = "entity_temporal_metadata_0_0_0"."entity_edition_id"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $2::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $2::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $3
-              AND "entity_editions_0_1_0"."draft" = FALSE
-              AND jsonb_path_query_first("entity_editions_0_1_0"."properties", $1::text::jsonpath) = $4
+              AND jsonb_path_query_first("entity_editions_0_1_0"."properties", (($1::text)::jsonpath)) = $4
             "#,
             &[
                 &json_path,
@@ -724,10 +759,10 @@ mod tests {
             FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
             INNER JOIN "entity_editions" AS "entity_editions_0_1_0"
               ON "entity_editions_0_1_0"."entity_edition_id" = "entity_temporal_metadata_0_0_0"."entity_edition_id"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $2::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $2::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $3
-              AND "entity_editions_0_1_0"."draft" = FALSE
-              AND jsonb_path_query_first("entity_editions_0_1_0"."properties", $1::text::jsonpath) IS NULL
+              AND jsonb_path_query_first("entity_editions_0_1_0"."properties", (($1::text)::jsonpath)) IS NULL
             "#,
             &[
                 &json_path,
@@ -774,10 +809,13 @@ mod tests {
             RIGHT OUTER JOIN "entity_temporal_metadata" AS "entity_temporal_metadata_0_4_0"
               ON "entity_temporal_metadata_0_4_0"."web_id" = "entity_has_right_entity_0_3_0"."right_web_id"
              AND "entity_temporal_metadata_0_4_0"."entity_uuid" = "entity_has_right_entity_0_3_0"."right_entity_uuid"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
+              AND "entity_temporal_metadata_0_2_0"."draft_id" IS NULL
               AND "entity_temporal_metadata_0_2_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_2_0"."decision_time" && $2
+              AND "entity_temporal_metadata_0_4_0"."draft_id" IS NULL
               AND "entity_temporal_metadata_0_4_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_4_0"."decision_time" && $2
               AND "entity_temporal_metadata_0_4_0"."entity_edition_id" = $3
@@ -823,10 +861,13 @@ mod tests {
             RIGHT OUTER JOIN "entity_temporal_metadata" AS "entity_temporal_metadata_0_4_0"
               ON "entity_temporal_metadata_0_4_0"."web_id" = "entity_has_left_entity_0_3_0"."left_web_id"
              AND "entity_temporal_metadata_0_4_0"."entity_uuid" = "entity_has_left_entity_0_3_0"."left_entity_uuid"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
+              AND "entity_temporal_metadata_0_2_0"."draft_id" IS NULL
               AND "entity_temporal_metadata_0_2_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_2_0"."decision_time" && $2
+              AND "entity_temporal_metadata_0_4_0"."draft_id" IS NULL
               AND "entity_temporal_metadata_0_4_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_4_0"."decision_time" && $2
               AND "entity_temporal_metadata_0_4_0"."entity_edition_id" = $3
@@ -888,7 +929,8 @@ mod tests {
             LEFT OUTER JOIN "entity_has_right_entity" AS "entity_has_right_entity_0_1_0"
               ON "entity_has_right_entity_0_1_0"."web_id" = "entity_temporal_metadata_0_0_0"."web_id"
              AND "entity_has_right_entity_0_1_0"."entity_uuid" = "entity_temporal_metadata_0_0_0"."entity_uuid"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
               AND ("entity_has_left_entity_0_1_0"."left_entity_uuid" = $3)
               AND ("entity_has_left_entity_0_1_0"."left_web_id" = $4)
@@ -973,11 +1015,14 @@ mod tests {
               ON "ontology_temporal_metadata_0_4_1"."ontology_id" = "entity_is_of_type_0_3_1"."entity_type_ontology_id"
             INNER JOIN "ontology_ids" AS "ontology_ids_0_5_1"
               ON "ontology_ids_0_5_1"."ontology_id" = "ontology_temporal_metadata_0_4_1"."ontology_id"
-            WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+            WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+              AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
+              AND "entity_temporal_metadata_0_2_0"."draft_id" IS NULL
               AND "entity_temporal_metadata_0_2_0"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_2_0"."decision_time" && $2
               AND "ontology_temporal_metadata_0_4_0"."transaction_time" @> $1::TIMESTAMPTZ
+              AND "entity_temporal_metadata_0_2_1"."draft_id" IS NULL
               AND "entity_temporal_metadata_0_2_1"."transaction_time" @> $1::TIMESTAMPTZ
               AND "entity_temporal_metadata_0_2_1"."decision_time" && $2
               AND "ontology_temporal_metadata_0_4_1"."transaction_time" @> $1::TIMESTAMPTZ
@@ -1011,11 +1056,18 @@ mod tests {
                 *,
                 "entity_embeddings_0_1_0"."distance"
               FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
-              INNER JOIN (SELECT *, "entity_embeddings_0_0_0"."embedding" <=> $1 AS "distance" FROM "entity_embeddings" AS "entity_embeddings_0_0_0")
+              LEFT OUTER JOIN
+                (SELECT
+                    "entity_embeddings_0_0_0"."web_id",
+                    "entity_embeddings_0_0_0"."entity_uuid",
+                    MIN("entity_embeddings_0_0_0"."embedding" <=> $1) AS "distance"
+                  FROM "entity_embeddings" AS "entity_embeddings_0_0_0"
+                  GROUP BY "entity_embeddings_0_0_0"."web_id", "entity_embeddings_0_0_0"."entity_uuid")
                  AS "entity_embeddings_0_1_0"
                  ON "entity_embeddings_0_1_0"."web_id" = "entity_temporal_metadata_0_0_0"."web_id"
                 AND "entity_embeddings_0_1_0"."entity_uuid" = "entity_temporal_metadata_0_0_0"."entity_uuid"
-              WHERE "entity_embeddings_0_1_0"."distance" <= $2
+              WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+                AND "entity_embeddings_0_1_0"."distance" <= $2
               ORDER BY "entity_embeddings_0_1_0"."distance" ASC
             "#,
             &[&Embedding::from(vec![0.0; 1536]), &0.5],
@@ -1025,10 +1077,9 @@ mod tests {
     mod predefined {
         use graph_types::{
             knowledge::entity::{EntityId, EntityUuid},
-            ontology::OntologyTypeVersion,
             owned_by_id::OwnedById,
         };
-        use type_system::url::{BaseUrl, VersionedUrl};
+        use type_system::url::{BaseUrl, OntologyTypeVersion, VersionedUrl};
 
         use super::*;
 
@@ -1039,7 +1090,7 @@ mod tests {
                     "https://blockprotocol.org/@blockprotocol/types/data-type/text/".to_owned(),
                 )
                 .expect("invalid base url"),
-                version: 1,
+                version: OntologyTypeVersion::new(1),
             };
 
             let temporal_axes = QueryTemporalAxesUnresolved::default().resolve();
@@ -1060,11 +1111,7 @@ mod tests {
                 WHERE "ontology_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
                   AND ("ontology_ids_0_1_0"."base_url" = $2) AND ("ontology_ids_0_1_0"."version" = $3)
                 "#,
-                &[
-                    &pinned_timestamp,
-                    &url.base_url.as_str(),
-                    &OntologyTypeVersion::new(url.version),
-                ],
+                &[&pinned_timestamp, &url.base_url, &url.version],
             );
         }
 
@@ -1073,6 +1120,7 @@ mod tests {
             let entity_id = EntityId {
                 owned_by_id: OwnedById::new(Uuid::new_v4()),
                 entity_uuid: EntityUuid::new(Uuid::new_v4()),
+                draft_id: None,
             };
 
             let temporal_axes = QueryTemporalAxesUnresolved::default().resolve();
@@ -1087,7 +1135,8 @@ mod tests {
                 r#"
                 SELECT *
                 FROM "entity_temporal_metadata" AS "entity_temporal_metadata_0_0_0"
-                WHERE "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
+                WHERE "entity_temporal_metadata_0_0_0"."draft_id" IS NULL
+                  AND "entity_temporal_metadata_0_0_0"."transaction_time" @> $1::TIMESTAMPTZ
                   AND "entity_temporal_metadata_0_0_0"."decision_time" && $2
                   AND ("entity_temporal_metadata_0_0_0"."web_id" = $3)
                   AND ("entity_temporal_metadata_0_0_0"."entity_uuid" = $4)

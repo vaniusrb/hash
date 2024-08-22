@@ -1,4 +1,4 @@
-use std::{
+use core::{
     fmt::{self, Write},
     str::FromStr,
 };
@@ -21,8 +21,8 @@ use crate::{
 
 /// A path to a [`EntityType`] field.
 ///
-/// [`EntityType`]: type_system::EntityType
-#[derive(Debug, PartialEq, Eq)]
+/// [`EntityType`]: type_system::schema::EntityType
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EntityTypeQueryPath<'p> {
     /// The [`BaseUrl`] of the [`EntityType`].
     ///
@@ -35,7 +35,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType`]: type_system::EntityType
+    /// [`EntityType`]: type_system::schema::EntityType
     /// [`BaseUrl`]: type_system::url::BaseUrl
     BaseUrl,
     /// The version of the [`EntityType`].
@@ -69,7 +69,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType`]: type_system::EntityType
+    /// [`EntityType`]: type_system::schema::EntityType
     Version,
     /// The [`VersionedUrl`] of the [`EntityType`].
     ///
@@ -82,16 +82,15 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType`]: type_system::EntityType
+    /// [`EntityType`]: type_system::schema::EntityType
     /// [`VersionedUrl`]: type_system::url::VersionedUrl
     VersionedUrl,
     /// The transaction time of the [`EntityType`].
     ///
     /// It's not possible to query for the temporal axis directly, this has to be done via the
-    /// `temporalAxes` parameter on [`StructuralQuery`].
+    /// `temporalAxes` parameter on the request.
     ///
-    /// [`EntityType`]: type_system::EntityType
-    /// [`StructuralQuery`]: crate::subgraph::query::StructuralQuery
+    /// [`EntityType`]: type_system::schema::EntityType
     TransactionTime,
     /// The [`OwnedById`] of the [`EntityTypeMetadata`] belonging to the [`EntityType`].
     ///
@@ -104,40 +103,10 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType`]: type_system::EntityType
+    /// [`EntityType`]: type_system::schema::EntityType
     /// [`OwnedById`]: graph_types::owned_by_id::OwnedById
     /// [`EntityTypeMetadata`]: graph_types::ontology::EntityTypeMetadata
     OwnedById,
-    /// The [`CreatedById`] of the [`OntologyProvenanceMetadata`] belonging to the [`EntityType`].
-    ///
-    /// ```rust
-    /// # use serde::Deserialize;
-    /// # use serde_json::json;
-    /// # use graph::ontology::EntityTypeQueryPath;
-    /// let path = EntityTypeQueryPath::deserialize(json!(["editionCreatedById"]))?;
-    /// assert_eq!(path, EntityTypeQueryPath::EditionCreatedById);
-    /// # Ok::<(), serde_json::Error>(())
-    /// ```
-    ///
-    /// [`EntityType`]: type_system::EntityType
-    /// [`CreatedById`]: graph_types::account::CreatedById
-    /// [`OntologyProvenanceMetadata`]: graph_types::ontology::OntologyProvenanceMetadata
-    EditionCreatedById,
-    /// The [`ArchivedById`] of the [`OntologyProvenanceMetadata`] belonging to the [`EntityType`].
-    ///
-    /// ```rust
-    /// # use serde::Deserialize;
-    /// # use serde_json::json;
-    /// # use graph::ontology::EntityTypeQueryPath;
-    /// let path = EntityTypeQueryPath::deserialize(json!(["editionArchivedById"]))?;
-    /// assert_eq!(path, EntityTypeQueryPath::EditionArchivedById);
-    /// # Ok::<(), serde_json::Error>(())
-    /// ```
-    ///
-    /// [`EntityType`]: type_system::EntityType
-    /// [`ArchivedById`]: graph_types::account::EditionArchivedById
-    /// [`OntologyProvenanceMetadata`]: graph_types::ontology::OntologyProvenanceMetadata
-    EditionArchivedById,
     /// Corresponds to [`EntityType::title()`].
     ///
     /// ```rust
@@ -149,7 +118,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType::title()`]: type_system::EntityType::title
+    /// [`EntityType::title()`]: type_system::schema::EntityType::title
     Title,
     /// Corresponds to [`EntityType::description()`]
     ///
@@ -162,7 +131,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType::description()`]: type_system::EntityType::description
+    /// [`EntityType::description()`]: type_system::schema::EntityType::description
     Description,
     /// Corresponds to [`EntityType::examples()`].
     ///
@@ -175,7 +144,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType::examples()`]: type_system::EntityType::examples
+    /// [`EntityType::examples()`]: type_system::schema::EntityType::examples
     Examples,
     /// Corresponds to [`EntityType::required()`].
     ///
@@ -188,7 +157,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType::required()`]: type_system::EntityType::required
+    /// [`EntityType::required()`]: type_system::schema::EntityType::required
     Required,
     /// The label property metadata of the entity type.
     ///
@@ -219,8 +188,8 @@ pub enum EntityTypeQueryPath<'p> {
     /// Allowed edge kinds are:
     /// - [`ConstrainsPropertiesOn`]
     ///
-    /// [`PropertyType`]: type_system::PropertyType
-    /// [`EntityType`]: type_system::EntityType
+    /// [`PropertyType`]: type_system::schema::PropertyType
+    /// [`EntityType`]: type_system::schema::EntityType
     /// [`ConstrainsPropertiesOn`]: OntologyEdgeKind::ConstrainsPropertiesOn
     ///
     ///
@@ -284,7 +253,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// - [`ConstrainsLinksOn`]
     /// - [`ConstrainsLinkDestinationsOn`]
     ///
-    /// [`EntityType`]: type_system::EntityType
+    /// [`EntityType`]: type_system::schema::EntityType
     /// [`InheritsFrom`]: OntologyEdgeKind::InheritsFrom
     /// [`ConstrainsLinksOn`]: OntologyEdgeKind::ConstrainsLinksOn
     /// [`ConstrainsLinkDestinationsOn`]: OntologyEdgeKind::ConstrainsLinkDestinationsOn
@@ -441,7 +410,7 @@ pub enum EntityTypeQueryPath<'p> {
     /// # Ok::<(), serde_json::Error>(())
     /// ```
     ///
-    /// [`EntityType::link_mappings()`]: type_system::EntityType::link_mappings
+    /// [`EntityType::link_mappings()`]: type_system::schema::EntityType::link_mappings
     ///
     ///
     /// ## Constraining link destinations
@@ -461,7 +430,7 @@ pub enum EntityTypeQueryPath<'p> {
     ///
     /// Only used internally and not available for deserialization.
     ///
-    /// [`EntityType`]: type_system::PropertyType
+    /// [`EntityType`]: type_system::schema::PropertyType
     /// [`Entity`]: graph_types::knowledge::entity::Entity
     EntityEdge {
         edge_kind: SharedEdgeKind,
@@ -476,6 +445,35 @@ pub enum EntityTypeQueryPath<'p> {
     ClosedSchema(Option<JsonPath<'p>>),
     /// Only used internally and not available for deserialization.
     AdditionalMetadata,
+    /// Corresponds to the provenance data of the [`EntityType`].
+    ///
+    /// Deserializes from `["editionProvenance", ...]` where `...` is a path to a provenance entry
+    /// of an [`EntityType`].
+    ///
+    /// [`EntityType`]: type_system::schema::EntityType
+    ///
+    /// ```rust
+    /// # use serde::Deserialize;
+    /// # use serde_json::json;
+    /// # use graph::ontology::EntityTypeQueryPath;
+    /// let path = EntityTypeQueryPath::deserialize(json!(["editionProvenance", "createdById"]))?;
+    /// assert_eq!(path.to_string(), r#"editionProvenance.$."createdById""#);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
+    EditionProvenance(Option<JsonPath<'p>>),
+    /// The embedding for the whole entity blob.
+    ///
+    /// Deserializes from `["embedding"]`:
+    ///
+    /// ```rust
+    /// # use serde::Deserialize;
+    /// # use serde_json::json;
+    /// # use graph::ontology::EntityTypeQueryPath;
+    /// let path = EntityTypeQueryPath::deserialize(json!(["embedding"]))?;
+    /// assert_eq!(path, EntityTypeQueryPath::Embedding);
+    /// # Ok::<(), serde_json::Error>(())
+    /// ```
+    Embedding,
 }
 
 impl OntologyQueryPath for EntityTypeQueryPath<'_> {
@@ -491,19 +489,17 @@ impl OntologyQueryPath for EntityTypeQueryPath<'_> {
 impl QueryPath for EntityTypeQueryPath<'_> {
     fn expected_type(&self) -> ParameterType {
         match self {
-            Self::OntologyId
-            | Self::OwnedById
-            | Self::EditionCreatedById
-            | Self::EditionArchivedById => ParameterType::Uuid,
+            Self::OntologyId | Self::OwnedById => ParameterType::Uuid,
             Self::Schema(_) | Self::ClosedSchema(_) | Self::AdditionalMetadata => {
                 ParameterType::Object
             }
-            Self::Examples | Self::Required => ParameterType::Any,
+            Self::Examples | Self::Required | Self::EditionProvenance(_) => ParameterType::Any,
             Self::BaseUrl | Self::LabelProperty => ParameterType::BaseUrl,
             Self::VersionedUrl => ParameterType::VersionedUrl,
             Self::Version => ParameterType::OntologyTypeVersion,
             Self::TransactionTime => ParameterType::TimeInterval,
             Self::Title | Self::Description | Self::Icon => ParameterType::Text,
+            Self::Embedding => ParameterType::Vector(Box::new(ParameterType::F64)),
             Self::PropertyTypeEdge { path, .. } => path.expected_type(),
             Self::EntityTypeEdge { path, .. } => path.expected_type(),
             Self::EntityEdge { path, .. } => path.expected_type(),
@@ -520,8 +516,6 @@ impl fmt::Display for EntityTypeQueryPath<'_> {
             Self::VersionedUrl => fmt.write_str("versionedUrl"),
             Self::TransactionTime => fmt.write_str("transactionTime"),
             Self::OwnedById => fmt.write_str("ownedById"),
-            Self::EditionCreatedById => fmt.write_str("editionCreatedById"),
-            Self::EditionArchivedById => fmt.write_str("editionArchivedById"),
             Self::Schema(Some(path)) => write!(fmt, "schema.{path}"),
             Self::Schema(None) => fmt.write_str("schema"),
             Self::ClosedSchema(Some(path)) => write!(fmt, "closedSchema.{path}"),
@@ -532,6 +526,9 @@ impl fmt::Display for EntityTypeQueryPath<'_> {
             Self::Required => fmt.write_str("required"),
             Self::LabelProperty => fmt.write_str("labelProperty"),
             Self::Icon => fmt.write_str("icon"),
+            Self::Embedding => fmt.write_str("embedding"),
+            Self::EditionProvenance(Some(path)) => write!(fmt, "editionProvenance.{path}"),
+            Self::EditionProvenance(None) => fmt.write_str("editionProvenance"),
             Self::PropertyTypeEdge {
                 edge_kind: OntologyEdgeKind::ConstrainsPropertiesOn,
                 path,
@@ -616,8 +613,6 @@ pub enum EntityTypeQueryToken {
     Version,
     VersionedUrl,
     OwnedById,
-    EditionCreatedById,
-    EditionArchivedById,
     Title,
     Description,
     Examples,
@@ -625,9 +620,11 @@ pub enum EntityTypeQueryToken {
     Required,
     LabelProperty,
     Icon,
+    EditionProvenance,
     Links,
     InheritsFrom,
     Children,
+    Embedding,
     #[serde(skip)]
     Schema,
     #[serde(skip)]
@@ -642,9 +639,9 @@ pub struct EntityTypeQueryPathVisitor {
 
 impl EntityTypeQueryPathVisitor {
     pub const EXPECTING: &'static str =
-        "one of `baseUrl`, `version`, `versionedUrl`, `ownedById`, `editionCreatedById`, \
-         `editionArchivedById`, `title`, `description`, `examples`, `properties`, `required`, \
-         `labelProperty`, `icon`, `links`, `inheritsFrom`, `children`";
+        "one of `baseUrl`, `version`, `versionedUrl`, `ownedById`, `title`, `description`, \
+         `examples`, `properties`, `required`, `labelProperty`, `icon`, `editionProvenance`, \
+         `links`, `inheritsFrom`, `children`, `embedding`";
 
     #[must_use]
     pub const fn new(position: usize) -> Self {
@@ -672,8 +669,6 @@ impl<'de> Visitor<'de> for EntityTypeQueryPathVisitor {
 
         let query_path = match token {
             EntityTypeQueryToken::OwnedById => EntityTypeQueryPath::OwnedById,
-            EntityTypeQueryToken::EditionCreatedById => EntityTypeQueryPath::EditionCreatedById,
-            EntityTypeQueryToken::EditionArchivedById => EntityTypeQueryPath::EditionArchivedById,
             EntityTypeQueryToken::BaseUrl => EntityTypeQueryPath::BaseUrl,
             EntityTypeQueryToken::VersionedUrl => EntityTypeQueryPath::VersionedUrl,
             EntityTypeQueryToken::Version => EntityTypeQueryPath::Version,
@@ -698,6 +693,7 @@ impl<'de> Visitor<'de> for EntityTypeQueryPathVisitor {
             EntityTypeQueryToken::Required => EntityTypeQueryPath::Required,
             EntityTypeQueryToken::LabelProperty => EntityTypeQueryPath::LabelProperty,
             EntityTypeQueryToken::Icon => EntityTypeQueryPath::Icon,
+            EntityTypeQueryToken::Embedding => EntityTypeQueryPath::Embedding,
             EntityTypeQueryToken::Links => {
                 seq.next_element::<Selector>()?
                     .ok_or_else(|| de::Error::invalid_length(self.position, &self))?;
@@ -772,6 +768,21 @@ impl<'de> Visitor<'de> for EntityTypeQueryPathVisitor {
                     EntityTypeQueryPath::ClosedSchema(Some(JsonPath::from_path_tokens(path_tokens)))
                 }
             }
+            EntityTypeQueryToken::EditionProvenance => {
+                let mut path_tokens = Vec::new();
+                while let Some(field) = seq.next_element::<PathToken<'de>>()? {
+                    path_tokens.push(field);
+                    self.position += 1;
+                }
+
+                if path_tokens.is_empty() {
+                    EntityTypeQueryPath::EditionProvenance(None)
+                } else {
+                    EntityTypeQueryPath::EditionProvenance(Some(JsonPath::from_path_tokens(
+                        path_tokens,
+                    )))
+                }
+            }
         };
 
         if !parameters.is_empty() {
@@ -794,9 +805,67 @@ impl<'de: 'p, 'p> Deserialize<'de> for EntityTypeQueryPath<'p> {
     }
 }
 
+impl EntityTypeQueryPath<'_> {
+    #[must_use]
+    pub fn into_owned(self) -> EntityTypeQueryPath<'static> {
+        match self {
+            Self::BaseUrl => EntityTypeQueryPath::BaseUrl,
+            Self::Version => EntityTypeQueryPath::Version,
+            Self::VersionedUrl => EntityTypeQueryPath::VersionedUrl,
+            Self::TransactionTime => EntityTypeQueryPath::TransactionTime,
+            Self::OwnedById => EntityTypeQueryPath::OwnedById,
+            Self::Title => EntityTypeQueryPath::Title,
+            Self::Description => EntityTypeQueryPath::Description,
+            Self::Examples => EntityTypeQueryPath::Examples,
+            Self::Required => EntityTypeQueryPath::Required,
+            Self::LabelProperty => EntityTypeQueryPath::LabelProperty,
+            Self::Icon => EntityTypeQueryPath::Icon,
+            Self::EditionProvenance(path) => {
+                EntityTypeQueryPath::EditionProvenance(path.map(JsonPath::into_owned))
+            }
+            Self::PropertyTypeEdge {
+                path,
+                edge_kind,
+                inheritance_depth,
+            } => EntityTypeQueryPath::PropertyTypeEdge {
+                path: path.into_owned(),
+                edge_kind,
+                inheritance_depth,
+            },
+            Self::EntityTypeEdge {
+                path,
+                edge_kind,
+                inheritance_depth,
+                direction,
+            } => EntityTypeQueryPath::EntityTypeEdge {
+                path: Box::new(path.into_owned()),
+                edge_kind,
+                inheritance_depth,
+                direction,
+            },
+            Self::EntityEdge {
+                path,
+                edge_kind,
+                inheritance_depth,
+            } => EntityTypeQueryPath::EntityEdge {
+                path: Box::new(path.into_owned()),
+                edge_kind,
+                inheritance_depth,
+            },
+            Self::OntologyId => EntityTypeQueryPath::OntologyId,
+            Self::Schema(path) => EntityTypeQueryPath::Schema(path.map(JsonPath::into_owned)),
+            Self::Embedding => EntityTypeQueryPath::Embedding,
+            Self::ClosedSchema(path) => {
+                EntityTypeQueryPath::ClosedSchema(path.map(JsonPath::into_owned))
+            }
+            Self::AdditionalMetadata => EntityTypeQueryPath::AdditionalMetadata,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::iter::once;
+    use core::iter::once;
 
     use super::*;
 

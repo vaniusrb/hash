@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
+import type { UnknownBlock } from "./load-remote-block";
 import {
   loadCrossFrameRemoteBlock,
   loadRemoteBlock,
-  UnknownBlock,
 } from "./load-remote-block";
 import { isTopWindow } from "./util";
 
@@ -42,7 +42,7 @@ export const loadBlockComponent = (
       url: sourceUrl,
     };
 
-    return remoteModuleCache[sourceUrl]!;
+    return remoteModuleCache[sourceUrl];
   });
 };
 

@@ -1,32 +1,41 @@
-import { UserPermissions } from "@local/hash-isomorphic-utils/types";
-import { Entity } from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { UserPermissions } from "@local/hash-isomorphic-utils/types";
 
 import {
   checkEntityPermission,
   checkPermissionsOnEntity,
 } from "../../../../graph/knowledge/primitive/entity";
-import { ResolverFn } from "../../../api-types.gen";
-import { GraphQLContext, LoggedInGraphQLContext } from "../../../context";
+import type { ResolverFn } from "../../../api-types.gen";
+import type { GraphQLContext, LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 
 export const checkUserPermissionsOnEntity: ResolverFn<
   UserPermissions,
   Pick<Entity, "metadata">,
   GraphQLContext,
-  {}
-> = async (entity, _, context) => {
-  return checkPermissionsOnEntity(context.dataSources, context.authentication, {
-    entity,
-  });
+  Record<string, never>
+> = async (entity, _, graphQLContext) => {
+  return checkPermissionsOnEntity(
+    graphQLContextToImpureGraphContext(graphQLContext),
+    graphQLContext.authentication,
+    {
+      entity,
+    },
+  );
 };
 
 export const canUserEdit: ResolverFn<
   boolean,
   Pick<Entity, "metadata">,
   LoggedInGraphQLContext,
-  {}
-> = async (entity, _, context) => {
-  return checkEntityPermission(context.dataSources, context.authentication, {
-    entityId: entity.metadata.recordId.entityId,
-    permission: "update",
-  });
+  Record<string, never>
+> = async (entity, _, graphQLContext) => {
+  return checkEntityPermission(
+    graphQLContextToImpureGraphContext(graphQLContext),
+    graphQLContext.authentication,
+    {
+      entityId: entity.metadata.recordId.entityId,
+      permission: "update",
+    },
+  );
 };

@@ -1,20 +1,16 @@
+import type { DefaultOptions, NormalizedCacheObject } from "@apollo/client";
 import {
   ApolloClient,
   ApolloLink,
-  DefaultOptions,
   HttpLink,
   InMemoryCache,
-  NormalizedCacheObject,
 } from "@apollo/client";
 import { onError } from "@apollo/client/link/error";
 import * as Sentry from "@sentry/browser";
-import {
-  RequestInfo as RequestInfoFromNodeFetch,
-  RequestInit as RequestInitFromNodeFetch,
-} from "node-fetch";
 
-import { apiGraphQLEndpoint } from "./environment";
+import { apiGraphQLEndpoint } from "./environment.js";
 import possibleTypes from "./graphql/fragment-types.gen.json";
+import { hashClientHeaderKey } from "./http-requests.js";
 
 const errorLink = onError(({ graphQLErrors, operation }) => {
   if (graphQLErrors) {
@@ -43,18 +39,12 @@ const errorLink = onError(({ graphQLErrors, operation }) => {
   }
 });
 
-// @todo update references
 export const createApolloClient = (params?: {
+  clientId?: "web-app";
   name?: string;
   isBrowser: boolean;
-  additionalHeaders?: { [key: string]: string | undefined };
+  additionalHeaders?: { [key: string]: string };
 }): ApolloClient<NormalizedCacheObject> => {
-  const ponyfilledFetch =
-    typeof (globalThis as any).fetch === "undefined"
-      ? // eslint-disable-next-line global-require
-        require("node-fetch")
-      : (globalThis as any).fetch;
-
   /**
    * This wraps fetch to inject the query operation name into the URL, which makes it easier
    * to identify in dev tools.
@@ -62,8 +52,8 @@ export const createApolloClient = (params?: {
    * @todo disable this in production due to caching concerns
    */
   const wrappedFetch = (
-    uri: RequestInfoFromNodeFetch | Request,
-    options: RequestInitFromNodeFetch | RequestInit | undefined,
+    uri: string | Request,
+    options: RequestInit | undefined,
   ) => {
     let operationName: string | null = null;
 
@@ -76,17 +66,27 @@ export const createApolloClient = (params?: {
       }
     }
 
-    return ponyfilledFetch(
-      operationName ? `${uri.toString()}?${operationName}` : uri,
+    return fetch(
+      operationName
+        ? `${
+            typeof uri === "string" ? uri : JSON.stringify(uri)
+          }?${operationName}`
+        : uri,
       options,
     );
   };
 
+  let headers = params?.additionalHeaders;
+  if (params?.clientId) {
+    headers ??= {};
+    headers[hashClientHeaderKey] = params.clientId;
+  }
+
   const httpLink = new HttpLink({
     uri: apiGraphQLEndpoint,
     credentials: "include",
-    fetch: wrappedFetch,
-    headers: params?.additionalHeaders,
+    fetch: wrappedFetch as WindowOrWorkerGlobalScope["fetch"],
+    headers,
   });
 
   const link = ApolloLink.from([errorLink, httpLink]);
@@ -114,6 +114,7 @@ export const createApolloClient = (params?: {
       typePolicies: {
         UnknownEntity: entityKeyFields,
         PageProperties: { keyFields: ["pageEntityId"] },
+        FlowRun: { keyFields: ["flowRunId"] },
       },
     }),
     credentials: "include",

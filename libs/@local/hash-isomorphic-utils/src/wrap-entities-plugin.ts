@@ -1,19 +1,18 @@
-import { entityStorePluginState } from "@local/hash-isomorphic-utils/entity-store-plugin";
-import { mapValues } from "lodash";
+import { mapValues } from "lodash-es";
 import { keymap } from "prosemirror-keymap";
-import { Node } from "prosemirror-model";
+import type { Node } from "prosemirror-model";
+import type { Command, Transaction } from "prosemirror-state";
 import {
-  Command,
   EditorState,
   NodeSelection,
   Plugin,
   TextSelection,
-  Transaction,
 } from "prosemirror-state";
 import { Mapping } from "prosemirror-transform";
 
-import { getBlockChildEntity, isRichTextContainingEntity } from "./entity";
-import { isComponentNode, isEntityNode } from "./prosemirror";
+import { getBlockChildEntity, isRichTextProperties } from "./entity.js";
+import { entityStorePluginState } from "./entity-store-plugin.js";
+import { isComponentNode, isEntityNode } from "./prosemirror.js";
 
 type WrapperNodes = [number, Node[]];
 type WrapperNodesList = WrapperNodes[];
@@ -181,7 +180,7 @@ const prepareCommandForWrappedEntities =
 
           if (
             inNode ||
-            (childEntity && isRichTextContainingEntity(childEntity))
+            (childEntity && isRichTextProperties(childEntity.properties))
           ) {
             const range = getRangeForNodeAtMappedPosition(pos, node, tr);
 

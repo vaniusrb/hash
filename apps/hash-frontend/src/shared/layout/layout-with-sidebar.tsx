@@ -1,6 +1,7 @@
 import { IconButton } from "@hashintel/design-system";
-import { Box, Fade, styled, Tooltip } from "@mui/material";
-import { FunctionComponent, ReactNode, useState } from "react";
+import { Box, Collapse, Stack, styled } from "@mui/material";
+import type { FunctionComponent, ReactNode } from "react";
+import { useState } from "react";
 
 import { EditBarScroller } from "../edit-bar-scroller";
 import { SidebarToggleIcon } from "../icons";
@@ -14,7 +15,7 @@ import {
 } from "./layout-with-sidebar/page-sidebar";
 
 const Main = styled("main")(({ theme }) => ({
-  height: `calc(100vh - ${HEADER_HEIGHT}px)`,
+  minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
   flexGrow: 1,
   marginLeft: "auto",
   marginRight: "auto",
@@ -49,42 +50,57 @@ export const LayoutWithSidebar: FunctionComponent<LayoutWithSidebarProps> = ({
       >
         {!isReadonlyMode && <PageSidebar />}
 
-        <Box
+        <Stack
+          direction="row"
           sx={(theme) => ({
             width: "100%",
             position: "relative",
             marginLeft: `-${SIDEBAR_WIDTH}px`,
+            overflowX: "hidden",
+            overflowY: "hidden",
             transition: theme.transitions.create("margin", {
               easing: theme.transitions.easing.easeOut,
               duration: theme.transitions.duration.enteringScreen,
             }),
-            ...(sidebarOpen && {
+            ...((sidebarOpen || isReadonlyMode) && {
               marginLeft: 0,
             }),
           })}
         >
-          <Fade timeout={800} in={!sidebarOpen}>
-            <Tooltip title="Expand Sidebar">
+          <Collapse
+            orientation="horizontal"
+            timeout={100}
+            in={!isReadonlyMode && !sidebarOpen}
+          >
+            <Stack
+              alignItems="center"
+              sx={({ palette, zIndex }) => ({
+                background: palette.common.white,
+                borderRight: `1px solid ${palette.gray[20]}`,
+                height: "100%",
+                p: 1,
+                textAlign: "center",
+                width: 42,
+                zIndex: zIndex.drawer,
+              })}
+            >
               <IconButton
+                aria-hidden
                 size="medium"
-                sx={({ zIndex }) => ({
-                  position: "absolute",
-                  top: 8,
-                  left: 8,
+                sx={({ palette }) => ({
                   transform: "rotate(180deg)",
-                  zIndex: zIndex.drawer,
 
                   "&:hover": {
-                    backgroundColor: ({ palette }) => palette.gray[20],
-                    color: ({ palette }) => palette.gray[60],
+                    backgroundColor: palette.gray[20],
+                    color: palette.gray[60],
                   },
                 })}
                 onClick={openSidebar}
               >
                 <SidebarToggleIcon />
               </IconButton>
-            </Tooltip>
-          </Fade>
+            </Stack>
+          </Collapse>
 
           <Box
             sx={({ palette }) => ({
@@ -92,7 +108,8 @@ export const LayoutWithSidebar: FunctionComponent<LayoutWithSidebarProps> = ({
                 ? palette.gray[10]
                 : palette.common.white,
               minHeight: "100%",
-              overflowY: "scroll",
+              flex: 1,
+              width: "100%",
             })}
           >
             <Main
@@ -109,7 +126,7 @@ export const LayoutWithSidebar: FunctionComponent<LayoutWithSidebarProps> = ({
               <EditBarScroller scrollingNode={main}>{children}</EditBarScroller>
             </Main>
           </Box>
-        </Box>
+        </Stack>
       </Box>
     </LayoutWithHeader>
   );

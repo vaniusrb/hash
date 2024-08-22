@@ -4,22 +4,26 @@
   "private": true,
   "description": "OpenAPI client for the HASH Graph API.",
   "license": "AGPL-3.0",
-  "main": "index.ts",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "codegen": "redocly bundle --format=json -o openapi.bundle.json ../../../../apps/hash-graph/openapi/openapi.json && openapi-generator-cli generate && rm openapi.bundle.json"
+    "build": "rimraf dist && tsc --build tsconfig.build.json",
+    "codegen": "redocly bundle -o openapi.bundle.json ../../../../apps/hash-graph/openapi/openapi.json && JAVA_OPTS='-Dlog.level=warn' openapi-generator-cli generate && rm openapi.bundle.json && fix-esm-import-path *.ts"
   },
   "dependencies": {
     "@openapitools/openapi-generator-cli": "2.5.2",
-    "axios": "1.6.0"
+    "axios": "1.7.4"
   },
   "devDependencies": {
     "@apps/hash-graph": "0.0.0-private",
     "@local/eslint-config": "0.0.0-private",
     "@local/tsconfig": "0.0.0-private",
-    "@redocly/cli": "1.6.0",
-    "@types/node": "18.15.13",
-    "@typescript-eslint/parser": "5.49.0",
-    "eslint": "8.33.0",
-    "typescript": "5.1.6"
+    "@redocly/cli": "1.19.0",
+    "@types/node": "20.16.1",
+    "eslint": "8.57.0",
+    "fix-esm-import-path": "1.10.0",
+    "rimraf": "6.0.1",
+    "typescript": "5.5.4"
   }
 }

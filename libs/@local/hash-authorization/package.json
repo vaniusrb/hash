@@ -1,7 +1,8 @@
 {
-  "name": "@local/hash-authorization-rs",
+  "name": "@rust/authorization",
   "version": "0.0.0-private",
   "private": true,
+  "license": "AGPL-3",
   "scripts": {
     "fix:clippy": "just clippy --fix",
     "lint:clippy": "just clippy",
@@ -9,7 +10,8 @@
     "test:unit:disabled": "cargo hack nextest run --feature-powerset --lib && cargo test --all-features --doc"
   },
   "dependencies": {
-    "@local/codec-rs": "0.0.0-private",
-    "@local/hash-graph-types-rs": "0.0.0-private"
+    "@blockprotocol/type-system-rs": "0.0.0-private",
+    "@rust/codec": "0.0.0-private",
+    "@rust/graph-types": "0.0.0-private"
   }
 }

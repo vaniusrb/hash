@@ -3,12 +3,16 @@ import "../shared/common.scss";
 import { theme } from "@hashintel/design-system/theme";
 import { Box, Skeleton, ThemeProvider } from "@mui/material";
 import { useEffect, useState } from "react";
-import browser, { Tabs } from "webextension-polyfill";
+import type { Tabs } from "webextension-polyfill";
+import browser from "webextension-polyfill";
 
 import { clearError } from "../../shared/badge";
-import { useLocalStorage } from "../shared/use-local-storage";
-import { useUser } from "../shared/use-user";
+import { useStorageSync } from "../shared/use-storage-sync";
 import { ActionCenter } from "./popup-contents/action-center";
+import {
+  PopupUserContextProvider,
+  useUserContext,
+} from "./popup-contents/shared/user-context";
 import { SignIn } from "./popup-contents/sign-in";
 
 const getCurrentTab = async () => {
@@ -25,20 +29,20 @@ const getCurrentTab = async () => {
  * You must inspect the popup window itself to see any logs, network events etc.
  * In Firefox this can be done via enabling and running the Browser Toolbox.
  */
-export const PopupContents = () => {
+const Popup = () => {
   const [activeBrowserTab, setActiveBrowserTab] = useState<Tabs.Tab | null>(
     null,
   );
 
-  const [popupTab, setPopupTab, popupTabLoaded] = useLocalStorage(
+  const [popupTab, setPopupTab, popupTabLoaded] = useStorageSync(
     "popupTab",
     "one-off",
   );
 
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading } = useUserContext();
 
   useEffect(() => {
-    void getCurrentTab().then(setActiveBrowserTab);
+    void getCurrentTab().then((tab) => setActiveBrowserTab(tab ?? null));
 
     void clearError();
   }, []);
@@ -84,3 +88,9 @@ export const PopupContents = () => {
     </ThemeProvider>
   );
 };
+
+export const PopupContents = () => (
+  <PopupUserContextProvider>
+    <Popup />
+  </PopupUserContextProvider>
+);

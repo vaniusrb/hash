@@ -1,23 +1,22 @@
-import {
+import type {
   CustomCell,
   CustomRenderer,
   DataEditorRef,
-  GridCellKind,
-  Item,
 } from "@glideapps/glide-data-grid";
+import { GridCellKind } from "@glideapps/glide-data-grid";
 import { customColors } from "@hashintel/design-system/theme";
-import { DataTypeWithMetadata } from "@local/hash-subgraph";
+import type { DataTypeWithMetadata } from "@local/hash-graph-types/ontology";
 import produce from "immer";
-import { RefObject } from "react";
+import type { RefObject } from "react";
 
 import { getYCenter } from "../../../../../../../../components/grid/utils";
 import { drawCellFadeOutGradient } from "../../../../../../../../components/grid/utils/draw-cell-fade-out-gradient";
 import { drawChip } from "../../../../../../../../components/grid/utils/draw-chip";
 import { drawChipWithIcon } from "../../../../../../../../components/grid/utils/draw-chip-with-icon";
 import { propertyGridIndexes } from "../constants";
-import { PropertyRow } from "../types";
+import type { PropertyRow } from "../types";
 import { getEditorSpecs } from "./value-cell/editor-specs";
-import { ValueCell } from "./value-cell/types";
+import type { ValueCell } from "./value-cell/types";
 import { guessEditorTypeFromExpectedType } from "./value-cell/utils";
 
 export interface ChangeTypeCellProps {
@@ -42,6 +41,7 @@ export const createRenderChangeTypeCell = (
   return {
     kind: GridCellKind.Custom,
     isMatch: (cell: CustomCell): cell is ChangeTypeCell =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (cell.data as any).kind === "change-type-cell",
     draw: (args, cell) => {
       const { theme, rect, ctx, spriteManager } = args;
@@ -55,7 +55,7 @@ export const createRenderChangeTypeCell = (
 
       const editorSpec = getEditorSpecs(
         guessEditorTypeFromExpectedType(currentType),
-        currentType.title,
+        currentType,
       );
 
       const drawTheLeftChip = () =>
@@ -102,7 +102,7 @@ export const createRenderChangeTypeCell = (
     onClick: (args) => {
       const { valueCellOfThisRow } = args.cell.data;
 
-      const [_, rowIndex] = (args as unknown as { location: Item }).location;
+      const [_, rowIndex] = args.location;
 
       const valueCellColumnIndex = propertyGridIndexes.findIndex(
         (val) => val === "value",

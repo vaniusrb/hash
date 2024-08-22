@@ -1,18 +1,15 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import {
-  AccountGroupId,
-  AccountId,
+import type {
+  CreateEntityParameters,
   Entity,
-  EntityId,
-  EntityMetadata,
-  EntityPropertiesObject,
-  EntityRelationAndSubject,
+} from "@local/hash-graph-sdk/entity";
+import { LinkEntity } from "@local/hash-graph-sdk/entity";
+import type {
+  EntityProperties,
   LinkData,
-  OwnedById,
-} from "@local/hash-subgraph";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
+  PropertyPatchOperation,
+} from "@local/hash-graph-types/entity";
 
-import { ImpureGraphFunction } from "../../context-types";
+import type { ImpureGraphFunction } from "../../context-types";
 import {
   getEntityTypeById,
   isEntityTypeLinkEntityType,
@@ -20,50 +17,35 @@ import {
 import { getLatestEntityById } from "./entity";
 import { afterCreateEntityHooks } from "./entity/after-create-entity-hooks";
 
-export type CreateLinkEntityParams = {
-  ownedById: OwnedById;
-  properties?: EntityPropertiesObject;
-  linkEntityTypeId: VersionedUrl;
-  owner?: AccountId | AccountGroupId;
-  draft?: boolean;
-  leftEntityId: EntityId;
-  leftToRightOrder?: number;
-  rightEntityId: EntityId;
-  rightToLeftOrder?: number;
-  relationships: EntityRelationAndSubject[];
-};
-
 export const isEntityLinkEntity = (entity: Entity): entity is LinkEntity =>
   !!entity.linkData;
 
+type CreateLinkEntityFunction<Properties extends EntityProperties> =
+  ImpureGraphFunction<
+    Omit<CreateEntityParameters<Properties>, "provenance"> & {
+      linkData: LinkData;
+    },
+    Promise<LinkEntity<Properties>>
+  >;
+
 /**
- * Create a link entity between a left and a right entity.
- *
- * @param params.ownedById - the id of the account who owns the new link entity
- * @param params.linkEntityTypeId - the link entity type ID of the link entity
- * @param params.leftEntityId - the ID of the left entity
- * @param params.leftToRightOrder (optional) - the left to right order of the link entity
- * @param params.rightEntityId - the ID of the right entity
- * @param params.rightToLeftOrder (optional) - the right to left order of the link entity
- * @param params.actorId - the id of the account that is creating the link
+ * Create an entity.
  */
-export const createLinkEntity: ImpureGraphFunction<
-  CreateLinkEntityParams,
-  Promise<LinkEntity>
-> = async (context, authentication, params) => {
+export const createLinkEntity = async <Properties extends EntityProperties>(
+  ...args: Parameters<CreateLinkEntityFunction<Properties>>
+): ReturnType<CreateLinkEntityFunction<Properties>> => {
+  const [context, authentication, params] = args;
   const {
     ownedById,
-    linkEntityTypeId,
-    leftEntityId,
-    leftToRightOrder,
-    rightEntityId,
-    rightToLeftOrder,
-    properties = {},
+    linkData,
+    properties = { value: {} },
     draft = false,
+    relationships,
+    confidence,
   } = params;
 
   const linkEntityType = await getEntityTypeById(context, authentication, {
-    entityTypeId: linkEntityTypeId,
+    entityTypeId: params.entityTypeId,
   });
 
   /**
@@ -82,30 +64,20 @@ export const createLinkEntity: ImpureGraphFunction<
     );
   }
 
-  const linkData: LinkData = {
-    leftEntityId,
-    leftToRightOrder,
-    rightEntityId,
-    rightToLeftOrder,
-  };
-
-  const { data: metadata } = await context.graphApi.createEntity(
-    authentication.actorId,
+  const linkEntity = await LinkEntity.create<Properties>(
+    context.graphApi,
+    authentication,
     {
       ownedById,
       linkData,
       entityTypeId: linkEntityType.schema.$id,
       properties,
       draft,
-      relationships: params.relationships,
+      relationships,
+      confidence,
+      provenance: context.provenance,
     },
   );
-
-  const linkEntity = {
-    metadata: metadata as EntityMetadata,
-    properties,
-    linkData,
-  };
 
   for (const afterCreateHook of afterCreateEntityHooks) {
     if (afterCreateHook.entityTypeId === linkEntity.metadata.entityTypeId) {
@@ -125,46 +97,27 @@ export const createLinkEntity: ImpureGraphFunction<
  *
  * @param params.linkEntity - the link entity being updated
  * @param params.properties (optional) - the updated properties object of the link entity
- * @param params.leftToRightOrder (optional) - the updated left to right order of the link entity
- * @param params.rightToLeftOrder (optional) - the updated right to left order of the link entity
  * @param params.actorId - the id of the account that is updating the entity
  */
 export const updateLinkEntity: ImpureGraphFunction<
   {
     linkEntity: LinkEntity;
-    properties?: EntityPropertiesObject;
-    leftToRightOrder?: number;
-    rightToLeftOrder?: number;
+    propertyPatches?: PropertyPatchOperation[];
     draft?: boolean;
   },
   Promise<LinkEntity>
-> = async ({ graphApi }, { actorId }, params) => {
-  const { leftToRightOrder, rightToLeftOrder, linkEntity } = params;
+> = async ({ graphApi, provenance }, { actorId }, params) => {
+  const { linkEntity, propertyPatches } = params;
 
-  const properties = params.properties ?? linkEntity.properties;
-
-  const { data: metadata } = await graphApi.updateEntity(actorId, {
-    entityId: linkEntity.metadata.recordId.entityId,
-    entityTypeId: linkEntity.metadata.entityTypeId,
-    properties,
-    archived: linkEntity.metadata.archived,
-    draft:
-      typeof params.draft === "undefined"
-        ? linkEntity.metadata.draft
-        : params.draft,
-    leftToRightOrder,
-    rightToLeftOrder,
-  });
-
-  return {
-    metadata: metadata as EntityMetadata,
-    properties,
-    linkData: {
-      ...linkEntity.linkData,
-      leftToRightOrder,
-      rightToLeftOrder,
+  return await linkEntity.patch(
+    graphApi,
+    { actorId },
+    {
+      propertyPatches,
+      draft: params.draft,
+      provenance,
     },
-  };
+  );
 };
 
 /**

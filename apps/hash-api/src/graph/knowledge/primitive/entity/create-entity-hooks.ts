@@ -1,16 +1,28 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { Entity } from "@local/hash-subgraph";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { PropertyObjectWithMetadata } from "@local/hash-graph-types/entity";
 
-import { AuthenticationContext } from "../../../../graphql/authentication-context";
-import { ImpureGraphContext } from "../../../context-types";
+import type { ImpureGraphContext } from "../../../context-types";
 
-export type CreateEntityHookCallback = (params: {
+export type BeforeCreateEntityHookCallback = (params: {
+  context: ImpureGraphContext;
+  authentication: AuthenticationContext;
+  properties: PropertyObjectWithMetadata;
+}) => Promise<{ properties: PropertyObjectWithMetadata }>;
+
+export type BeforeCreateEntityHook = {
+  entityTypeId: VersionedUrl;
+  callback: BeforeCreateEntityHookCallback;
+};
+
+export type AfterCreateEntityHookCallback = (params: {
   context: ImpureGraphContext;
   authentication: AuthenticationContext;
   entity: Entity;
-}) => Promise<Entity>;
+}) => Promise<void>;
 
-export type CreateEntityHook = {
+export type AfterCreateEntityHook = {
   entityTypeId: VersionedUrl;
-  callback: CreateEntityHookCallback;
+  callback: AfterCreateEntityHookCallback;
 };

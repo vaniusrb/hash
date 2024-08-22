@@ -1,22 +1,21 @@
-import { Entity } from "@local/hash-subgraph";
+import type { SerializedEntity } from "@local/hash-graph-sdk/entity";
 
 import { getCommentParent } from "../../../../graph/knowledge/system-types/comment";
-import { ResolverFn } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
-import { mapEntityToGQL, UnresolvedCommentGQL } from "../graphql-mapping";
+import type { ResolverFn } from "../../../api-types.gen";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
+import type { UnresolvedCommentGQL } from "../graphql-mapping";
 
 export const commentParentResolver: ResolverFn<
-  Promise<Entity>,
+  Promise<SerializedEntity>,
   UnresolvedCommentGQL,
   LoggedInGraphQLContext,
-  {}
-> = async ({ metadata }, _, { dataSources, authentication }) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  Record<string, never>
+> = async ({ metadata }, _, graphQLContext) => {
+  const { authentication } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
-  const parent = await getCommentParent(context, authentication, {
+  return getCommentParent(context, authentication, {
     commentEntityId: metadata.recordId.entityId,
-  });
-
-  return mapEntityToGQL(parent);
+  }).then((parent) => parent.toJSON());
 };

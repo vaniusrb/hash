@@ -1,9 +1,6 @@
-import {
-  DataEditorProps,
-  isObjectEditorCallbackResult,
-  Item,
-} from "@glideapps/glide-data-grid";
-import { MutableRefObject, PropsWithChildren } from "react";
+import type { DataEditorProps } from "@glideapps/glide-data-grid";
+import { isObjectEditorCallbackResult } from "@glideapps/glide-data-grid";
+import type { MutableRefObject, PropsWithChildren } from "react";
 
 import { useEditBarContext } from "../../../shared/edit-bar-scroller";
 import { useScrollLock } from "../../../shared/use-scroll-lock";
@@ -44,9 +41,7 @@ export const overrideCustomRenderers = (
         draw: (args, cell) =>
           draw({ ...args, tableId: tableIdRef.current }, cell),
         onClick: (args) => {
-          /** @todo investigate why `args` don't have `location` in it's type  */
-          const [colIndex, rowIndex] = (args as unknown as { location: Item })
-            .location;
+          const [colIndex, rowIndex] = args.location;
 
           const wasClickHandledByManager = InteractableManager.handleClick(
             `${tableIdRef.current}-${colIndex}-${rowIndex}`,

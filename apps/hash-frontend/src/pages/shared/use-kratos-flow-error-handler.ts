@@ -1,14 +1,15 @@
-import {
+import type {
   ErrorAuthenticatorAssuranceLevelNotSatisfied,
   ErrorBrowserLocationChangeRequired,
   NeedsPrivilegedSessionError,
 } from "@ory/client";
-import { AxiosError } from "axios";
+import type { AxiosError } from "axios";
 import { useRouter } from "next/router";
-import { Dispatch, SetStateAction, useCallback } from "react";
+import type { Dispatch, SetStateAction } from "react";
+import { useCallback } from "react";
 
 import { useAuthInfo } from "./auth-info-context";
-import { Flows } from "./ory-kratos";
+import type { Flows } from "./ory-kratos";
 
 export const useKratosErrorHandler = <S>(props: {
   flowType: keyof Flows;
@@ -21,6 +22,7 @@ export const useKratosErrorHandler = <S>(props: {
   const router = useRouter();
 
   const handleFlowError = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (err: AxiosError<any>) => {
       const kratosError = err.response?.data;
 
@@ -37,7 +39,7 @@ export const useKratosErrorHandler = <S>(props: {
             return;
           }
           case "session_already_available":
-            // User is already signed in, if we're in the login flow let's redirect them home!
+            // If user is already signed in, redirect them home
             if (flowType === "login") {
               if (!authenticatedUser) {
                 throw new Error(
@@ -58,13 +60,13 @@ export const useKratosErrorHandler = <S>(props: {
             return;
           }
           case "self_service_flow_return_to_forbidden":
-            // The flow expired, let's request a new one.
+            // If flow has expired, request a new one
             setErrorMessage("The return_to address is not allowed.");
             setFlow(undefined);
             await router.push(`/${flowType}`);
             return;
           case "self_service_flow_expired":
-            // The flow expired, let's request a new one.
+            // If flow has expired, request a new one
             setErrorMessage(
               "Your interaction expired, please fill out the form again.",
             );
@@ -85,7 +87,7 @@ export const useKratosErrorHandler = <S>(props: {
             await router.push(`/${flowType}`);
             return;
           case "browser_location_change_required": {
-            // Ory Kratos asked us to point the user to this URL.
+            // Ory Kratos asked us to point the user to this URL
             const { redirect_browser_to } =
               kratosError as ErrorBrowserLocationChangeRequired;
 

@@ -1,19 +1,18 @@
-import { type Subgraph as SubgraphBp } from "@blockprotocol/graph/temporal";
+import { type Subgraph as SubgraphBp } from "@blockprotocol/graph";
 import {
   getDataTypeById as getDataTypeByIdBp,
   getDataTypeByVertexId as getDataTypeByVertexIdBp,
   getDataTypes as getDataTypesBp,
   getDataTypesByBaseUrl as getDataTypesByBaseUrlBp,
-} from "@blockprotocol/graph/temporal/stdlib";
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
-import { DataType } from "@local/hash-graph-client";
-
-import {
+} from "@blockprotocol/graph/stdlib";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { DataType } from "@local/hash-graph-client";
+import type {
   BaseUrl,
   DataTypeWithMetadata,
-  OntologyTypeVertexId,
-  Subgraph,
-} from "../../../main";
+} from "@local/hash-graph-types/ontology";
+
+import type { OntologyTypeVertexId, Subgraph } from "../../../main.js";
 
 /**
  * Returns all `DataTypeWithMetadata`s within the vertices of the subgraph

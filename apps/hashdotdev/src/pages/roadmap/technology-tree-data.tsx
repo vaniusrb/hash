@@ -1,8 +1,8 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { StatusId } from "./statuses";
-import { UseCaseId } from "./use-cases";
-import { VariantId } from "./variants";
+import type { StatusId } from "./statuses";
+import type { UseCaseId } from "./use-cases";
+import type { VariantId } from "./variants";
 
 export type TechnologyTreeNodeData = {
   id: string;
@@ -105,7 +105,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
   {
     id: "11",
     heading: "Basic Authentication",
-    body: "Implement login/logout/signup atop Kratos",
+    body: "Implement sign up/in/out atop Kratos",
     parentIds: ["8"],
     status: "done",
     useCases: ["general"],
@@ -230,12 +230,12 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
   },
   {
     id: "25",
-    heading: "Type Inheritance RFC",
-    body: "Proposal for supporting type inheritance in the Block Protocol Graph Module",
+    heading: "Type Inheritance",
+    body: "Set parent types whose expected property and link types will be inherited",
     parentIds: ["3"],
     status: "done",
     useCases: ["general"],
-    variant: "infrastructure",
+    variant: "feature",
   },
   {
     id: "26",
@@ -309,10 +309,10 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
   },
   {
     id: "32",
-    heading: "Type Inheritance",
-    body: "Set parent types whose expected property and link types will be inherited",
-    parentIds: ["25"],
-    status: "done",
+    heading: "Entity Duplication",
+    body: "Easy duplication of existing entities with lineage information preserved",
+    parentIds: ["28"],
+    status: "future",
     useCases: ["general"],
     variant: "feature",
   },
@@ -365,15 +365,15 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     id: "38",
     heading: "Multi-Type Entities",
     body: "Allow a single entity to have more than one assigned type",
-    parentIds: ["32"],
-    status: "next-up",
+    parentIds: ["25"],
+    status: "in-progress",
     useCases: ["general"],
     variant: "feature",
   },
   {
     id: "39",
-    heading: "Custom Data Types RFC",
-    body: "Proposed specification extension allowing for user-defined non-primitive Data Types",
+    heading: "Data Type Groups",
+    body: "Ability to group data types and reference multiple at once",
     parentIds: ["25"],
     status: "next-up",
     useCases: ["general"],
@@ -384,7 +384,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Flows",
     body: "Scheduled and responsive execution of user-defined logic",
     parentIds: ["21"],
-    status: "next-up",
+    status: "working-poc",
     useCases: [
       "general",
       "knowledge-management",
@@ -401,7 +401,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Advanced Blocks",
     body: "Blocks which allow users to query and insert multiple entities of varying types (e.g. table, kanban, timeline)",
     parentIds: ["34"],
-    status: "in-progress",
+    status: "working-poc",
     useCases: [
       "knowledge-management",
       "data-management",
@@ -434,30 +434,30 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     parentIds: ["28"],
     status: "future",
     useCases: ["general"],
-    variant: "feature",
+    variant: "infrastructure",
   },
   {
     id: "44",
-    heading: "Data Mapping RFC",
-    body: "Proposal for a system to map between data of different types",
+    heading: "Data Type Conversion",
+    body: "Ability to automatically convert between data types within a group",
     parentIds: ["39"],
     status: "future",
     useCases: ["general", "knowledge-management"],
-    variant: "infrastructure",
+    variant: "feature",
   },
   {
     id: "45",
     heading: "Custom Data Types",
     body: "Interface allowing user definition of non-primitive Data Types",
     parentIds: ["39"],
-    status: "future",
+    status: "working-poc",
     useCases: ["general"],
     variant: "feature",
   },
   {
     id: "46",
-    heading: "Structural Data Mapping",
-    body: "Specify that different types are structurally related (or literally duplicative)",
+    heading: "Literal Sameness Mapping",
+    body: "Specify that different web entities refer to the same literal thing, and watch for changes",
     parentIds: ["44"],
     status: "future",
     useCases: ["knowledge-management"],
@@ -465,8 +465,8 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
   },
   {
     id: "47",
-    heading: "Semantic Data Mapping",
-    body: "Specify that different types are semantically related (or semantically the same as one another)",
+    heading: "Semantic Similarity Mapping",
+    body: "Specify that different types are semantically related to one another",
     parentIds: ["44"],
     status: "future",
     useCases: ["knowledge-management"],
@@ -540,7 +540,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Similarity Search",
     body: "Generation of per-entity, property, link and type embeddings, vector datastore backend, and frontend",
     parentIds: ["24", "37"],
-    status: "in-progress",
+    status: "done",
     useCases: [
       "general",
       "knowledge-management",
@@ -576,7 +576,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Calculated Properties",
     body: "Programmatic calculation of properties, supported independently of Flows.",
     parentIds: ["45"],
-    status: "future",
+    status: "working-poc",
     useCases: ["general", "knowledge-management", "data-management"],
     variant: "feature",
   },
@@ -594,7 +594,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Semantic Q&A",
     body: "Natural language questions and answers based on the contents of a web",
     parentIds: ["53"],
-    status: "future",
+    status: "working-poc",
     useCases: [
       "general",
       "knowledge-management",
@@ -704,7 +704,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Intelligent Global Search",
     body: "Augment semantic Q&A with relevant and timely context from the global web",
     parentIds: ["58"],
-    status: "future",
+    status: "working-poc",
     useCases: ["general", "knowledge-management"],
     variant: "feature",
   },
@@ -812,8 +812,8 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     id: "80",
     heading: "Entity Labels",
     body: "Select properties that can be used to easily identify entities in HASH",
-    parentIds: ["32"],
-    status: "next-up",
+    parentIds: ["25"],
+    status: "done",
     useCases: ["general", "knowledge-management", "data-management"],
     variant: "feature",
   },
@@ -854,7 +854,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
   {
     id: "84",
     heading: "Composite Blocks",
-    body: "Nest blocks inside other blocks to create complex ",
+    body: "Nest blocks inside of one another to create more powerful user experiences",
     parentIds: ["41"],
     status: "future",
     useCases: ["general", "internal-tools-apps", "website-building"],
@@ -943,10 +943,10 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
   },
   {
     id: "94",
-    heading: "Login with HASH",
+    heading: "Sign in with HASH",
     body: "Authenticate users with external services via their hash.ai accounts",
     parentIds: ["91"],
-    status: "future",
+    status: "done",
     useCases: ["general"],
     variant: "experiment",
   },
@@ -1009,7 +1009,7 @@ export const technologyTreeData: TechnologyTreeNodeData[] = [
     heading: "Draft Updated Entities",
     body: "Updates or suggested changes to entities may be persisted as drafts prior to finalization",
     parentIds: ["100"],
-    status: "next-up",
+    status: "done",
     useCases: ["general"],
     variant: "feature",
   },

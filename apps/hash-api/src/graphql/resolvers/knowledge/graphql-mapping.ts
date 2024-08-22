@@ -1,15 +1,11 @@
-import { Entity } from "@local/hash-subgraph";
-
-import { Block } from "../../../graph/knowledge/system-types/block";
-import { Comment } from "../../../graph/knowledge/system-types/comment";
-import { Page } from "../../../graph/knowledge/system-types/page";
-import {
+import type { Block } from "../../../graph/knowledge/system-types/block";
+import type { Comment } from "../../../graph/knowledge/system-types/comment";
+import type { Page } from "../../../graph/knowledge/system-types/page";
+import type {
   Block as GQLBlock,
   Comment as GQLComment,
   Page as GQLPage,
 } from "../../api-types.gen";
-
-export const mapEntityToGQL = (entity: Entity): Entity => entity;
 
 export type ExternalPageResolversGQL =
   | "contents"
@@ -18,7 +14,8 @@ export type ExternalPageResolversGQL =
 export type UnresolvedPageGQL = Omit<GQLPage, ExternalPageResolversGQL>;
 
 export const mapPageToGQL = (page: Page): UnresolvedPageGQL => ({
-  ...mapEntityToGQL(page.entity),
+  properties: page.entity.properties,
+  metadata: page.entity.metadata,
   title: page.title,
   archived: page.archived,
   summary: page.summary,
@@ -39,7 +36,8 @@ export type UnresolvedCommentGQL = Omit<
 >;
 
 export const mapCommentToGQL = (comment: Comment): UnresolvedCommentGQL => ({
-  ...mapEntityToGQL(comment.entity),
+  properties: comment.entity.properties,
+  metadata: comment.entity.metadata,
   resolvedAt: comment.resolvedAt,
   deletedAt: comment.deletedAt,
 });
@@ -48,6 +46,7 @@ export type ExternalBlockResolversGQL = "blockChildEntity";
 export type UnresolvedBlockGQL = Omit<GQLBlock, ExternalBlockResolversGQL>;
 
 export const mapBlockToGQL = (block: Block): UnresolvedBlockGQL => ({
-  ...mapEntityToGQL(block.entity),
+  properties: block.entity.properties,
+  metadata: block.entity.metadata,
   componentId: block.componentId,
 });

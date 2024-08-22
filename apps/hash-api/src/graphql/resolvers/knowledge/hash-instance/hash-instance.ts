@@ -1,19 +1,34 @@
 import { getHashInstance } from "@local/hash-backend-utils/hash-instance";
-import { Entity } from "@local/hash-subgraph";
 
-import { ResolverFn } from "../../../api-types.gen";
-import { GraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
+import { checkEntityPermission } from "../../../../graph/knowledge/primitive/entity";
+import type { HashInstanceSettings, ResolverFn } from "../../../api-types.gen";
+import type { GraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 
-export const hashInstanceEntityResolver: ResolverFn<
-  Promise<Entity>,
-  {},
+export const hashInstanceSettingsResolver: ResolverFn<
+  Promise<HashInstanceSettings>,
+  Record<string, never>,
   GraphQLContext,
-  {}
-> = async (_, __, { dataSources, authentication }) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  Record<string, never>
+> = async (_, __, graphQLContext) => {
+  const { authentication } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
-  const hashInstance = await getHashInstance(context, authentication);
+  const { entity } = await getHashInstance(context, authentication);
 
-  return hashInstance.entity;
+  const isUserAdmin = graphQLContext.user
+    ? await checkEntityPermission(
+        graphQLContextToImpureGraphContext(graphQLContext),
+        graphQLContext.authentication,
+        {
+          entityId: entity.metadata.recordId.entityId,
+          permission: "update",
+        },
+      )
+    : false;
+
+  return {
+    entity: entity.toJSON(),
+    isUserAdmin,
+  };
 };

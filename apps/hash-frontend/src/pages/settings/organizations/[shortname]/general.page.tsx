@@ -1,17 +1,27 @@
-import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { OrganizationProperties } from "@local/hash-isomorphic-utils/system-types/shared";
+import { useMutation } from "@apollo/client";
+import { typedEntries } from "@local/advanced-types/typed-entries";
+import type { PropertyPatchOperation } from "@local/hash-graph-types/entity";
+import {
+  blockProtocolPropertyTypes,
+  systemPropertyTypes,
+} from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { useRouter } from "next/router";
 import { NextSeo } from "next-seo";
 import { useRef } from "react";
 
-import { useBlockProtocolUpdateEntity } from "../../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-update-entity";
 import { useOrgs } from "../../../../components/hooks/use-orgs";
-import { NextPageWithLayout } from "../../../../shared/layout";
+import type {
+  UpdateEntityMutation,
+  UpdateEntityMutationVariables,
+} from "../../../../graphql/api-types.gen";
+import { updateEntityMutation } from "../../../../graphql/queries/knowledge/entity.queries";
+import type { NextPageWithLayout } from "../../../../shared/layout";
 import { useUserPermissionsOnEntity } from "../../../../shared/use-user-permissions-on-entity";
 import { useAuthenticatedUser } from "../../../shared/auth-info-context";
-import { getSettingsLayout } from "../../shared/settings-layout";
-import { OrgForm, OrgFormData } from "../shared/org-form";
-import { OrgSettingsContainer } from "../shared/org-settings-container";
+import { getSettingsLayout } from "../../../shared/settings-layout";
+import { SettingsPageContainer } from "../../shared/settings-page-container";
+import type { OrgFormData } from "../shared/org-form";
+import { OrgForm } from "../shared/org-form";
 
 const OrgGeneralSettingsPage: NextPageWithLayout = () => {
   const router = useRouter();
@@ -20,7 +30,10 @@ const OrgGeneralSettingsPage: NextPageWithLayout = () => {
 
   const { shortname } = router.query as { shortname: string };
 
-  const { updateEntity } = useBlockProtocolUpdateEntity();
+  const [updateEntity] = useMutation<
+    UpdateEntityMutation,
+    UpdateEntityMutationVariables
+  >(updateEntityMutation);
 
   const { authenticatedUser, refetch: refetchUser } = useAuthenticatedUser();
   const { refetch: refetchOrgs } = useOrgs();
@@ -38,36 +51,39 @@ const OrgGeneralSettingsPage: NextPageWithLayout = () => {
   }
 
   const updateOrg = async (orgData: OrgFormData) => {
-    const updatedProperties: OrganizationProperties = {
-      "https://hash.ai/@hash/types/property-type/shortname/": org.shortname,
-      "https://hash.ai/@hash/types/property-type/organization-name/":
-        orgData.name,
-      // @todo this is tedious, either enable TS's exact-optional-property-types or allow 'undefined' as a value in EntityPropertiesObject
-      ...(orgData.description
-        ? {
-            "https://blockprotocol.org/@blockprotocol/types/property-type/description/":
-              orgData.description,
-          }
-        : {}),
-      ...(orgData.location
-        ? {
-            "https://hash.ai/@hash/types/property-type/location/":
-              orgData.location,
-          }
-        : {}),
-      ...(orgData.websiteUrl
-        ? {
-            "https://hash.ai/@hash/types/property-type/website-url/":
-              orgData.websiteUrl,
-          }
-        : {}),
-    };
+    const propertyPatches: PropertyPatchOperation[] = [];
+    const { description, location, name, websiteUrl } = orgData;
+    for (const [key, value] of typedEntries({
+      description,
+      location,
+      name,
+      websiteUrl,
+    })) {
+      if (typeof value !== "undefined") {
+        propertyPatches.push({
+          path: [
+            key === "name" || key === "description"
+              ? blockProtocolPropertyTypes.name.propertyTypeBaseUrl
+              : systemPropertyTypes[key].propertyTypeBaseUrl,
+          ],
+          op: "add",
+          property: {
+            value,
+            metadata: {
+              dataTypeId:
+                "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+            },
+          },
+        });
+      }
+    }
 
     await updateEntity({
-      data: {
-        entityId: org.entity.metadata.recordId.entityId,
-        entityTypeId: systemEntityTypes.organization.entityTypeId,
-        properties: updatedProperties,
+      variables: {
+        entityUpdate: {
+          entityId: org.entity.metadata.recordId.entityId,
+          propertyPatches,
+        },
       },
     });
 
@@ -81,8 +97,8 @@ const OrgGeneralSettingsPage: NextPageWithLayout = () => {
     <>
       <NextSeo title={`${org.name} | Settings`} />
 
-      <OrgSettingsContainer
-        header={org.name}
+      <SettingsPageContainer
+        heading={org.name}
         sectionLabel="General"
         ref={topRef}
       >
@@ -93,7 +109,7 @@ const OrgGeneralSettingsPage: NextPageWithLayout = () => {
           readonly={!userPermissions?.edit}
           submitLabel="Update organization profile"
         />
-      </OrgSettingsContainer>
+      </SettingsPageContainer>
     </>
   );
 };

@@ -1,19 +1,22 @@
-import { BlockMetadata } from "@blockprotocol/core";
-import {
+import type { BlockMetadata } from "@blockprotocol/core";
+import type {
   BlockGraphProperties,
+  EntityRootType,
   GraphEmbedderMessageCallbacks,
-} from "@blockprotocol/graph/temporal";
-import { useGraphEmbedderModule } from "@blockprotocol/graph/temporal/react";
+} from "@blockprotocol/graph";
+import { useGraphEmbedderModule } from "@blockprotocol/graph/react";
 import {
   getOutgoingLinksForEntity,
   getRoots,
-} from "@blockprotocol/graph/temporal/stdlib";
+} from "@blockprotocol/graph/stdlib";
 import { useHookEmbedderModule } from "@blockprotocol/hook/react";
 import { useServiceEmbedderModule } from "@blockprotocol/service/react";
 import { textualContentPropertyTypeBaseUrl } from "@local/hash-isomorphic-utils/entity-store";
 import { blockProtocolLinkEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { Skeleton, SkeletonProps } from "@mui/material";
-import { FunctionComponent, useEffect, useMemo, useRef } from "react";
+import type { SkeletonProps } from "@mui/material";
+import { Skeleton } from "@mui/material";
+import type { FunctionComponent } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { v4 as uuid } from "uuid";
 
 import { useUserBlocks } from "../../blocks/user-blocks";
@@ -22,7 +25,7 @@ import { BlockRenderer } from "./block-renderer";
 import { serviceModuleCallbacks } from "./construct-service-module-callbacks";
 import { useRemoteBlock } from "./use-remote-block";
 
-type RemoteBlockProps = {
+export type RemoteBlockProps = {
   graphCallbacks: Omit<
     /** @todo-0.3 - Add these back */
     GraphEmbedderMessageCallbacks,
@@ -175,7 +178,9 @@ export const RemoteBlock: FunctionComponent<RemoteBlockProps> = ({
 
   const blockHasMissingHasQueryLinks = useMemo(() => {
     if (blockSchemaRequiresOutgoingHasQueryLinks) {
-      const blockEntity = getRoots(graphProperties.blockEntitySubgraph)[0];
+      const blockEntity = getRoots<EntityRootType>(
+        graphProperties.blockEntitySubgraph,
+      )[0];
 
       if (blockEntity) {
         const outgoingLinks = getOutgoingLinksForEntity(

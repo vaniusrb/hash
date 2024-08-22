@@ -1,11 +1,12 @@
-import { MapboxRetrieveStaticMapData } from "@blockprotocol/service";
-import {
+import type { MapboxRetrieveStaticMapData } from "@blockprotocol/service";
+import type {
   AutofillFeatureSuggestion,
   AutofillSuggestion,
 } from "@blockprotocol/service/dist/mapbox-types";
 import { useServiceBlockModule } from "@blockprotocol/service/react";
 import debounce from "lodash.debounce";
-import { RefObject, useCallback, useEffect, useState } from "react";
+import type { RefObject } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSessionstorageState } from "rooks";
 import { v4 as uuid } from "uuid";
 
@@ -68,7 +69,7 @@ export const useMapbox = (
   const fetchSuggestions = debounce((query: string) => {
     setSuggestionsLoading(true);
 
-    serviceModule
+    void serviceModule
       .mapboxSuggestAddress({
         data: {
           searchText: query,

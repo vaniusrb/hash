@@ -1,4 +1,5 @@
-import { buttonClasses, Components, CSSObject, Theme } from "@mui/material";
+import type { Components, CSSObject, Theme } from "@mui/material";
+import { buttonClasses } from "@mui/material";
 
 const buttonFocusBorderOffset = { md: 4, lg: 6 };
 const buttonFocusBorderWidth = { md: 2, lg: 3 };
@@ -76,6 +77,46 @@ export const MuiButtonThemeOptions: Components<Theme>["MuiButton"] = {
         borderColor: theme.palette.blue["70"],
       };
 
+      /** ====================== SIZE specific styling ============================= */
+
+      baseStyles = {
+        ...baseStyles,
+        borderRadius: `${buttonBorderRadius.md}px`,
+        ...(size === "large" && {
+          padding: "16px 32px",
+          minHeight: 56,
+          minWidth: 120,
+          borderRadius: `${buttonBorderRadius.lg}px`,
+          ...theme.typography.largeTextLabels,
+        }),
+        ...(size === "medium" && {
+          padding: "12px 20px",
+          minHeight: 48,
+          minWidth: 104,
+          ...theme.typography.regularTextLabels,
+        }),
+        ...(size === "small" && {
+          padding: "12px 20px",
+          minHeight: 42,
+          minWidth: 78,
+          ...theme.typography.smallTextLabels,
+        }),
+        ...(size === "xs" && {
+          padding: "8px 16px",
+          minHeight: 34,
+          minWidth: 52,
+          ...theme.typography.smallTextLabels,
+          fontSize:
+            variant === "secondary_quiet"
+              ? "var(--step--2)"
+              : theme.typography.smallTextLabels.fontSize,
+        }),
+        fontWeight: 600,
+        ...(["tertiary", "tertiary_quiet"].includes(variant ?? "primary") && {
+          fontWeight: 500,
+        }),
+      };
+
       /** ====================== VARIANTS specific styling ============================= */
 
       if (variant === "primary") {
@@ -97,8 +138,7 @@ export const MuiButtonThemeOptions: Components<Theme>["MuiButton"] = {
           height: "100%",
           opacity: 0,
           background:
-            "linear-gradient(82.89deg, #9E56FA 5.64%, #644CFF 78.19%, #0070F4 121.05%)",
-          boxShadow: theme.boxShadows.purpleShadowMd,
+            "linear-gradient(270deg, #037CF5 0%, #00B2FF 100%), #0775E3",
           transition: theme.transitions.create("opacity"),
           zIndex: -1,
         };
@@ -211,47 +251,28 @@ export const MuiButtonThemeOptions: Components<Theme>["MuiButton"] = {
           ...hoverStyles,
           background: theme.palette.red[70],
         };
+      } else if (variant === "white_cta") {
+        baseStyles = {
+          ...baseStyles,
+          background: theme.palette.common.white,
+          border: "1px solid transparent",
+          boxShadow: theme.boxShadows.md,
+          borderRadius: 8,
+          color: theme.palette.common.black,
+          transition: "none",
+        };
+
+        hoverStyles = {
+          ...hoverStyles,
+          background: "linear-gradient(87.69deg, #EDFBFF 0%, #FFFFFF 96.24%)",
+          boxShadow:
+            "0px 0.2px 0.63px 0px rgba(33, 77, 223, 0.07), 0px 4.24px 8.1px 0px rgba(21, 68, 222, 0.06), 0px 7.13px 18.37px 0px rgba(22, 70, 225, 0.05), 0px 11px 30px 0px rgba(22, 69, 221, 0.04)",
+          transition: theme.transitions.create("background"),
+          svg: {
+            filter: "brightness(120%)",
+          },
+        };
       }
-
-      /** ====================== SIZE specific styling ============================= */
-
-      baseStyles = {
-        ...baseStyles,
-        borderRadius: `${buttonBorderRadius.md}px`,
-        ...(size === "large" && {
-          padding: "16px 32px",
-          minHeight: 56,
-          minWidth: 120,
-          borderRadius: `${buttonBorderRadius.lg}px`,
-          ...theme.typography.largeTextLabels,
-        }),
-        ...(size === "medium" && {
-          padding: "12px 20px",
-          minHeight: 48,
-          minWidth: 104,
-          ...theme.typography.regularTextLabels,
-        }),
-        ...(size === "small" && {
-          padding: "12px 20px",
-          minHeight: 42,
-          minWidth: 78,
-          ...theme.typography.smallTextLabels,
-        }),
-        ...(size === "xs" && {
-          padding: "8px 16px",
-          minHeight: 34,
-          minWidth: 52,
-          ...theme.typography.smallTextLabels,
-          fontSize:
-            variant === "secondary_quiet"
-              ? "var(--step--2)"
-              : theme.typography.smallTextLabels.fontSize,
-        }),
-        fontWeight: 600,
-        ...(["tertiary", "tertiary_quiet"].includes(variant ?? "primary") && {
-          fontWeight: 500,
-        }),
-      };
 
       return {
         ...baseStyles,

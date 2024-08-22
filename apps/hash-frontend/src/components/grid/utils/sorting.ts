@@ -1,53 +1,39 @@
-import { GridColumn } from "@glideapps/glide-data-grid";
+import type { Row } from "./rows";
 
-import { Row } from "./rows";
-
-export type ColumnSortType = "asc" | "desc";
+export type ColumnSortDirection = "asc" | "desc";
 
 export interface ColumnSort<T extends string> {
-  key: T;
-  dir: ColumnSortType;
+  columnKey: T;
+  direction: ColumnSortDirection;
 }
 
 export type SetColumnSort<T extends string> = (sort: ColumnSort<T>) => void;
 
-export const createHandleHeaderClicked = <T extends string>(
-  columns: GridColumn[],
-  sort: ColumnSort<T>,
-  setColumnSort: SetColumnSort<T>,
-) => {
-  return (colIndex: number) => {
-    const key = columns[colIndex]?.id as T;
-
-    if (!key) {
-      return;
-    }
-
-    const isSorted = key === sort.key;
-
-    setColumnSort({
-      key,
-      dir: isSorted && sort.dir === "asc" ? "desc" : "asc",
-    });
-  };
-};
-
 export const defaultSortRows = <T extends Row>(
   rows: T[],
   sort: ColumnSort<string>,
+  previousSort?: ColumnSort<string>,
 ) => {
-  /**
-   * cloning the array, we want to return a new array,
-   * so React can run effects & update state properly
-   */
-  const clone = [...rows] as T[];
-  return clone.sort((row1, row2) => {
+  return rows.toSorted((row1, row2) => {
     // we sort only by alphabetical order for now
-    const key1 = String(row1[sort.key]);
-    const key2 = String(row2[sort.key]);
-    let comparison = key1.localeCompare(key2);
+    const value1 = String(row1[sort.columnKey]);
+    const value2 = String(row2[sort.columnKey]);
 
-    if (sort.dir === "desc") {
+    const previousValue1 = previousSort?.columnKey
+      ? String(row1[previousSort.columnKey])
+      : undefined;
+    const previousValue2 = previousSort?.columnKey
+      ? String(row2[previousSort.columnKey])
+      : undefined;
+
+    let comparison = value1.localeCompare(value2);
+
+    if (comparison === 0 && previousValue1 && previousValue2) {
+      // if the two keys are equal, we sort by the previous sort
+      comparison = previousValue1.localeCompare(previousValue2);
+    }
+
+    if (sort.direction === "desc") {
       // reverse if descending
       comparison = -comparison;
     }

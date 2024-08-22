@@ -13,22 +13,23 @@ import {
   bindTrigger,
   usePopupState,
 } from "material-ui-popup-state/hooks";
-import { FunctionComponent, useMemo } from "react";
+import type { FunctionComponent } from "react";
+import { useMemo } from "react";
 
-import { User } from "../../../lib/user-and-org";
-import { getImageUrlFromEntityProperties } from "../../../pages/shared/get-image-url-from-properties";
+import { useAuthenticatedUser } from "../../../pages/shared/auth-info-context";
+import { getImageUrlFromEntityProperties } from "../../../pages/shared/get-file-properties";
 import { Link, MenuItem } from "../../ui";
 import { HeaderIconButton } from "./shared/header-icon-button";
 
 type AccountDropdownProps = {
   logout: () => void;
-  authenticatedUser: User;
 };
 
 export const AccountDropdown: FunctionComponent<AccountDropdownProps> = ({
   logout,
-  authenticatedUser,
 }) => {
+  const { authenticatedUser, isInstanceAdmin } = useAuthenticatedUser();
+
   const popupState = usePopupState({
     variant: "popover",
     popupId: "account-dropdown-menu",
@@ -55,7 +56,7 @@ export const AccountDropdown: FunctionComponent<AccountDropdownProps> = ({
               }}
               mb={0.5}
             >
-              <strong>{authenticatedUser.preferredName}</strong>
+              <strong>{authenticatedUser.displayName}</strong>
             </Typography>
             {userPrimaryEmail && (
               <Typography
@@ -82,7 +83,9 @@ export const AccountDropdown: FunctionComponent<AccountDropdownProps> = ({
         >
           <Avatar
             size={32}
-            title={authenticatedUser.preferredName ?? "U"}
+            title={
+              authenticatedUser.displayName ?? userPrimaryEmail?.[0] ?? "?"
+            }
             src={
               authenticatedUser.hasAvatar
                 ? getImageUrlFromEntityProperties(
@@ -133,7 +136,7 @@ export const AccountDropdown: FunctionComponent<AccountDropdownProps> = ({
                 fontWeight: 500,
               })}
             >
-              {authenticatedUser.preferredName}
+              {authenticatedUser.displayName}
             </Typography>
             {userPrimaryEmail && (
               <Typography
@@ -146,19 +149,33 @@ export const AccountDropdown: FunctionComponent<AccountDropdownProps> = ({
           </Box>
         </Link>
         <Divider />
-        <MenuItem href="/settings" onClick={() => popupState.close()}>
-          <ListItemText primary="Settings" />
-        </MenuItem>
-        {/*  
-          Commented out menu items whose functionality have not been implemented yet
-          @todo uncomment when functionality has been implemented 
-        */}
-        {/*
-        <MenuItem onClick={popupState.close}>
-          <ListItemText primary="Appearance" />
-        </MenuItem>
-        */}
-        <Divider />
+        {authenticatedUser.accountSignupComplete && [
+          <MenuItem
+            href="/settings"
+            key="settings"
+            onClick={() => popupState.close()}
+          >
+            <ListItemText primary="Settings" />
+          </MenuItem>,
+          isInstanceAdmin ? (
+            <MenuItem
+              href="/admin"
+              key="admin"
+              onClick={() => popupState.close()}
+            >
+              <ListItemText primary="Instance Settings" />
+            </MenuItem>
+          ) : null,
+          <MenuItem
+            href="/settings/integrations"
+            key="integrations"
+            onClick={() => popupState.close()}
+          >
+            <ListItemText primary="Integrations" />
+          </MenuItem>,
+          <Divider key="divider" />,
+        ]}
+
         <MenuItem onClick={logout} faded>
           <ListItemText primary="Sign Out" />
         </MenuItem>

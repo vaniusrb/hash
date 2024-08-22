@@ -1,37 +1,61 @@
-import {
-  Entity,
+import type { VersionedUrl } from "@blockprotocol/type-system-rs/pkg/type-system";
+import type {
+  Chart,
+  ECOption,
+  GraphEdge,
+  GraphNode,
+} from "@hashintel/design-system";
+import { EChart } from "@hashintel/design-system";
+/* eslint-disable no-restricted-imports */
+import type {
   EntityId,
-  EntityRootType,
-  Subgraph,
-} from "@blockprotocol/graph";
-import { getEntities, getEntityTypeById } from "@blockprotocol/graph/stdlib";
-import { Chart, EChart, ECOption } from "@hashintel/design-system";
-// eslint-disable-next-line no-restricted-imports
+  EntityMetadata,
+  LinkData,
+  PropertyObject,
+} from "@local/hash-graph-types/entity";
 import { generateEntityLabel as hashGenerateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
-import { BoxProps, useTheme } from "@mui/material";
-import { FunctionComponent, useEffect, useMemo, useState } from "react";
+import type { Subgraph } from "@local/hash-subgraph";
+import { isEntityId } from "@local/hash-subgraph";
+import { getEntityTypeById } from "@local/hash-subgraph/stdlib";
+/* eslint-enable no-restricted-imports */
+import type { BoxProps } from "@mui/material";
+import { useTheme } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
 
-const generateEntityLabel = (
-  subgraph: Subgraph<EntityRootType>,
-  entity: Entity,
-) => {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-  return hashGenerateEntityLabel(subgraph as any, entity as any);
+export type EntityForGraphChart = {
+  linkData?: LinkData;
+  metadata: Pick<EntityMetadata, "recordId" | "entityTypeId"> &
+    Partial<Pick<EntityMetadata, "temporalVersioning">>;
+  properties: PropertyObject;
 };
 
-export const EntitiesGraphChart: FunctionComponent<{
-  filterEntity?: (entity: Entity) => boolean;
-  onEntityClick?: (entity: Entity) => void;
-  isPrimaryEntity?: (entity: Entity) => boolean;
-  subgraph?: Subgraph<EntityRootType>;
-  sx?: BoxProps["sx"];
-}> = ({ filterEntity, isPrimaryEntity, subgraph, sx, onEntityClick }) => {
-  const [chart, setChart] = useState<Chart>();
+const generateEntityLabel = (
+  subgraph: Subgraph,
+  entity: EntityForGraphChart,
+) => {
+  return hashGenerateEntityLabel(subgraph, entity);
+};
 
-  const entities = useMemo(
-    () => (subgraph ? getEntities(subgraph) : undefined),
-    [subgraph],
-  );
+const nodeCategories = [{ name: "entity" }, { name: "entityType" }];
+
+export const EntitiesGraphChart = <T extends EntityForGraphChart>({
+  entities,
+  filterEntity,
+  isPrimaryEntity,
+  subgraphWithTypes,
+  sx,
+  onEntityClick,
+  onEntityTypeClick,
+}: {
+  entities?: T[];
+  filterEntity?: (entity: T) => boolean;
+  onEntityClick?: (entityId: EntityId) => void;
+  onEntityTypeClick?: (entityTypeId: VersionedUrl) => void;
+  isPrimaryEntity?: (entity: T) => boolean;
+  subgraphWithTypes: Subgraph;
+  sx?: BoxProps["sx"];
+}) => {
+  const [chart, setChart] = useState<Chart>();
 
   const nonLinkEntities = useMemo(
     () =>
@@ -48,8 +72,8 @@ export const EntitiesGraphChart: FunctionComponent<{
         ? entities.filter(
             (
               entity,
-            ): entity is Entity & {
-              linkData: NonNullable<Entity["linkData"]>;
+            ): entity is T & {
+              linkData: NonNullable<T["linkData"]>;
             } =>
               !!entity.linkData &&
               nonLinkEntities.some(
@@ -71,47 +95,145 @@ export const EntitiesGraphChart: FunctionComponent<{
     if (chart) {
       chart.on("click", (params) => {
         if (
-          params.componentType === "series" &&
-          params.seriesType === "graph"
+          (params.dataType === "node" &&
+            (params.data as GraphNode).category === "entity") ||
+          (params.dataType === "edge" &&
+            isEntityId((params.data as GraphEdge).target as string))
         ) {
-          if (params.dataType === "node" || params.dataType === "edge") {
-            /** @todo: improve typing */
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            const entityId = (params.data as any).id as EntityId;
+          const entityId = (params.data as GraphNode | GraphEdge)
+            .id as EntityId;
 
-            const entity = entities?.find(
-              ({ metadata }) => entityId === metadata.recordId.entityId,
-            );
+          onEntityClick?.(entityId);
+        } else if (
+          params.dataType === "node" &&
+          (params.data as GraphNode).category === "entityType"
+        ) {
+          const entityTypeId = (params.data as GraphNode).id as VersionedUrl;
 
-            if (entity) {
-              onEntityClick?.(entity);
-            }
-          }
+          onEntityTypeClick?.(entityTypeId);
         }
       });
     }
     return () => {
       chart?.off("click");
     };
-  }, [chart, entities, onEntityClick]);
+  }, [chart, entities, onEntityClick, onEntityTypeClick]);
 
   const chartInitialized = !!chart;
 
   const theme = useTheme();
 
   const eChartOptions = useMemo<ECOption>(() => {
+    const nodes: GraphNode[] = [];
+    const edges: GraphEdge[] = [];
+
+    const typesAlreadyAdded: Set<VersionedUrl> = new Set();
+
+    const nodeLabelStyle = {
+      backgroundColor: "rgba(255, 255, 255, 0.4)",
+      fontFamily: theme.typography.fontFamily,
+      fontSize: 14,
+      fontWeight: 600,
+      position: "bottom",
+      padding: 4,
+      distance: 1,
+      show: true,
+    } as const;
+
+    for (const entity of nonLinkEntities ?? []) {
+      nodes.push({
+        category: "entity",
+        name: generateEntityLabel(subgraphWithTypes, entity),
+        id: entity.metadata.recordId.entityId,
+        label: nodeLabelStyle,
+        itemStyle: {
+          color: theme.palette.blue[20],
+          borderColor: theme.palette.blue[30],
+          ...(isPrimaryEntity
+            ? {
+                opacity: isPrimaryEntity(entity) ? 1 : 0.6,
+              }
+            : {}),
+        },
+      });
+
+      const entityType = getEntityTypeById(
+        subgraphWithTypes,
+        entity.metadata.entityTypeId,
+      );
+
+      if (entityType) {
+        const {
+          schema: { title, $id },
+        } = entityType;
+
+        if (!typesAlreadyAdded.has($id)) {
+          typesAlreadyAdded.add($id);
+
+          nodes.push({
+            category: "entityType",
+            name: title,
+            id: $id,
+            label: {
+              ...nodeLabelStyle,
+            },
+            itemStyle: {
+              color: theme.palette.blue[70],
+            },
+          });
+        }
+
+        edges.push({
+          source: entity.metadata.recordId.entityId,
+          target: $id,
+          name: `${entity.metadata.recordId.entityId}-${$id}`,
+          label: {
+            fontSize: 12,
+            padding: 2,
+            show: true,
+            formatter: () => "is of type",
+          },
+          symbol: ["none", "arrow"],
+          symbolSize: 8,
+        });
+      }
+    }
+
+    for (const linkEntity of linkEntities ?? []) {
+      const linkEntityType = getEntityTypeById(
+        subgraphWithTypes,
+        linkEntity.metadata.entityTypeId,
+      );
+
+      edges.push({
+        /** @todo: figure out why the right entity is the source and not the target */
+        source: linkEntity.linkData.leftEntityId,
+        target: linkEntity.linkData.rightEntityId,
+        id: linkEntity.metadata.recordId.entityId,
+        name: linkEntity.metadata.recordId.entityId,
+        label: {
+          show: true,
+          formatter: () => linkEntityType?.schema.title ?? "Unknown",
+        },
+        symbol: ["none", "arrow"],
+        symbolSize: 8,
+      });
+    }
+
     return {
+      categories: nodeCategories,
       tooltip: {
-        borderColor: theme.palette.blue[70],
         show: true,
         trigger: "item",
-        formatter: (params) => {
-          /** @todo: improve typing */
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          const id = (params as any).data.id as string;
+        formatter: (untypedParams) => {
+          const params = untypedParams as {
+            data: GraphNode | GraphEdge;
+            dataType: "node" | "edge";
+          };
 
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          if ((params as any).dataType === "edge") {
+          const id = params.data.id;
+
+          if (params.dataType === "edge") {
             const linkEntity = linkEntities?.find(
               ({ metadata }) => metadata.recordId.entityId === id,
             );
@@ -130,18 +252,18 @@ export const EntitiesGraphChart: FunctionComponent<{
               );
 
               const linkEntityTypeTitle = getEntityTypeById(
-                subgraph!,
+                subgraphWithTypes,
                 linkEntity.metadata.entityTypeId,
               )?.schema.title;
 
               return [
                 `<strong>${generateEntityLabel(
-                  subgraph!,
+                  subgraphWithTypes,
                   leftEntity!,
                 )}</strong>`,
                 linkEntityTypeTitle?.toLowerCase(),
                 `<strong>${generateEntityLabel(
-                  subgraph!,
+                  subgraphWithTypes,
                   rightEntity!,
                 )}</strong>`,
               ].join(" ");
@@ -153,7 +275,7 @@ export const EntitiesGraphChart: FunctionComponent<{
 
             if (entity) {
               const entityType = getEntityTypeById(
-                subgraph!,
+                subgraphWithTypes,
                 entity.metadata.entityTypeId,
               );
 
@@ -166,41 +288,16 @@ export const EntitiesGraphChart: FunctionComponent<{
       },
       series: {
         roam: true,
-        draggable: true,
+        draggable: false,
         force: {
           layoutAnimation: chartInitialized,
         },
-        data: nonLinkEntities?.map((entity) => ({
-          name: generateEntityLabel(subgraph!, entity),
-          id: entity.metadata.recordId.entityId,
-          label: {
-            show: true,
-            textBorderColor: theme.palette.blue[90],
-            textBorderWidth: 2,
-          },
-          itemStyle: {
-            color: theme.palette.blue[70],
-            ...(isPrimaryEntity
-              ? {
-                  opacity: isPrimaryEntity(entity) ? 1 : 0.6,
-                }
-              : {}),
-          },
-        })),
-        edges: linkEntities?.map((linkEntity) => ({
-          /** @todo: figure out why the right entity is the source and not the target */
-          source: linkEntity.linkData.leftEntityId,
-          target: linkEntity.linkData.rightEntityId,
-          id: linkEntity.metadata.recordId.entityId,
-          label: {
-            show: true,
-            formatter: () =>
-              getEntityTypeById(subgraph!, linkEntity.metadata.entityTypeId)
-                ?.schema.title ?? "Unknown",
-          },
-          symbol: ["none", "arrow"],
-          name: linkEntity.metadata.entityTypeId,
-        })),
+        scaleLimit: {
+          min: 4,
+          max: 12,
+        },
+        nodes,
+        edges,
         type: "graph",
         layout: "force",
         // Hack for only setting the zoom if the chart hasn't already been initialized
@@ -208,7 +305,7 @@ export const EntitiesGraphChart: FunctionComponent<{
       },
     };
   }, [
-    subgraph,
+    subgraphWithTypes,
     entities,
     linkEntities,
     nonLinkEntities,

@@ -1,4 +1,4 @@
-import {
+import type {
   DataType,
   EntityType,
   PropertyType,
@@ -8,11 +8,7 @@ import {
   apiGraphQLEndpoint,
   frontendUrl,
 } from "@local/hash-isomorphic-utils/environment";
-import {
-  SystemTypeWebShortname,
-  systemTypeWebShortnames,
-} from "@local/hash-isomorphic-utils/ontology-types";
-import { OntologyTypeVertexId } from "@local/hash-subgraph";
+import type { OntologyTypeVertexId } from "@local/hash-subgraph";
 import type { ApolloError } from "apollo-server-express";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -83,8 +79,8 @@ export const returnTypeAsJson = async (request: NextRequest) => {
   const shouldServeHashAiType =
     frontendUrl === "https://app.hash.ai" ||
     (frontendUrl === "http://localhost:3000" &&
-      systemTypeWebShortnames.includes(
-        urlObject.pathname.split("/")[1]!.slice(1) as SystemTypeWebShortname,
+      ["hash", "google", "linear"].includes(
+        urlObject.pathname.split("/")[1]!.slice(1),
       ));
 
   const urlToRequest = shouldServeHashAiType
@@ -105,7 +101,7 @@ export const returnTypeAsJson = async (request: NextRequest) => {
     | GetPropertyTypeQueryVariables
   >(query, variables, cookie);
 
-  if (errors || !data) {
+  if (errors ?? !data) {
     const { code, message } = errors?.[0] ?? {
       code: "INTERNAL_SERVER_ERROR",
       message: "Unknown error",

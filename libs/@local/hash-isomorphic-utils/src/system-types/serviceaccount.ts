@@ -2,20 +2,26 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   ProfileURLPropertyValue,
+  ProfileURLPropertyValueWithMetadata,
   ServiceAccount,
   ServiceAccountOutgoingLinkAndTarget,
   ServiceAccountOutgoingLinksByLinkEntityTypeId,
   ServiceAccountProperties,
+  ServiceAccountPropertiesWithMetadata,
   TextDataType,
-} from "./shared";
+  TextDataTypeWithMetadata,
+} from "./shared.js";
 
 export type {
   ProfileURLPropertyValue,
+  ProfileURLPropertyValueWithMetadata,
   ServiceAccount,
   ServiceAccountOutgoingLinkAndTarget,
   ServiceAccountOutgoingLinksByLinkEntityTypeId,
   ServiceAccountProperties,
+  ServiceAccountPropertiesWithMetadata,
   TextDataType,
+  TextDataTypeWithMetadata,
 };

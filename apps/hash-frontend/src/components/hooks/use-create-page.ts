@@ -1,18 +1,18 @@
 import { useMutation } from "@apollo/client";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   extractEntityUuidFromEntityId,
   extractOwnedByIdFromEntityId,
-  OwnedById,
 } from "@local/hash-subgraph";
 import { useRouter } from "next/router";
 import { useCallback } from "react";
 
-import {
+import type {
   CreatePageMutation,
   CreatePageMutationVariables,
-  PageType,
 } from "../../graphql/api-types.gen";
-import { structuralQueryEntitiesQuery } from "../../graphql/queries/knowledge/entity.queries";
+import { PageType } from "../../graphql/api-types.gen";
+import { getEntitySubgraphQuery } from "../../graphql/queries/knowledge/entity.queries";
 import { createPage } from "../../graphql/queries/page.queries";
 import { constructPageRelativeUrl } from "../../lib/routes";
 import { getAccountPagesVariables } from "../../shared/account-pages-variables";
@@ -35,7 +35,7 @@ export const useCreatePage = ({
       data
         ? [
             {
-              query: structuralQueryEntitiesQuery,
+              query: getEntitySubgraphQuery,
               variables: getAccountPagesVariables({
                 ownedById: extractOwnedByIdFromEntityId(
                   data.createPage.metadata.recordId.entityId,

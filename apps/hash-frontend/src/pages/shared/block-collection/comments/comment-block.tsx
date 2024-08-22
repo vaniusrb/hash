@@ -1,4 +1,5 @@
 import { faCheckCircle } from "@fortawesome/free-regular-svg-icons";
+import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
 import {
   faChevronDown,
   faChevronUp,
@@ -6,7 +7,6 @@ import {
   faLink,
   faPencil,
   faTrash,
-  IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import {
   Avatar,
@@ -14,26 +14,20 @@ import {
   IconButton,
   LoadingSpinner,
 } from "@hashintel/design-system";
+import type { EntityId } from "@local/hash-graph-types/entity";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { UserProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import { EntityId } from "@local/hash-subgraph";
+import type { UserProperties } from "@local/hash-isomorphic-utils/system-types/user";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
 import { Box, Collapse, Tooltip, Typography } from "@mui/material";
 import { formatDistanceToNowStrict } from "date-fns";
 import { isEqual } from "lodash";
 import { bindTrigger } from "material-ui-popup-state";
 import { usePopupState } from "material-ui-popup-state/hooks";
-import {
-  FunctionComponent,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import type { FunctionComponent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDeleteComment } from "../../../../components/hooks/use-delete-comment";
-import { PageComment } from "../../../../components/hooks/use-page-comments";
+import type { PageComment } from "../../../../components/hooks/use-page-comments";
 import { useResolveComment } from "../../../../components/hooks/use-resolve-comment";
 import { useUpdateCommentText } from "../../../../components/hooks/use-update-comment-text";
 import { PencilSlashIcon } from "../../../../shared/icons/pencil-slash-icon";
@@ -88,11 +82,7 @@ export const CommentBlock: FunctionComponent<CommentProps> = ({
   const {
     metadata: {
       recordId: { entityId },
-      // TODO: The provenance fields shouldn't be used for this
-      //   see https://app.asana.com/0/1201095311341924/1203466351235289/f
-      provenance: {
-        edition: { createdById: commentCreatedById },
-      },
+      provenance: { createdById: commentCreatedById },
     },
     hasText,
     author,
@@ -135,8 +125,8 @@ export const CommentBlock: FunctionComponent<CommentProps> = ({
     popupId: "comment-block-menu",
   });
 
-  const preferredName = useMemo(
-    () => simplifyProperties(author.properties as UserProperties).preferredName,
+  const displayName = useMemo(
+    () => simplifyProperties(author.properties as UserProperties).displayName,
     [author.properties],
   );
 
@@ -181,7 +171,7 @@ export const CommentBlock: FunctionComponent<CommentProps> = ({
     >
       <Box display="flex" justifyContent="space-between">
         {}
-        <Avatar size={36} title={preferredName ?? "U"} />
+        <Avatar size={36} title={displayName ?? "U"} />
         <Box
           sx={{ flexDirection: "column", flex: 1, overflow: "hidden", pl: 1.5 }}
         >
@@ -196,7 +186,7 @@ export const CommentBlock: FunctionComponent<CommentProps> = ({
               color: ({ palette }) => palette.gray[90],
             }}
           >
-            {preferredName}
+            {displayName}
           </Typography>
           <Typography
             component="p"

@@ -1,11 +1,13 @@
 import { faCheckCircle } from "@fortawesome/free-regular-svg-icons";
 import { faCircleExclamation } from "@fortawesome/free-solid-svg-icons";
+import type {
+  InputProps,
+  TextFieldProps as MuiTextFieldProps,
+} from "@mui/material";
 import {
   InputAdornment,
   inputClasses,
-  InputProps,
   outlinedInputClasses,
-  TextFieldProps as MuiTextFieldProps,
 } from "@mui/material";
 
 import { FontAwesomeIcon } from "./fontawesome-icon";
@@ -31,7 +33,7 @@ export const getInputProps = ({
   const { sx: InputPropsSx = [], ...otherInputProps } = otherProps;
 
   const renderEndAdornment = () => {
-    if (error || success) {
+    if (!!error || success) {
       return (
         <InputAdornment position="end">
           <FontAwesomeIcon
@@ -69,7 +71,7 @@ export const getInputProps = ({
     ...(variant === "outlined" ? { notched: false } : {}),
     ...otherInputProps,
     endAdornment:
-      error || success ? renderEndAdornment() : otherProps.endAdornment,
+      !!error || success ? renderEndAdornment() : otherProps.endAdornment,
   };
 };
 export const inputLabelProps = {

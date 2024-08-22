@@ -1,34 +1,38 @@
-use std::{
-    fmt, fs,
+use alloc::sync::Arc;
+use core::{
+    fmt,
     net::{AddrParseError, SocketAddr},
-    sync::Arc,
+    str::FromStr,
     time::Duration,
 };
+use std::fs;
 
 use authorization::{
     backend::{SpiceDbOpenApi, ZanzibarBackend},
     zanzibar::ZanzibarClient,
-    AuthorizationApi,
+    AuthorizationApi, NoAuthorization,
 };
 use clap::Parser;
 use error_stack::{Report, Result, ResultExt};
 use graph::{
-    logging::{init_logger, LoggingArgs},
     ontology::domain_validator::DomainValidator,
-    store::{DatabaseConnectionInfo, FetchingPool, PostgresStorePool, StorePool},
+    store::{
+        DatabaseConnectionInfo, DatabasePoolConfig, FetchingPool, PostgresStorePool, StorePool,
+    },
 };
 use graph_api::rest::{rest_api_router, OpenApiDocumentation, RestRouterDependencies};
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client, Url};
+use temporal_client::TemporalClientConfig;
 use tokio::{net::TcpListener, time::timeout};
 use tokio_postgres::NoTls;
 
 use crate::{
     error::{GraphError, HealthcheckError},
-    subcommand::type_fetcher::TypeFetcherAddress,
+    subcommand::{type_fetcher::TypeFetcherAddress, wait_healthcheck},
 };
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 pub struct ApiAddress {
     /// The host the REST client is listening at.
     #[clap(long, default_value = "127.0.0.1", env = "HASH_GRAPH_API_HOST")]
@@ -57,12 +61,13 @@ impl TryFrom<ApiAddress> for SocketAddr {
 }
 
 #[derive(Debug, Parser)]
+#[expect(clippy::struct_excessive_bools, reason = "This is a CLI struct")]
 pub struct ServerArgs {
     #[clap(flatten)]
-    pub log_config: LoggingArgs,
+    pub db_info: DatabaseConnectionInfo,
 
     #[clap(flatten)]
-    pub db_info: DatabaseConnectionInfo,
+    pub pool_config: DatabasePoolConfig,
 
     /// The address the REST client is listening at.
     #[clap(flatten)]
@@ -96,6 +101,14 @@ pub struct ServerArgs {
     #[clap(long, default_value_t = false)]
     pub healthcheck: bool,
 
+    /// Waits for the healthcheck to become healthy
+    #[clap(long, default_value_t = false, requires = "healthcheck")]
+    pub wait: bool,
+
+    /// Timeout for the wait flag in seconds
+    #[clap(long, requires = "wait")]
+    pub timeout: Option<u64>,
+
     /// Starts a server that only serves the OpenAPI spec.
     #[clap(long, default_value_t = false)]
     pub write_openapi_specs: bool,
@@ -109,21 +122,34 @@ pub struct ServerArgs {
     pub spicedb_host: String,
 
     /// The port the Spice DB server is listening at.
-    #[clap(long, env = "HASH_SPICEDB_HTTP_PORT")]
+    #[clap(long, env = "HASH_SPICEDB_HTTP_PORT", default_value_t = 8443)]
     pub spicedb_http_port: u16,
 
     /// The secret key used to authenticate with the Spice DB server.
     #[clap(long, env = "HASH_SPICEDB_GRPC_PRESHARED_KEY")]
     pub spicedb_grpc_preshared_key: Option<String>,
+
+    /// The URL of the Temporal server.
+    ///
+    /// If not set, the service will not trigger workflows.
+    #[clap(long, env = "HASH_TEMPORAL_SERVER_HOST")]
+    pub temporal_host: Option<String>,
+
+    /// The URL of the Temporal server.
+    #[clap(long, env = "HASH_TEMPORAL_SERVER_PORT", default_value_t = 7233)]
+    pub temporal_port: u16,
 }
 
+#[expect(clippy::too_many_lines)]
 pub async fn server(args: ServerArgs) -> Result<(), GraphError> {
-    let _log_guard = init_logger(&args.log_config);
-
     if args.healthcheck {
-        return healthcheck(args.api_address)
-            .await
-            .change_context(GraphError);
+        return wait_healthcheck(
+            || healthcheck(args.api_address.clone()),
+            args.wait,
+            args.timeout.map(Duration::from_secs),
+        )
+        .await
+        .change_context(GraphError);
     }
 
     if args.write_openapi_specs {
@@ -152,7 +178,7 @@ pub async fn server(args: ServerArgs) -> Result<(), GraphError> {
         return Ok(());
     }
 
-    let pool = PostgresStorePool::new(&args.db_info, NoTls)
+    let pool = PostgresStorePool::new(&args.db_info, &args.pool_config, NoTls)
         .await
         .change_context(GraphError)
         .map_err(|report| {
@@ -160,7 +186,7 @@ pub async fn server(args: ServerArgs) -> Result<(), GraphError> {
             report
         })?;
     _ = pool
-        .acquire()
+        .acquire(NoAuthorization, None)
         .await
         .change_context(GraphError)
         .attach_printable("Connection to database failed")?;
@@ -197,6 +223,19 @@ pub async fn server(args: ServerArgs) -> Result<(), GraphError> {
         store: Arc::new(pool),
         authorization_api: Arc::new(zanzibar_client),
         domain_regex: DomainValidator::new(args.allowed_url_domain),
+        temporal_client: if let Some(host) = args.temporal_host {
+            Some(
+                TemporalClientConfig::new(
+                    Url::from_str(&format!("{}:{}", host, args.temporal_port))
+                        .change_context(GraphError)?,
+                )
+                .change_context(GraphError)?
+                .await
+                .change_context(GraphError)?,
+            )
+        } else {
+            None
+        },
     });
 
     tracing::info!("Listening on {}", args.api_address);

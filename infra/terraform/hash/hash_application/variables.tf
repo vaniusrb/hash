@@ -108,6 +108,22 @@ variable "kratos_env_vars" {
   description = "A list of environment variables to save as system parameters and inject into Kratos"
 }
 
+variable "hydra_image" {
+  type = object({
+    url     = string
+    ecr_arn = optional(string)
+  })
+  description = "URL of the docker image for the Hydra service"
+}
+
+variable "hydra_env_vars" {
+  type = list(object({
+    name   = string,
+    secret = bool,
+    value  = string
+  }))
+  description = "A list of environment variables to save as system parameters and inject into Hydra"
+}
 
 variable "api_image" {
   type = object({
@@ -115,6 +131,15 @@ variable "api_image" {
     ecr_arn = optional(string)
   })
   description = "URL of the docker image for the API service"
+}
+
+variable "api_migration_env_vars" {
+  type = list(object({
+    name   = string,
+    secret = bool,
+    value  = string
+  }))
+  description = "A list of environment variables to save as system parameters and inject into the API service migration"
 }
 
 variable "api_env_vars" {
@@ -149,6 +174,15 @@ variable "temporal_worker_integration_image" {
     ecr_arn = optional(string)
   })
   description = "URL of the docker image for the Temporal integration worker"
+}
+
+variable "temporal_worker_integration_env_vars" {
+  type = list(object({
+    name   = string,
+    secret = bool,
+    value  = string
+  }))
+  description = "A list of environment variables to save as system parameters and inject into the Temporal integration worker"
 }
 
 variable "ses_verified_domain_identity" {

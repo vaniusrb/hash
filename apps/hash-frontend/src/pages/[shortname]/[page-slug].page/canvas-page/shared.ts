@@ -1,7 +1,7 @@
-import { ComponentIdHashBlockMap } from "@local/hash-isomorphic-utils/blocks";
+import type { ComponentIdHashBlockMap } from "@local/hash-isomorphic-utils/blocks";
+import type { BlockCollectionContentItem } from "@local/hash-isomorphic-utils/entity";
 
-import { BlockLoaderProps } from "../../../../components/block-loader/block-loader";
-import { BlockCollectionContentItem } from "../../../../graphql/api-types.gen";
+import type { BlockLoaderProps } from "../../../../components/block-loader/block-loader";
 
 export type JsonSerializableBlockLoaderProps = Omit<
   BlockLoaderProps,

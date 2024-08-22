@@ -1,15 +1,15 @@
 import { createKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
-import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
-import { migrateOntologyTypes } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized/migrate-ontology-types";
+import type { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { createOrg } from "@apps/hash-api/src/graph/knowledge/system-types/org";
 import { createUser } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { systemAccountId } from "@apps/hash-api/src/graph/system-account";
-import { AuthenticationContext } from "@apps/hash-api/src/graphql/authentication-context";
-import { getRequiredEnv } from "@apps/hash-api/src/util";
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { createGraphClient } from "@local/hash-backend-utils/create-graph-client";
+import { getRequiredEnv } from "@local/hash-backend-utils/environment";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { TemporalClient } from "@local/hash-backend-utils/temporal";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import { vi } from "vitest";
 
 export const textDataTypeId =
   "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1" as VersionedUrl;
@@ -21,9 +21,12 @@ const randomStringSuffix = () => {
     .join("");
 };
 
-export const createTestImpureGraphContext = (): ImpureGraphContext<true> => {
+export const createTestImpureGraphContext = (): ImpureGraphContext<
+  true,
+  true
+> => {
   const logger = new Logger({
-    mode: "dev",
+    environment: "test",
     level: "debug",
     serviceName: "integration-tests",
   });
@@ -35,26 +38,40 @@ export const createTestImpureGraphContext = (): ImpureGraphContext<true> => {
     host: graphApiHost,
     port: graphApiPort,
   });
+
+  const mockedTemporalClient = {
+    workflow: {
+      execute: vi.fn(),
+    },
+  } as unknown as TemporalClient;
+
   return {
     graphApi,
+    provenance: {
+      actorType: "machine",
+      origin: {
+        type: "api",
+      },
+    },
     uploadProvider: {
-      getFileEntityStorageKey: (_params: any) => {
+      getFileEntityStorageKey: (_params) => {
         throw new Error(
           "File fetching not implemented in tests. Override with mock to test.",
         );
       },
-      presignDownload: (_params: any) => {
+      presignDownload: (_params) => {
         throw new Error(
           "File presign download not implemented in tests. Override with mock to test.",
         );
       },
-      presignUpload: (_params: any) => {
+      presignUpload: (_params) => {
         throw new Error(
           "File presign upload not implemented in tests. Override with mock to test.",
         );
       },
       storageType: "LOCAL_FILE_SYSTEM",
     },
+    temporalClient: mockedTemporalClient,
   };
 };
 
@@ -62,12 +79,10 @@ export const generateRandomShortname = (prefix?: string) =>
   `${prefix ?? ""}${randomStringSuffix()}`;
 
 export const createTestUser = async (
-  context: ImpureGraphContext,
+  context: ImpureGraphContext<false, true>,
   shortNamePrefix: string,
   logger: Logger,
 ) => {
-  await ensureSystemGraphIsInitialized({ logger, context });
-
   const shortname = generateRandomShortname(shortNamePrefix);
 
   const identity = await createKratosIdentity({
@@ -93,7 +108,7 @@ export const createTestUser = async (
       emails: [`${shortname}@example.com`],
       kratosIdentityId,
       shortname,
-      preferredName: shortname,
+      displayName: shortname,
     },
   ).catch((err) => {
     logger.error(`Error making UserModel for ${shortname}`);
@@ -102,13 +117,10 @@ export const createTestUser = async (
 };
 
 export const createTestOrg = async (
-  context: ImpureGraphContext,
+  context: ImpureGraphContext<false, true>,
   authentication: AuthenticationContext,
   shortNamePrefix: string,
-  logger: Logger,
 ) => {
-  await migrateOntologyTypes({ logger, context });
-
   const shortname = generateRandomShortname(shortNamePrefix);
 
   return createOrg(context, authentication, {

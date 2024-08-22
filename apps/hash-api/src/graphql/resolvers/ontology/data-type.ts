@@ -1,64 +1,89 @@
 import {
   currentTimeInstantTemporalAxes,
+  fullTransactionTimeAxis,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
-import { DataTypeRootType, Subgraph } from "@local/hash-subgraph";
-import { mapGraphApiSubgraphToSubgraph } from "@local/hash-subgraph/stdlib";
+import {
+  mapGraphApiSubgraphToSubgraph,
+  serializeSubgraph,
+} from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type {
+  DataTypeRootType,
+  SerializedSubgraph,
+} from "@local/hash-subgraph";
 
 import { getDataTypeSubgraphById } from "../../../graph/ontology/primitive/data-type";
-import {
+import type {
   QueryGetDataTypeArgs,
   QueryQueryDataTypesArgs,
   ResolverFn,
 } from "../../api-types.gen";
-import { GraphQLContext, LoggedInGraphQLContext } from "../../context";
-import { dataSourcesToImpureGraphContext } from "../util";
+import type { GraphQLContext, LoggedInGraphQLContext } from "../../context";
+import { graphQLContextToImpureGraphContext } from "../util";
 
 export const queryDataTypes: ResolverFn<
-  Promise<Subgraph>,
-  {},
+  Promise<SerializedSubgraph>,
+  Record<string, never>,
   LoggedInGraphQLContext,
   QueryQueryDataTypesArgs
-> = async (_, { constrainsValuesOn }, { dataSources, authentication }) => {
-  const { graphApi } = dataSources;
-
-  const { data } = await graphApi.getDataTypesByQuery(authentication.actorId, {
-    filter: {
-      equal: [{ path: ["version"] }, { parameter: "latest" }],
-    },
-    graphResolveDepths: {
-      ...zeroedGraphResolveDepths,
-      constrainsValuesOn,
-    },
-    temporalAxes: currentTimeInstantTemporalAxes,
-    includeDrafts: false,
-  });
-
-  const subgraph = mapGraphApiSubgraphToSubgraph<DataTypeRootType>(data);
-
-  return subgraph;
-};
-
-export const getDataType: ResolverFn<
-  Promise<Subgraph>,
-  {},
-  GraphQLContext,
-  QueryGetDataTypeArgs
 > = async (
   _,
-  { dataTypeId, constrainsValuesOn },
+  { constrainsValuesOn, includeArchived },
   { dataSources, authentication },
-) =>
-  getDataTypeSubgraphById(
-    dataSourcesToImpureGraphContext(dataSources),
-    authentication,
+) => {
+  const { graphApi } = dataSources;
+
+  const { data: response } = await graphApi.getDataTypeSubgraph(
+    authentication.actorId,
     {
-      dataTypeId,
-      /** @todo - make these configurable once non-primitive data types are a thing https://app.asana.com/0/1200211978612931/1202464168422955/f */
+      filter: {
+        equal: [{ path: ["version"] }, { parameter: "latest" }],
+      },
       graphResolveDepths: {
         ...zeroedGraphResolveDepths,
         constrainsValuesOn,
       },
-      temporalAxes: currentTimeInstantTemporalAxes,
+      temporalAxes: includeArchived
+        ? fullTransactionTimeAxis
+        : currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     },
+  );
+
+  return serializeSubgraph(
+    mapGraphApiSubgraphToSubgraph<DataTypeRootType>(
+      response.subgraph,
+      authentication.actorId,
+    ),
+  );
+};
+
+export const getDataType: ResolverFn<
+  Promise<SerializedSubgraph>,
+  Record<string, never>,
+  GraphQLContext,
+  QueryGetDataTypeArgs
+> = async (
+  _,
+  { dataTypeId, constrainsValuesOn, includeArchived },
+  graphQLContext,
+) =>
+  serializeSubgraph(
+    await getDataTypeSubgraphById(
+      graphQLContextToImpureGraphContext(graphQLContext),
+      graphQLContext.authentication,
+      {
+        dataTypeId,
+        /** @todo - make these configurable once non-primitive data types are a thing
+         * @see https://linear.app/hash/issue/H-2994
+         */
+        graphResolveDepths: {
+          ...zeroedGraphResolveDepths,
+          constrainsValuesOn,
+        },
+        temporalAxes: includeArchived
+          ? fullTransactionTimeAxis
+          : currentTimeInstantTemporalAxes,
+      },
+    ),
   );

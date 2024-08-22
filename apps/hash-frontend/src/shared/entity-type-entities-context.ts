@@ -1,18 +1,15 @@
-import { ApolloQueryResult } from "@apollo/client";
-import {
+import type { ApolloQueryResult } from "@apollo/client";
+import type {
   EntityType,
   PropertyType,
   VersionedUrl,
 } from "@blockprotocol/type-system";
-import {
-  BaseUrl,
-  Entity,
-  EntityRootType,
-  Subgraph,
-} from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
 import { createContext, useContext } from "react";
 
-import { QueryEntitiesQuery } from "../graphql/api-types.gen";
+import type { GetEntitySubgraphQuery } from "../graphql/api-types.gen";
 
 export type EntityTypeEntitiesContextValue = {
   entityTypeId?: VersionedUrl;
@@ -27,7 +24,7 @@ export type EntityTypeEntitiesContextValue = {
    * The cached content will be replaced automatically and the value updated when the network request completes.
    */
   loading: boolean;
-  refetch: () => Promise<ApolloQueryResult<QueryEntitiesQuery>>;
+  refetch: () => Promise<ApolloQueryResult<GetEntitySubgraphQuery>>;
   propertyTypes?: PropertyType[];
   subgraph?: Subgraph<EntityRootType>;
 };

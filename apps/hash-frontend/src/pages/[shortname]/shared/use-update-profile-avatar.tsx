@@ -1,11 +1,11 @@
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { EntityId, OwnedById } from "@local/hash-subgraph";
 import { useCallback, useState } from "react";
 
-import { Org, User } from "../../../lib/user-and-org";
+import type { Org, User } from "../../../lib/user-and-org";
 import { useFileUploads } from "../../../shared/file-upload-context";
 import { useAuthInfo } from "../../shared/auth-info-context";
 
@@ -34,7 +34,7 @@ export const useUpdateProfileAvatar = (props: {
 
       const profileName =
         props.profileName ??
-        (profile.kind === "user" ? profile.preferredName : profile.name);
+        (profile.kind === "user" ? profile.displayName : profile.name);
 
       await uploadFile({
         ownedById,
@@ -46,8 +46,8 @@ export const useUpdateProfileAvatar = (props: {
           ...(existingAvatarImageEntity
             ? {
                 fileEntityUpdateInput: {
-                  existingFileEntityId: existingAvatarImageEntity.metadata
-                    .recordId.entityId as EntityId,
+                  existingFileEntityId:
+                    existingAvatarImageEntity.metadata.recordId.entityId,
                 },
               }
             : {

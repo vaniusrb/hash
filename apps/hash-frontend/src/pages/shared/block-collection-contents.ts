@@ -1,4 +1,7 @@
+import type { Entity, LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { EntityId, EntityUuid } from "@local/hash-graph-types/entity";
 import { sortBlockCollectionLinks } from "@local/hash-isomorphic-utils/block-collection";
+import type { BlockCollectionContentItem } from "@local/hash-isomorphic-utils/entity";
 import {
   currentTimeInstantTemporalAxes,
   zeroedGraphResolveDepths,
@@ -8,17 +11,14 @@ import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { HasSpatiallyPositionedContentProperties } from "@local/hash-isomorphic-utils/system-types/canvas";
-import {
-  BlockProperties,
-  HasIndexedContentProperties,
+import type { HasSpatiallyPositionedContent } from "@local/hash-isomorphic-utils/system-types/canvas";
+import type {
+  Block,
+  HasIndexedContent,
 } from "@local/hash-isomorphic-utils/system-types/shared";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import {
-  Entity,
-  EntityId,
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
+import type {
   EntityRootType,
-  EntityUuid,
   GraphResolveDepths,
   Subgraph,
 } from "@local/hash-subgraph";
@@ -26,15 +26,8 @@ import {
   getOutgoingLinkAndTargetEntities,
   getRoots,
 } from "@local/hash-subgraph/stdlib";
-import {
-  extractBaseUrl,
-  LinkEntity,
-} from "@local/hash-subgraph/type-system-patch";
 
-import {
-  BlockCollectionContentItem,
-  StructuralQueryEntitiesQueryVariables,
-} from "../../graphql/api-types.gen";
+import type { GetEntitySubgraphQueryVariables } from "../../graphql/api-types.gen";
 
 /**
  * The depths required to fetch the contents for blocks to render, rooted at a BlockCollection
@@ -57,6 +50,7 @@ export const blockCollectionContentsDepths: GraphResolveDepths = {
   ...zeroedGraphResolveDepths,
   hasLeftEntity: { incoming: 4, outgoing: 4 },
   hasRightEntity: { incoming: 4, outgoing: 4 },
+  isOfType: { outgoing: 1 },
 };
 
 export const blockCollectionContentsGetEntityVariables = {
@@ -66,9 +60,9 @@ export const blockCollectionContentsGetEntityVariables = {
 
 export const getBlockCollectionContentsStructuralQueryVariables = (
   pageEntityUuid: EntityUuid,
-): StructuralQueryEntitiesQueryVariables => ({
+): GetEntitySubgraphQueryVariables => ({
   includePermissions: true,
-  query: {
+  request: {
     filter: {
       all: [
         {
@@ -101,7 +95,7 @@ export const isBlockCollectionContentsEmpty = (params: {
       systemEntityTypes.text.entityTypeId
   ) {
     const textualContent = contents[0]!.rightEntity.blockChildEntity.properties[
-      extractBaseUrl(blockProtocolPropertyTypes.textualContent.propertyTypeId)
+      blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl
     ] as TextToken[];
 
     return textualContent.length === 0;
@@ -124,9 +118,9 @@ export const getBlockCollectionContents = (params: {
   const outgoingContentLinks = getOutgoingLinkAndTargetEntities<
     {
       linkEntity:
-        | LinkEntity<HasIndexedContentProperties>[]
-        | LinkEntity<HasSpatiallyPositionedContentProperties>[];
-      rightEntity: Entity<BlockProperties>[];
+        | LinkEntity<HasIndexedContent>[]
+        | LinkEntity<HasSpatiallyPositionedContent>[];
+      rightEntity: Entity<Block>[];
     }[]
   >(blockCollectionSubgraph, blockCollectionEntityId)
     .filter(
@@ -171,7 +165,8 @@ export const getBlockCollectionContents = (params: {
       return {
         linkEntity: containsLinkEntityRevisions[0]!,
         rightEntity: {
-          ...rightEntity,
+          metadata: rightEntity.metadata,
+          properties: rightEntity.properties,
           blockChildEntity,
           componentId,
         },

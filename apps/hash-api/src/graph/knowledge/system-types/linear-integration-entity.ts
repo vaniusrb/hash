@@ -1,4 +1,8 @@
 import { EntityTypeMismatchError } from "@local/hash-backend-utils/error";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { AccountId } from "@local/hash-graph-types/account";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 import {
   createDefaultAuthorizationRelationships,
   currentTimeInstantTemporalAxes,
@@ -12,38 +16,40 @@ import {
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
 import {
-  LinearIntegrationProperties,
+  mapGraphApiEntityToEntity,
+  mapGraphApiSubgraphToSubgraph,
+} from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type {
+  LinearIntegration as LinearIntegrationEntity,
+  SyncLinearDataWith,
   SyncLinearDataWithProperties,
 } from "@local/hash-isomorphic-utils/system-types/linearintegration";
+import type { EntityRootType } from "@local/hash-subgraph";
 import {
-  AccountId,
-  Entity,
-  EntityId,
-  EntityRootType,
   extractEntityUuidFromEntityId,
   extractOwnedByIdFromEntityId,
 } from "@local/hash-subgraph";
 import {
   getRightEntityForLinkEntity,
   getRoots,
-  mapGraphApiSubgraphToSubgraph,
 } from "@local/hash-subgraph/stdlib";
-import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
 
-import { ImpureGraphFunction, PureGraphFunction } from "../../context-types";
+import type {
+  ImpureGraphFunction,
+  PureGraphFunction,
+} from "../../context-types";
 import { systemAccountId } from "../../system-account";
 import { getLatestEntityById, updateEntity } from "../primitive/entity";
 import { createLinkEntity } from "../primitive/link-entity";
 
 export type LinearIntegration = {
   linearOrgId: string;
-  entity: Entity;
+  entity: Entity<LinearIntegrationEntity>;
 };
 
-export const getLinearIntegrationFromEntity: PureGraphFunction<
-  { entity: Entity },
-  LinearIntegration
-> = ({ entity }) => {
+function assertLinearIntegrationEntity(
+  entity: Entity,
+): asserts entity is Entity<LinearIntegrationEntity> {
   if (
     entity.metadata.entityTypeId !==
     systemEntityTypes.linearIntegration.entityTypeId
@@ -54,10 +60,15 @@ export const getLinearIntegrationFromEntity: PureGraphFunction<
       entity.metadata.entityTypeId,
     );
   }
+}
 
-  const { linearOrgId } = simplifyProperties(
-    entity.properties as LinearIntegrationProperties,
-  );
+export const getLinearIntegrationFromEntity: PureGraphFunction<
+  { entity: Entity },
+  LinearIntegration
+> = ({ entity }) => {
+  assertLinearIntegrationEntity(entity);
+
+  const { linearOrgId } = simplifyProperties(entity.properties);
 
   return { linearOrgId, entity };
 };
@@ -72,7 +83,7 @@ export const getAllLinearIntegrationsWithLinearOrgId: ImpureGraphFunction<
   const { linearOrgId, includeDrafts = false } = params;
 
   const entities = await graphApi
-    .getEntitiesByQuery(actorId, {
+    .getEntities(actorId, {
       filter: {
         all: [
           generateVersionedUrlMatchingFilter(
@@ -84,9 +95,7 @@ export const getAllLinearIntegrationsWithLinearOrgId: ImpureGraphFunction<
               {
                 path: [
                   "properties",
-                  extractBaseUrl(
-                    systemPropertyTypes.linearOrgId.propertyTypeId,
-                  ),
+                  systemPropertyTypes.linearOrgId.propertyTypeBaseUrl,
                 ],
               },
               { parameter: linearOrgId },
@@ -94,14 +103,14 @@ export const getAllLinearIntegrationsWithLinearOrgId: ImpureGraphFunction<
           },
         ],
       },
-      graphResolveDepths: zeroedGraphResolveDepths,
       temporalAxes: currentTimeInstantTemporalAxes,
       includeDrafts,
     })
-    .then(({ data }) => {
-      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
-      return getRoots(subgraph);
-    });
+    .then(({ data: response }) =>
+      response.entities.map((entity) =>
+        mapGraphApiEntityToEntity<LinearIntegrationEntity>(entity, null, true),
+      ),
+    );
 
   return entities.map((entity) => getLinearIntegrationFromEntity({ entity }));
 };
@@ -115,7 +124,7 @@ export const getLinearIntegrationByLinearOrgId: ImpureGraphFunction<
 > = async ({ graphApi }, { actorId }, params) => {
   const { userAccountId, linearOrgId, includeDrafts = false } = params;
   const entities = await graphApi
-    .getEntitiesByQuery(actorId, {
+    .getEntities(actorId, {
       filter: {
         all: [
           {
@@ -130,9 +139,7 @@ export const getLinearIntegrationByLinearOrgId: ImpureGraphFunction<
               {
                 path: [
                   "properties",
-                  extractBaseUrl(
-                    systemPropertyTypes.linearOrgId.propertyTypeId,
-                  ),
+                  systemPropertyTypes.linearOrgId.propertyTypeBaseUrl,
                 ],
               },
               { parameter: linearOrgId },
@@ -140,14 +147,14 @@ export const getLinearIntegrationByLinearOrgId: ImpureGraphFunction<
           },
         ],
       },
-      graphResolveDepths: zeroedGraphResolveDepths,
       temporalAxes: currentTimeInstantTemporalAxes,
       includeDrafts,
     })
-    .then(({ data }) => {
-      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
-      return getRoots(subgraph);
-    });
+    .then(({ data: response }) =>
+      response.entities.map((entity) =>
+        mapGraphApiEntityToEntity(entity, null, true),
+      ),
+    );
 
   if (entities.length > 1) {
     throw new Error(
@@ -167,7 +174,9 @@ export const getLinearIntegrationByLinearOrgId: ImpureGraphFunction<
  */
 export const getLinearIntegrationById: ImpureGraphFunction<
   { entityId: EntityId },
-  Promise<LinearIntegration>
+  Promise<LinearIntegration>,
+  false,
+  true
 > = async (ctx, authentication, { entityId }) => {
   const entity = await getLatestEntityById(ctx, authentication, { entityId });
 
@@ -176,14 +185,19 @@ export const getLinearIntegrationById: ImpureGraphFunction<
 
 export const getSyncedWorkspacesForLinearIntegration: ImpureGraphFunction<
   { linearIntegrationEntityId: EntityId; includeDrafts?: boolean },
-  Promise<{ syncLinearDataWithLinkEntity: Entity; workspaceEntity: Entity }[]>
+  Promise<
+    {
+      syncLinearDataWithLinkEntity: Entity;
+      workspaceEntity: Entity;
+    }[]
+  >
 > = async (
   { graphApi },
   { actorId },
   { linearIntegrationEntityId, includeDrafts = false },
 ) =>
   graphApi
-    .getEntitiesByQuery(actorId, {
+    .getEntitySubgraph(actorId, {
       filter: {
         all: [
           {
@@ -213,7 +227,11 @@ export const getSyncedWorkspacesForLinearIntegration: ImpureGraphFunction<
       includeDrafts,
     })
     .then(({ data }) => {
-      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
+      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(
+        data.subgraph,
+        null,
+        true,
+      );
 
       const syncLinearDataWithLinkEntities = getRoots(subgraph);
 
@@ -236,7 +254,9 @@ export const linkIntegrationToWorkspace: ImpureGraphFunction<
     linearTeamIds: string[];
     includeDrafts?: boolean;
   },
-  Promise<void>
+  Promise<void>,
+  false,
+  true
 > = async (context, authentication, params) => {
   const {
     linearIntegrationEntityId,
@@ -246,7 +266,7 @@ export const linkIntegrationToWorkspace: ImpureGraphFunction<
   } = params;
 
   const existingLinkEntities = await context.graphApi
-    .getEntitiesByQuery(authentication.actorId, {
+    .getEntities(authentication.actorId, {
       filter: {
         all: [
           {
@@ -276,15 +296,28 @@ export const linkIntegrationToWorkspace: ImpureGraphFunction<
           },
         ],
       },
-      graphResolveDepths: zeroedGraphResolveDepths,
       temporalAxes: currentTimeInstantTemporalAxes,
       includeDrafts,
     })
-    .then(({ data }) => {
-      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
+    .then(({ data: response }) =>
+      response.entities.map((entity) =>
+        mapGraphApiEntityToEntity<SyncLinearDataWith>(entity, null, true),
+      ),
+    );
 
-      return getRoots(subgraph);
-    });
+  const properties: SyncLinearDataWith["propertiesWithMetadata"] = {
+    value: {
+      "https://hash.ai/@hash/types/property-type/linear-team-id/": {
+        value: linearTeamIds.map((linearTeamId) => ({
+          value: linearTeamId,
+          metadata: {
+            dataTypeId:
+              "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+          },
+        })),
+      },
+    },
+  };
 
   if (existingLinkEntities.length > 1) {
     throw new Error(
@@ -293,24 +326,31 @@ export const linkIntegrationToWorkspace: ImpureGraphFunction<
   } else if (existingLinkEntities[0]) {
     const [existingLinkEntity] = existingLinkEntities;
 
-    await updateEntity(context, authentication, {
+    const teamIdPath =
+      "https://hash.ai/@hash/types/property-type/linear-team-id/" satisfies keyof SyncLinearDataWithProperties as BaseUrl;
+
+    await updateEntity<SyncLinearDataWith>(context, authentication, {
       entity: existingLinkEntity,
-      properties: {
-        "https://hash.ai/@hash/types/property-type/linear-team-id/":
-          linearTeamIds,
-      } as SyncLinearDataWithProperties,
+      propertyPatches: [
+        {
+          op: "add",
+          path: [teamIdPath],
+          property:
+            properties.value[
+              "https://hash.ai/@hash/types/property-type/linear-team-id/"
+            ]!,
+        },
+      ],
     });
   } else {
-    await createLinkEntity(context, authentication, {
+    await createLinkEntity<SyncLinearDataWith>(context, authentication, {
       ownedById: extractOwnedByIdFromEntityId(linearIntegrationEntityId),
-      linkEntityTypeId:
-        systemLinkEntityTypes.syncLinearDataWith.linkEntityTypeId,
-      leftEntityId: linearIntegrationEntityId,
-      rightEntityId: workspaceEntityId,
-      properties: {
-        "https://hash.ai/@hash/types/property-type/linear-team-id/":
-          linearTeamIds,
-      } as SyncLinearDataWithProperties,
+      properties,
+      linkData: {
+        leftEntityId: linearIntegrationEntityId,
+        rightEntityId: workspaceEntityId,
+      },
+      entityTypeId: systemLinkEntityTypes.syncLinearDataWith.linkEntityTypeId,
       relationships: [
         ...createDefaultAuthorizationRelationships(authentication),
         {

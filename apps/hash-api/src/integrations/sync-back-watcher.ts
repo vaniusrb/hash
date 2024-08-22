@@ -1,22 +1,16 @@
+import { getRequiredEnv } from "@local/hash-backend-utils/environment";
 import { getMachineActorId } from "@local/hash-backend-utils/machine-actors";
 import { entityEditionRecordFromRealtimeMessage } from "@local/hash-backend-utils/pg-tables";
 import { RedisQueueExclusiveConsumer } from "@local/hash-backend-utils/queue/redis";
 import { AsyncRedisClient } from "@local/hash-backend-utils/redis";
-import { Wal2JsonMsg } from "@local/hash-backend-utils/wal2json";
+import type { Wal2JsonMsg } from "@local/hash-backend-utils/wal2json";
 import type { GraphApi } from "@local/hash-graph-client";
-import {
-  fullDecisionTimeAxis,
-  zeroedGraphResolveDepths,
-} from "@local/hash-isomorphic-utils/graph-queries";
-import { Entity, EntityRootType } from "@local/hash-subgraph";
-import {
-  getRoots,
-  mapGraphApiSubgraphToSubgraph,
-} from "@local/hash-subgraph/stdlib";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import { fullDecisionTimeAxis } from "@local/hash-isomorphic-utils/graph-queries";
+import { mapGraphApiEntityToEntity } from "@local/hash-isomorphic-utils/subgraph-mapping";
 
 import { systemAccountId } from "../graph/system-account";
 import { logger } from "../logger";
-import { getRequiredEnv } from "../util";
 import {
   processEntityChange as processLinearEntityChange,
   supportedLinearTypeIds,
@@ -39,6 +33,7 @@ export const createIntegrationSyncBackWatcher = async (
   const redisClient = new AsyncRedisClient(logger, {
     host: getRequiredEnv("HASH_REDIS_HOST"),
     port: parseInt(getRequiredEnv("HASH_REDIS_PORT"), 10),
+    tls: process.env.HASH_REDIS_ENCRYPTED_TRANSIT === "true",
   });
 
   const queue = new RedisQueueExclusiveConsumer(redisClient);
@@ -58,22 +53,21 @@ export const createIntegrationSyncBackWatcher = async (
 
         const entity = (
           await graphApiClient
-            .getEntitiesByQuery(linearBotAccountId, {
+            .getEntities(linearBotAccountId, {
               filter: {
                 equal: [
                   { path: ["editionId"] },
                   { parameter: entityEdition.entityEditionId },
                 ],
               },
-              graphResolveDepths: zeroedGraphResolveDepths,
               temporalAxes: fullDecisionTimeAxis,
               includeDrafts: false,
             })
-            .then(({ data }) => {
-              const subgraph =
-                mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
-              return getRoots(subgraph);
-            })
+            .then(({ data: response }) =>
+              response.entities.map((graphEntity) =>
+                mapGraphApiEntityToEntity(graphEntity, null, true),
+              ),
+            )
         )[0];
 
         if (!entity) {
@@ -103,7 +97,7 @@ export const createIntegrationSyncBackWatcher = async (
       });
   };
 
-  let interval: NodeJS.Timer;
+  let interval: NodeJS.Timeout;
 
   return {
     stop: async () => {

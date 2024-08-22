@@ -1,18 +1,18 @@
-import {
-  CustomCell,
-  CustomRenderer,
-  GridCellKind,
-} from "@glideapps/glide-data-grid";
-import type { CustomIcon } from "@glideapps/glide-data-grid/dist/ts/data-grid/data-grid-sprites";
+import type { CustomCell, CustomRenderer } from "@glideapps/glide-data-grid";
+import { GridCellKind } from "@glideapps/glide-data-grid";
 import { customColors } from "@hashintel/design-system/theme";
 
-import { getCellHorizontalPadding } from "../../../components/grid/utils";
+import {
+  getCellHorizontalPadding,
+  getYCenter,
+} from "../../../components/grid/utils";
+import type { CustomIcon } from "../../../components/grid/utils/custom-grid-icons";
 import { drawTextWithIcon } from "../../../components/grid/utils/draw-text-with-icon";
 
 export interface TextIconCellProps {
   readonly kind: "text-icon-cell";
   value: string;
-  icon: CustomIcon;
+  icon: CustomIcon | null;
   onClick?: () => void;
 }
 
@@ -23,6 +23,7 @@ export const createRenderTextIconCell = (params?: {
 }): CustomRenderer<TextIconCell> => ({
   kind: GridCellKind.Custom,
   isMatch: (cell: CustomCell): cell is TextIconCell =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (cell.data as any).kind === "text-icon-cell",
   draw: (args, cell) => {
     const { firstColumnLeftPadding } = params ?? {};
@@ -34,23 +35,29 @@ export const createRenderTextIconCell = (params?: {
         ? firstColumnLeftPadding
         : getCellHorizontalPadding();
 
-    const iconLeft = rect.x + columnPadding;
+    const left = rect.x + columnPadding;
 
     // prepare to fill text
     ctx.font = theme.baseFontStyle;
 
     const color = args.highlighted ? customColors.blue[70] : theme.textHeader;
 
-    drawTextWithIcon({
-      args,
-      icon,
-      text: value,
-      left: iconLeft,
-      iconSize: 12,
-      gap: 8,
-      textColor: color,
-      iconColor: color,
-    });
+    if (icon) {
+      drawTextWithIcon({
+        args,
+        icon,
+        text: value,
+        left,
+        iconSize: 12,
+        gap: 8,
+        textColor: color,
+        iconColor: color,
+      });
+    } else {
+      const yCenter = getYCenter(args);
+      ctx.fillStyle = color;
+      ctx.fillText(value, left, yCenter);
+    }
   },
   onClick: (args) => {
     args.cell.data.onClick?.();

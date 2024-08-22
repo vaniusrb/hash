@@ -1,4 +1,7 @@
-import { ImpureGraphFunction, PureGraphFunction } from "../../context-types";
+import type {
+  ImpureGraphFunction,
+  PureGraphFunction,
+} from "../../context-types";
 import { getOrgByShortname } from "./org";
 import { getUserByShortname } from "./user";
 
@@ -24,10 +27,11 @@ export const RESTRICTED_SHORTNAMES = [
   "dashboard",
   "deploy.html",
   "dw",
-  "example",
+  "entities",
   "explore",
   "favicon.ico",
   "favicon.png",
+  "favicon.svg",
   "files",
   "groups",
   "health_check",
@@ -37,7 +41,9 @@ export const RESTRICTED_SHORTNAMES = [
   "jwt",
   "local",
   "login",
+  "log-in",
   "new",
+  "notes",
   "oauth",
   "org",
   "profile",
@@ -47,8 +53,13 @@ export const RESTRICTED_SHORTNAMES = [
   "s",
   "search",
   "sent_notifications",
+  "sign-in",
+  "sign-up",
+  "signin",
+  "signup",
   "slash-command-logo.png",
   "snippets",
+  "types",
   "unsubscribes",
   "uploads",
   "user",
@@ -60,7 +71,7 @@ export const RESTRICTED_SHORTNAMES = [
 /**
  * @todo revisit (simple) shortname validation to make use of data type
  *   constraints.
- *   https://app.asana.com/0/0/1202900021005257/f
+ *   https://linear.app/hash/issue/H-2987
  */
 export const shortnameMinimumLength = 4;
 export const shortnameMaximumLength = 24;
@@ -92,7 +103,7 @@ export const shortnameIsTaken: ImpureGraphFunction<
    * @todo this creates a circular dependencies between `org.ts` and `user.ts`
    * and this file.
    *
-   * @see https://app.asana.com/0/1203363157432084/1203568198115111/f
+   * @see https://linear.app/hash/issue/H-2989
    */
   return (
     (await getUserByShortname(ctx, authentication, params)) !== null ||

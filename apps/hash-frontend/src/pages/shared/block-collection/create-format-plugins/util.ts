@@ -1,8 +1,9 @@
 import { isComponentNode } from "@local/hash-isomorphic-utils/prosemirror";
 import { InputRule } from "prosemirror-inputrules";
-import { Mark, Node } from "prosemirror-model";
-import { EditorState, TextSelection } from "prosemirror-state";
-import { EditorView } from "prosemirror-view";
+import type { Mark, Node } from "prosemirror-model";
+import type { EditorState } from "prosemirror-state";
+import { TextSelection } from "prosemirror-state";
+import type { EditorView } from "prosemirror-view";
 import urlRegexSafe from "url-regex-safe";
 
 export const selectionContainsText = (state: EditorState) => {
@@ -172,12 +173,12 @@ export function linkInputRule() {
   return new InputRule(
     new RegExp(`${urlRegexSafe({ returnString: true })}\\s$`),
     (state, match, start, end) => {
-      const attrs = { href: match[0]!.slice(0, -1) };
+      const attrs = { href: match[0].slice(0, -1) };
       const tr = state.tr;
       let newEnd = end;
 
       if (match[1]) {
-        const textStart = start + match[0]!.indexOf(match[1]);
+        const textStart = start + match[0].indexOf(match[1]);
         const textEnd = textStart + match[1].length;
         if (textEnd < newEnd) {
           tr.delete(textEnd, newEnd);

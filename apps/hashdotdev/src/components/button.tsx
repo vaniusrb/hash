@@ -1,13 +1,14 @@
+import type { ButtonProps as MuiButtonProps } from "@mui/material";
 import {
   Box,
   // eslint-disable-next-line no-restricted-imports
   Button as MuiButton,
-  ButtonProps as MuiButtonProps,
   useTheme,
 } from "@mui/material";
 // eslint-disable-next-line no-restricted-imports
 import Link from "next/link";
-import { forwardRef, FunctionComponent, ReactNode, useMemo } from "react";
+import type { FunctionComponent, ReactNode } from "react";
+import { forwardRef, useMemo } from "react";
 
 import { isHrefExternal } from "./link";
 import { LoadingSpinner } from "./loading-spinner";
@@ -68,63 +69,65 @@ const LoadingContent: FunctionComponent<{
   );
 };
 
-export const Button: FunctionComponent<ButtonProps & { openInNew?: boolean }> =
-  forwardRef(
-    (
-      {
-        children,
-        loading,
-        loadingText,
-        loadingWithoutText,
-        href,
-        openInNew,
-        ...props
-      },
-      ref,
-    ) => {
-      const linkProps = useMemo(() => {
-        if (href && (openInNew || isHrefExternal(href))) {
-          return {
-            rel: "noopener",
-            target: "_blank",
-            href,
-          };
-        }
-
-        return {};
-      }, [href, openInNew]);
-
-      const Component = (
-        <MuiButton
-          sx={{
-            ...(loading && { pointerEvents: "none" }),
-            ...props.sx,
-          }}
-          {...props}
-          {...linkProps}
-          ref={ref}
-        >
-          {loading ? (
-            <LoadingContent
-              loadingText={loadingText}
-              withText={!loadingWithoutText}
-              size={props.size}
-              variant={props.variant}
-            />
-          ) : (
-            children
-          )}
-        </MuiButton>
-      );
-
-      if (href && !isHrefExternal(href)) {
-        return (
-          <Link href={href} passHref legacyBehavior>
-            {Component}
-          </Link>
-        );
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonProps & { openInNew?: boolean }
+>(
+  (
+    {
+      children,
+      loading,
+      loadingText,
+      loadingWithoutText,
+      href,
+      openInNew,
+      ...props
+    },
+    ref,
+  ) => {
+    const linkProps = useMemo(() => {
+      if (href && (openInNew ?? isHrefExternal(href))) {
+        return {
+          rel: "noopener",
+          target: "_blank",
+          href,
+        };
       }
 
-      return Component;
-    },
-  );
+      return {};
+    }, [href, openInNew]);
+
+    const Component = (
+      <MuiButton
+        sx={{
+          ...(loading && { pointerEvents: "none" }),
+          ...props.sx,
+        }}
+        {...props}
+        {...linkProps}
+        ref={ref}
+      >
+        {loading ? (
+          <LoadingContent
+            loadingText={loadingText}
+            withText={!loadingWithoutText}
+            size={props.size}
+            variant={props.variant}
+          />
+        ) : (
+          children
+        )}
+      </MuiButton>
+    );
+
+    if (href && !isHrefExternal(href)) {
+      return (
+        <Link href={href} passHref legacyBehavior>
+          {Component}
+        </Link>
+      );
+    }
+
+    return Component;
+  },
+);

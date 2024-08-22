@@ -2,19 +2,21 @@ import {
   type Edges as EdgesBp,
   type KnowledgeGraphRootedEdges as KnowledgeGraphRootedEdgesBp,
   type OntologyRootedEdges as OntologyRootedEdgesBp,
-} from "@blockprotocol/graph/temporal";
-import { Subtype } from "@local/advanced-types/subtype";
+} from "@blockprotocol/graph";
+import type { Subtype } from "@local/advanced-types/subtype";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { Timestamp } from "@local/hash-graph-types/temporal-versioning";
 
-import { OntologyTypeRevisionId } from "../element";
-import { BaseUrl, EntityId, Timestamp } from "../shared";
-import {
+import type { OntologyTypeRevisionId } from "../element.js";
+import type {
   KnowledgeGraphOutwardEdge,
   OntologyOutwardEdge,
-} from "./edges/variants";
+} from "./edges/variants.js";
 
-export * from "./edges/kind";
-export * from "./edges/outward-edge";
-export * from "./edges/variants";
+export * from "./edges/kind.js";
+export * from "./edges/outward-edge.js";
+export * from "./edges/variants.js";
 
 export type OntologyRootedEdges = Subtype<
   OntologyRootedEdgesBp,

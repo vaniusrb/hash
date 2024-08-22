@@ -1,19 +1,26 @@
 import { faHome } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon, IconButton } from "@hashintel/design-system";
-import { Box, Drawer, Tooltip } from "@mui/material";
+import { Box, Collapse, Drawer } from "@mui/material";
 import { useRouter } from "next/router";
-import { FunctionComponent } from "react";
+import {
+  Fragment,
+  type FunctionComponent,
+  type ReactNode,
+  useMemo,
+} from "react";
 
 import { useHashInstance } from "../../../components/hooks/use-hash-instance";
+import { useAuthenticatedUser } from "../../../pages/shared/auth-info-context";
+import { useEnabledFeatureFlags } from "../../../pages/shared/use-enabled-feature-flags";
 import { useActiveWorkspace } from "../../../pages/shared/workspace-context";
 import { useDraftEntities } from "../../draft-entities-context";
 import { SidebarToggleIcon } from "../../icons";
-import { FeatherLightIcon } from "../../icons/feather-light-icon";
+import { BoltLightIcon } from "../../icons/bolt-light-icon";
+import { CogLightIcon } from "../../icons/cog-light-icon";
 import { InboxIcon } from "../../icons/inbox-icon";
-import { QuickNoteIcon } from "../../icons/quick-note-icon";
+import { NoteIcon } from "../../icons/note-icon";
 import { useNotificationEntities } from "../../notification-entities-context";
 import { useRoutePageInfo } from "../../routing";
-import { HEADER_HEIGHT } from "../layout-with-header/page-header";
 import { AccountEntitiesList } from "./account-entities-list";
 import { AccountEntityTypeList } from "./account-entity-type-list";
 import { AccountPageList } from "./account-page-list/account-page-list";
@@ -23,6 +30,30 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 
 export const SIDEBAR_WIDTH = 260;
 
+type NavLinkDefinition = {
+  title: string;
+  path: string;
+  activeIfPathMatches?: RegExp;
+  icon?: ReactNode;
+  tooltipTitle?: string;
+  count?: number;
+  children?: Omit<NavLinkDefinition, "children" | "icon">[];
+};
+
+const isNavLinkActive = ({
+  definition,
+  currentPath,
+}: {
+  definition: NavLinkDefinition;
+  currentPath: string;
+}): boolean =>
+  definition.path === currentPath ||
+  (definition.activeIfPathMatches &&
+    !!currentPath.match(definition.activeIfPathMatches)) ||
+  !!definition.children?.some((child) =>
+    isNavLinkActive({ definition: child, currentPath }),
+  );
+
 export const PageSidebar: FunctionComponent = () => {
   const router = useRouter();
   const { sidebarOpen, closeSidebar } = useSidebarContext();
@@ -30,11 +61,110 @@ export const PageSidebar: FunctionComponent = () => {
   const { routePageEntityUuid } =
     useRoutePageInfo({ allowUndefined: true }) ?? {};
 
+  const { isInstanceAdmin } = useAuthenticatedUser();
+
+  const enabledFeatureFlags = useEnabledFeatureFlags();
+
   const { hashInstance } = useHashInstance();
 
   const { numberOfUnreadNotifications } = useNotificationEntities();
 
   const { draftEntities } = useDraftEntities();
+
+  const workersSection = useMemo<NavLinkDefinition[]>(
+    () =>
+      enabledFeatureFlags.workers
+        ? [
+            {
+              title: "Workers",
+              path: enabledFeatureFlags.ai ? "/goals" : "/flows",
+              icon: <BoltLightIcon sx={{ fontSize: 16 }} />,
+              tooltipTitle: "",
+              activeIfPathMatches: /^\/@([^/]+)\/(flows|workers)\//,
+              children: [
+                ...(enabledFeatureFlags.ai
+                  ? [
+                      {
+                        title: "Goals",
+                        path: "/goals",
+                      },
+                    ]
+                  : []),
+                {
+                  title: "Flows",
+                  path: "/flows",
+                  activeIfPathMatches: /^\/@([^/]+)\/flows\//,
+                },
+                {
+                  title: "Activity Log",
+                  path: "/workers",
+                  activeIfPathMatches: /^\/@([^/]+)\/workers\//,
+                },
+              ],
+            },
+          ]
+        : [],
+    [enabledFeatureFlags],
+  );
+
+  const navLinks = useMemo<NavLinkDefinition[]>(() => {
+    const numberOfPendingActions = draftEntities?.length ?? 0;
+
+    return [
+      {
+        title: "Home",
+        path: "/",
+        icon: <FontAwesomeIcon icon={faHome} />,
+        tooltipTitle: "",
+      },
+      ...workersSection,
+      {
+        title: "Inbox",
+        path: "/actions",
+        icon: <InboxIcon sx={{ fontSize: 16 }} />,
+        tooltipTitle: "",
+        count: (numberOfUnreadNotifications ?? 0) + numberOfPendingActions,
+        children: [
+          {
+            title: "Actions",
+            path: "/actions",
+            count: numberOfPendingActions,
+          },
+          {
+            title: "Notifications",
+            path: "/inbox",
+            count: numberOfUnreadNotifications,
+          },
+        ],
+      },
+      ...(enabledFeatureFlags.notes
+        ? [
+            {
+              title: "Notes",
+              path: "/notes",
+              icon: <NoteIcon sx={{ fontSize: 16 }} />,
+              tooltipTitle: "",
+            },
+          ]
+        : []),
+      ...(isInstanceAdmin
+        ? [
+            {
+              title: "Instance Administration",
+              path: "/admin",
+              icon: <CogLightIcon sx={{ fontSize: 16 }} />,
+              tooltipTitle: "",
+            },
+          ]
+        : []),
+    ];
+  }, [
+    draftEntities,
+    numberOfUnreadNotifications,
+    enabledFeatureFlags,
+    isInstanceAdmin,
+    workersSection,
+  ]);
 
   return (
     <Drawer
@@ -44,7 +174,6 @@ export const PageSidebar: FunctionComponent = () => {
       sx={{
         zIndex: 0,
         width: SIDEBAR_WIDTH,
-        height: `calc(100vh - ${HEADER_HEIGHT}px)`,
       }}
       PaperProps={{
         sx: (theme) => ({
@@ -52,7 +181,7 @@ export const PageSidebar: FunctionComponent = () => {
           position: "relative",
           flex: 1,
           backgroundColor: theme.palette.white,
-          borderRight: `1px solid ${theme.palette.gray[30]}`,
+          borderRight: `1px solid ${theme.palette.gray[20]}`,
         }),
       }}
       data-testid="page-sidebar"
@@ -69,42 +198,58 @@ export const PageSidebar: FunctionComponent = () => {
         <Box sx={{ flex: 1 }}>
           <WorkspaceSwitcher />
         </Box>
-        <Tooltip title="Collapse Sidebar">
-          <IconButton size="medium" onClick={closeSidebar}>
-            <SidebarToggleIcon />
-          </IconButton>
-        </Tooltip>
+        <IconButton aria-hidden size="medium" onClick={closeSidebar}>
+          <SidebarToggleIcon />
+        </IconButton>
       </Box>
-      <TopNavLink
-        icon={<FontAwesomeIcon icon={faHome} />}
-        title="Home"
-        href="/"
-        tooltipTitle=""
-        active={router.pathname === "/[shortname]"}
-      />
-      <TopNavLink
-        icon={<InboxIcon sx={{ fontSize: 16 }} />}
-        title="Inbox"
-        href="/inbox"
-        tooltipTitle=""
-        count={numberOfUnreadNotifications}
-        active={router.pathname === "/inbox"}
-      />
-      <TopNavLink
-        icon={<FeatherLightIcon sx={{ fontSize: 16 }} />}
-        title="Drafts"
-        href="/drafts"
-        tooltipTitle=""
-        count={draftEntities?.length}
-        active={router.pathname === "/drafts"}
-      />
-      <TopNavLink
-        icon={<QuickNoteIcon sx={{ fontSize: 16 }} />}
-        title="Quick Note"
-        href="/notes"
-        tooltipTitle=""
-        active={router.pathname === "/notes"}
-      />
+      {navLinks.map((navLink) => {
+        const currentPath = router.asPath;
+
+        const isActive = isNavLinkActive({
+          definition: navLink,
+          currentPath,
+        });
+
+        return (
+          <Fragment key={navLink.path}>
+            <TopNavLink
+              icon={navLink.icon}
+              title={navLink.title}
+              href={navLink.path}
+              tooltipTitle={navLink.tooltipTitle ?? ""}
+              count={navLink.count}
+              active={isActive}
+            />
+            <Collapse in={isActive}>
+              {navLink.children?.map((definition) => {
+                const { path, title, tooltipTitle, count } = definition;
+
+                const isChildActive = isNavLinkActive({
+                  definition,
+                  currentPath,
+                });
+
+                return (
+                  <TopNavLink
+                    key={path}
+                    title={title}
+                    href={path}
+                    tooltipTitle={tooltipTitle ?? ""}
+                    count={count}
+                    active={isChildActive}
+                    sx={{
+                      "&:hover": {
+                        background: "transparent",
+                      },
+                      ...(isChildActive ? { background: "transparent" } : {}),
+                    }}
+                  />
+                );
+              })}
+            </Collapse>
+          </Fragment>
+        );
+      })}
       {/* 
         Commented out nav links whose functionality have not been 
         implemented yet
@@ -124,12 +269,14 @@ export const PageSidebar: FunctionComponent = () => {
         sx={{
           flex: 1,
           overflowY: "auto",
+          pb: 4,
         }}
       >
         {activeWorkspaceOwnedById ? (
           <>
             {/* PAGES */}
-            {hashInstance?.properties.pagesAreEnabled ? (
+            {hashInstance?.properties.pagesAreEnabled &&
+            enabledFeatureFlags.pages ? (
               <AccountPageList
                 currentPageEntityUuid={routePageEntityUuid}
                 ownedById={activeWorkspaceOwnedById}

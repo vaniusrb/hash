@@ -14,7 +14,7 @@ import {
   MultipleValuesControlContainer,
 } from "../shared/multiple-values-cell";
 import { TypeMenuCell } from "../shared/type-menu-cell";
-import { InheritedValues } from "../shared/use-inherited-values";
+import type { InheritedValues } from "../shared/use-inherited-values";
 import { AnythingChip } from "./anything-chip";
 import { DestinationEntityType } from "./destination-entity-type";
 import { DestinationTypeContainer } from "./destination-type-container";
@@ -34,7 +34,7 @@ export const InheritedLinkRow = ({
   } = inheritedLinkData;
 
   const { entityTypes, linkTypes } = useEntityTypesOptions();
-  const linkSchema = linkTypes[$id];
+  const linkSchema = linkTypes[$id]?.schema;
 
   if (!linkSchema) {
     throw new Error(`Inherited property type ${$id} not found`);
@@ -74,7 +74,7 @@ export const InheritedLinkRow = ({
                 return (
                   <DestinationEntityType
                     key={entityTypeId}
-                    entityType={entityType}
+                    entityTypeSchema={entityType.schema}
                   />
                 );
               })

@@ -1,4 +1,5 @@
-use std::{error::Error, fmt, io};
+use core::{error::Error, fmt};
+use std::io;
 
 use error_stack::{Report, ResultExt};
 use futures::{Stream, StreamExt, TryStreamExt};
@@ -66,6 +67,9 @@ impl fmt::Display for StreamError {
 
 impl Error for StreamError {}
 
+type StreamReturn<T: DeserializeOwned, B: Serialize + Sync> =
+    impl Stream<Item = Result<T, Report<StreamError>>>;
+
 impl SpiceDbOpenApi {
     async fn invoke_request(
         &self,
@@ -110,25 +114,16 @@ impl SpiceDbOpenApi {
             .change_context(InvocationError::Response)
     }
 
-    async fn stream<R: DeserializeOwned>(
+    async fn stream<R: DeserializeOwned, B: Serialize + Sync>(
         &self,
         path: &'static str,
-        body: &(impl Serialize + Sync),
-    ) -> Result<impl Stream<Item = Result<R, Report<StreamError>>>, Report<InvocationError>> {
+        body: &B,
+    ) -> Result<StreamReturn<R, B>, Report<InvocationError>> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         enum StreamResult<T> {
             Result(T),
             Error(RpcError),
-        }
-
-        impl<T> From<StreamResult<T>> for Result<T, Report<StreamError>> {
-            fn from(result: StreamResult<T>) -> Self {
-                match result {
-                    StreamResult::Result(result) => Ok(result),
-                    StreamResult::Error(rpc_error) => Err(Report::new(StreamError::Api(rpc_error))),
-                }
-            }
         }
 
         let stream_response = self.invoke_request(path, body).await?;
@@ -142,8 +137,12 @@ impl SpiceDbOpenApi {
             codec::bytes::JsonLinesDecoder::<StreamResult<R>>::new(),
         );
 
-        Ok(framed_stream
-            .map(|io_result| Result::from(io_result.change_context(StreamError::Parse)?)))
+        Ok(framed_stream.map(
+            |io_result| match io_result.change_context(StreamError::Parse)? {
+                StreamResult::Result(result) => Ok(result),
+                StreamResult::Error(rpc_error) => Err(Report::new(StreamError::Api(rpc_error))),
+            },
+        ))
     }
 }
 
@@ -174,10 +173,6 @@ impl ZanzibarBackend for SpiceDbOpenApi {
         })
     }
 
-    #[expect(
-        clippy::missing_errors_doc,
-        reason = "False positive, documented on trait"
-    )]
     async fn export_schema(&self) -> Result<ExportSchemaResponse, Report<ExportSchemaError>> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -197,10 +192,6 @@ impl ZanzibarBackend for SpiceDbOpenApi {
         })
     }
 
-    #[expect(
-        clippy::missing_errors_doc,
-        reason = "False positive, documented on trait"
-    )]
     async fn modify_relationships<T>(
         &mut self,
         relationships: impl IntoIterator<Item = (ModifyRelationshipOperation, T), IntoIter: Send> + Send,
@@ -284,7 +275,7 @@ impl ZanzibarBackend for SpiceDbOpenApi {
                             attempt += 1;
                             // TODO: Use a more customizable backoff
                             //       current: 10ms, 40ms, 90ms
-                            sleep(std::time::Duration::from_millis(10) * attempt * attempt).await;
+                            sleep(core::time::Duration::from_millis(10) * attempt * attempt).await;
                         }
                         _ => break Err(report),
                     },
@@ -303,10 +294,6 @@ impl ZanzibarBackend for SpiceDbOpenApi {
         )
     }
 
-    #[expect(
-        clippy::missing_errors_doc,
-        reason = "False positive, documented on trait"
-    )]
     async fn check_permission<O, R, S>(
         &self,
         resource: &O,
@@ -362,10 +349,6 @@ impl ZanzibarBackend for SpiceDbOpenApi {
         })
     }
 
-    #[expect(
-        clippy::missing_errors_doc,
-        reason = "False positive, documented on trait"
-    )]
     #[expect(clippy::too_many_lines)]
     async fn check_permissions<O, R, S>(
         &self,
@@ -502,10 +485,6 @@ impl ZanzibarBackend for SpiceDbOpenApi {
         })
     }
 
-    #[expect(
-        clippy::missing_errors_doc,
-        reason = "False positive, documented on trait"
-    )]
     async fn read_relations<R>(
         &self,
         filter: RelationshipFilter<
@@ -517,7 +496,7 @@ impl ZanzibarBackend for SpiceDbOpenApi {
             impl Serialize + Send + Sync,
         >,
         consistency: Consistency<'_>,
-    ) -> Result<Vec<R>, Report<ReadError>>
+    ) -> Result<impl Stream<Item = Result<R, Report<ReadError>>>, Report<ReadError>>
     where
         for<'de> R: Relationship<
                 Resource: Resource<Kind: Deserialize<'de>, Id: Deserialize<'de>>,
@@ -554,25 +533,20 @@ impl ZanzibarBackend for SpiceDbOpenApi {
             relationship: R,
         }
 
-        self.stream::<ReadRelationshipsResponse<R>>(
-            "/v1/relationships/read",
-            &ReadRelationshipsRequest {
-                consistency: model::Consistency::from(consistency),
-                relationship_filter: filter,
-            },
-        )
-        .await
-        .change_context(ReadError)?
-        .map_ok(|response| response.relationship)
-        .map_err(|error| error.change_context(ReadError))
-        .try_collect::<Vec<_>>()
-        .await
+        Ok(self
+            .stream::<ReadRelationshipsResponse<R>, _>(
+                "/v1/relationships/read",
+                &ReadRelationshipsRequest {
+                    consistency: model::Consistency::from(consistency),
+                    relationship_filter: filter,
+                },
+            )
+            .await
+            .change_context(ReadError)?
+            .map_ok(|response| response.relationship)
+            .map_err(|error| error.change_context(ReadError)))
     }
 
-    #[expect(
-        clippy::missing_errors_doc,
-        reason = "False positive, documented on trait"
-    )]
     async fn delete_relations(
         &mut self,
         filter: RelationshipFilter<

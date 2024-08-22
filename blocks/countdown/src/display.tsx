@@ -1,5 +1,7 @@
-import { Duration, intervalToDuration, isPast } from "date-fns";
-import { FunctionComponent, useEffect, useState } from "react";
+import type { Duration } from "date-fns";
+import { intervalToDuration, isPast } from "date-fns";
+import type { FunctionComponent } from "react";
+import { useEffect, useState } from "react";
 
 type DisplayProps = {
   targetDate: Date | null;
@@ -50,7 +52,7 @@ export const Display: FunctionComponent<DisplayProps> = ({
     if (!displayTime && ["hours", "minutes"].includes(val)) {
       return acc;
     }
-    if (duration[val] || acc.length > 0) {
+    if (duration[val] ?? acc.length > 0) {
       return [...acc, val];
     }
     return acc;
@@ -68,8 +70,8 @@ export const Display: FunctionComponent<DisplayProps> = ({
           <div key={item} className="countdown-block__display-grid__item">
             <p>
               {["minutes"].includes(item)
-                ? duration[item]?.toString().padStart(2, "0") ?? "00"
-                : duration[item] ?? "0"}
+                ? (duration[item]?.toString().padStart(2, "0") ?? "00")
+                : (duration[item] ?? "0")}
             </p>
             <p>{`${item} ${targetDate && isPast(targetDate) ? "ago" : ""}`}</p>
           </div>

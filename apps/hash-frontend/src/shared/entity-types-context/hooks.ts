@@ -1,6 +1,8 @@
-import { VersionedUrl } from "@blockprotocol/type-system/dist/cjs";
-import { EntityType } from "@blockprotocol/type-system/slim";
-import { BaseUrl, EntityTypeWithMetadata } from "@local/hash-subgraph";
+import type { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
+import type {
+  BaseUrl,
+  EntityTypeWithMetadata,
+} from "@local/hash-graph-types/ontology";
 import { useMemo } from "react";
 
 import { isTypeArchived } from "../is-archived";

@@ -1,20 +1,23 @@
 import { getLinearUserSecretByLinearOrgId } from "../../../../graph/knowledge/system-types/linear-user-secret";
 import { getOrganization, listTeams } from "../../../../integrations/linear";
-import {
+import type {
   LinearOrganization,
   QueryGetLinearOrganizationArgs,
   ResolverFn,
 } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 
 export const getLinearOrganizationResolver: ResolverFn<
   Promise<LinearOrganization>,
-  {},
+  Record<string, never>,
   LoggedInGraphQLContext,
   QueryGetLinearOrganizationArgs
-> = async (_, params, { dataSources, authentication, user, vault }) => {
+> = async (_, params, graphQLContext) => {
+  const { authentication, user, vault } = graphQLContext;
+
   const linearSecretEntity = await getLinearUserSecretByLinearOrgId(
-    dataSources,
+    graphQLContextToImpureGraphContext(graphQLContext),
     authentication,
     {
       userAccountId: user.accountId,
@@ -29,6 +32,7 @@ export const getLinearOrganizationResolver: ResolverFn<
   const vaultSecret = await vault.read<{ value: string }>({
     secretMountPath: "secret",
     path: linearSecretEntity.vaultPath,
+    userAccountId: user.accountId,
   });
 
   const apiKey = vaultSecret.data.value;

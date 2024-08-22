@@ -1,14 +1,18 @@
 import { toggleMark } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
-import { Node, NodeSpec, NodeType, Schema } from "prosemirror-model";
+import type { Node, NodeSpec, NodeType } from "prosemirror-model";
+import { Schema } from "prosemirror-model";
 
-import { paragraphBlockComponentId } from "./blocks";
+import { paragraphBlockComponentId } from "./blocks.js";
 
-type NodeWithAttrs<Attrs extends {}> = Omit<Node, "attrs"> & {
+type NodeWithAttrs<Attrs extends Record<string, unknown>> = Omit<
+  Node,
+  "attrs"
+> & {
   attrs: Attrs;
 };
 
-type ComponentNodeAttrs = {};
+type ComponentNodeAttrs = Record<string, unknown>;
 export type ComponentNode = NodeWithAttrs<ComponentNodeAttrs>;
 
 export type EntityNode = NodeWithAttrs<{
@@ -325,6 +329,7 @@ export const mutateSchema = (
   schema: Schema,
   mutate: (map: OrderedMapPrivateInterface<NodeSpec>) => void,
 ) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mutate(schema.spec.nodes as any);
   const loadingType = schema.nodes.loading!;
 
@@ -360,7 +365,7 @@ export const mutateSchema = (
           // @ts-expect-error -- NodeType#nodes is readonly in prosemirror-model
           this.nodes[key] = value;
         } else {
-          this.nodes[key]!.contentMatch = value.contentMatch;
+          this.nodes[key].contentMatch = value.contentMatch;
         }
       }
     }

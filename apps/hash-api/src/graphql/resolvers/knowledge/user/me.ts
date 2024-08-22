@@ -1,22 +1,21 @@
 import { getLatestEntityRootedSubgraph } from "../../../../graph/knowledge/primitive/entity";
-import { Query, QueryMeArgs, ResolverFn } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
+import type { Query, QueryMeArgs, ResolverFn } from "../../../api-types.gen";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 import { createSubgraphAndPermissionsReturn } from "../shared/create-subgraph-and-permissions-return";
 
 export const meResolver: ResolverFn<
   Query["me"],
-  {},
+  Record<string, never>,
   LoggedInGraphQLContext,
   QueryMeArgs
-> = async (
-  _,
-  { hasLeftEntity, hasRightEntity },
-  { dataSources, authentication, user },
-  info,
-) => {
+> = async (_, { hasLeftEntity, hasRightEntity }, graphQLContext, info) => {
+  const { authentication, user } = graphQLContext;
+
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
+
   const userSubgraph = await getLatestEntityRootedSubgraph(
-    dataSourcesToImpureGraphContext(dataSources),
+    context,
     authentication,
     {
       entity: user.entity,
@@ -27,9 +26,5 @@ export const meResolver: ResolverFn<
     },
   );
 
-  return createSubgraphAndPermissionsReturn(
-    { dataSources, authentication },
-    info,
-    userSubgraph,
-  );
+  return createSubgraphAndPermissionsReturn(graphQLContext, info, userSubgraph);
 };

@@ -1,14 +1,16 @@
-import { EntityType, PropertyType } from "@blockprotocol/graph";
-import { extractBaseUrl, VersionedUrl } from "@blockprotocol/type-system/slim";
+import type {
+  EntityTypeWithMetadata,
+  PropertyTypeWithMetadata,
+} from "@blockprotocol/graph";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
+import { extractBaseUrl } from "@blockprotocol/type-system/slim";
 import { useCallback } from "react";
 
 import { useEntityTypesOptions } from "../../shared/entity-types-options-context";
 import { usePropertyTypesOptions } from "../../shared/property-types-options-context";
 import { linkEntityTypeUrl } from "../../shared/urls";
-import {
-  InheritedValues,
-  useGetInheritedValues,
-} from "../shared/use-inherited-values";
+import type { InheritedValues } from "../shared/use-inherited-values";
+import { useGetInheritedValues } from "../shared/use-inherited-values";
 
 /**
  * Utility function used in the hook below – the same logic is used to check for both link and property duplicates.
@@ -30,8 +32,8 @@ const throwIfDuplicates = <
   label: string;
   newParentTitle: string;
   typeOptions: T extends InheritedValues["links"]
-    ? Record<VersionedUrl, EntityType>
-    : Record<VersionedUrl, PropertyType>;
+    ? Record<VersionedUrl, EntityTypeWithMetadata>
+    : Record<VersionedUrl, PropertyTypeWithMetadata>;
 }) => {
   for (const inheritedType of inheritedTypes) {
     const inheritedFrom =
@@ -53,12 +55,12 @@ const throwIfDuplicates = <
     ) {
       throw new Error(
         `The parent type you’re adding (${newParentTitle}) ${
-          inheritedFrom.title !== newParentTitle
-            ? `has a parent (${inheritedFrom.title}) which `
+          inheritedFrom.schema.title !== newParentTitle
+            ? `has a parent (${inheritedFrom.schema.title}) which `
             : ""
         }
         specifies a ${label} type (${
-          fullTypeDetails.title
+          fullTypeDetails.schema.title
         }) already present on your type. Please remove it from your type in order to make ${newParentTitle} a parent.`,
       );
     }
@@ -73,7 +75,8 @@ const throwIfDuplicates = <
         // it might appear in multiple chains, e.g. Father <- Person, Salesman <- Person
         inheritedType.inheritanceChain[ // the direct owner will be the last in the inheritance chain
           inheritedType.inheritanceChain.length - 1
-        ]!.$id !== type.inheritanceChain[type.inheritanceChain.length - 1]!.$id,
+        ]!.schema.$id !==
+          type.inheritanceChain[type.inheritanceChain.length - 1]!.schema.$id,
     );
 
     if (duplicateFromAnotherParent) {
@@ -84,16 +87,16 @@ const throwIfDuplicates = <
 
       throw new Error(
         `The new type you’re adding (${newParentTitle}) ${
-          inheritedFrom.title !== newParentTitle
-            ? `has a parent ${inheritedFrom.title} which `
+          inheritedFrom.schema.title !== newParentTitle
+            ? `has a parent ${inheritedFrom.schema.title} which `
             : ""
         }
         specifies a ${label} (${
-          fullTypeDetails.title
+          fullTypeDetails.schema.title
         }) already present on another parent (${
-          duplicateInheritedFrom.title
+          duplicateInheritedFrom.schema.title
         }). Please remove it from either ${newParentTitle} or ${
-          duplicateInheritedFrom.title
+          duplicateInheritedFrom.schema.title
         } in order to add ${newParentTitle} as a parent.`,
       );
     }
@@ -142,7 +145,7 @@ export const useValidateParents = (): ((args: {
       for (const chain of inheritanceChains) {
         const idsInChainIncludingChild = [
           childEntityTypeId,
-          ...chain.map((type) => type.$id),
+          ...chain.map((type) => type.schema.$id),
         ];
 
         let isLinkChain = false;
@@ -153,24 +156,26 @@ export const useValidateParents = (): ((args: {
           // Check if the current type's id appears twice in the chain from child to root parent
           if (
             idsInChainIncludingChild.findIndex(
-              (id) => extractBaseUrl(id) === extractBaseUrl(currentType.$id),
+              (id) =>
+                extractBaseUrl(id) === extractBaseUrl(currentType.schema.$id),
             ) !==
             // add 1 because the child is included in the array of ids but not the loop
             i + 1
           ) {
             throw new Error(
-              `You cannot create a cycle by having ${currentType.title} extend itself.`,
+              `You cannot create a cycle by having ${currentType.schema.title} extend itself.`,
             );
           }
 
           const isLink = !!(
-            linkTypes[currentType.$id] ?? currentType.$id === linkEntityTypeUrl
+            linkTypes[currentType.schema.$id] ??
+            currentType.schema.$id === linkEntityTypeUrl
           );
           if (isLink) {
             isLinkChain = true;
           } else if (isLinkChain) {
             throw new Error(
-              `You cannot have link type extend non-link type ${currentType.title}.`,
+              `You cannot have link type extend non-link type ${currentType.schema.title}.`,
             );
           }
 

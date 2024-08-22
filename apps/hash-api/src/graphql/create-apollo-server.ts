@@ -1,29 +1,30 @@
 import { performance } from "node:perf_hooks";
 
 import { makeExecutableSchema } from "@graphql-tools/schema";
-import { Logger } from "@local/hash-backend-utils/logger";
-import { SearchAdapter } from "@local/hash-backend-utils/search/adapter";
+import type { UploadableStorageProvider } from "@local/hash-backend-utils/file-storage";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import type { SearchAdapter } from "@local/hash-backend-utils/search/adapter";
+import type { TemporalClient } from "@local/hash-backend-utils/temporal";
+import type { VaultClient } from "@local/hash-backend-utils/vault";
 import { schema } from "@local/hash-isomorphic-utils/graphql/type-defs/schema";
+import { getHashClientTypeFromRequest } from "@local/hash-isomorphic-utils/http-requests";
 import * as Sentry from "@sentry/node";
 import { ApolloServerPluginLandingPageGraphQLPlayground } from "apollo-server-core";
 import { ApolloServer } from "apollo-server-express";
-import { StatsD } from "hot-shots";
+import type { StatsD } from "hot-shots";
 
 import { getActorIdFromRequest } from "../auth/get-actor-id";
-import { CacheAdapter } from "../cache";
-import { EmailTransporter } from "../email/transporters";
-import { GraphApi } from "../graph/context-types";
-import { UploadableStorageProvider } from "../storage/storage-provider";
-import { TemporalClient } from "../temporal";
-import { VaultClient } from "../vault/index";
-import { GraphQLContext } from "./context";
+import type { CacheAdapter } from "../cache";
+import type { EmailTransporter } from "../email/transporters";
+import type { GraphApi } from "../graph/context-types";
+import type { GraphQLContext } from "./context";
 import { resolvers } from "./resolvers";
 
 export interface CreateApolloServerParams {
   graphApi: GraphApi;
   cache: CacheAdapter;
   uploadProvider: UploadableStorageProvider;
-  temporalClient?: TemporalClient;
+  temporalClient: TemporalClient;
   vaultClient?: VaultClient;
   search?: SearchAdapter;
   emailTransporter: EmailTransporter;
@@ -48,6 +49,7 @@ export const createApolloServer = ({
     resolvers,
     inheritResolversFromInterfaces: true,
   });
+
   const getDataSources = () => {
     const sources: GraphQLContext["dataSources"] = {
       graphApi,
@@ -68,6 +70,13 @@ export const createApolloServer = ({
       authentication: {
         actorId: getActorIdFromRequest(ctx.req),
       },
+      provenance: {
+        actorType: "human",
+        origin: {
+          type: getHashClientTypeFromRequest(ctx.req) ?? "api",
+          userAgent: ctx.req.headers["user-agent"],
+        },
+      },
       user: ctx.req.user,
       emailTransporter,
       logger: logger.child({
@@ -79,16 +88,32 @@ export const createApolloServer = ({
     // @todo: we may want to disable introspection at some point for production
     introspection: true,
     debug: true, // required for stack traces to be captured
+    // See https://www.apollographql.com/docs/apollo-server/integrations/plugins/#request-lifecycle-event-flow
     plugins: [
       {
         requestDidStart: async (ctx) => {
           ctx.logger = ctx.context.logger as Logger;
-          const startedAt = performance.now();
+
+          const startTimestamp = performance.now();
 
           return {
-            async didEncounterErrors(errorContext) {
-              const user: Express.Request["user"] = errorContext.context.user;
+            didResolveOperation: async (didResolveOperationCtx) => {
+              const operationName = didResolveOperationCtx.operationName;
+              if (operationName) {
+                statsd?.increment(operationName, ["graphql"]);
+              }
+            },
 
+            executionDidStart: async ({ request }) => {
+              const scope = Sentry.getCurrentScope();
+
+              scope.setContext("graphql", {
+                query: request.query,
+                variables: request.variables,
+              });
+            },
+
+            didEncounterErrors: async (errorContext) => {
               for (const err of errorContext.errors) {
                 // Don't send ForbiddenErrors to Sentry – we can add more here as needed
                 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this may be undefined
@@ -96,38 +121,14 @@ export const createApolloServer = ({
                   continue;
                 }
 
-                Sentry.withScope((scope) => {
-                  // Annotate whether failing operation was query/mutation/subscription
-                  scope.setTag("kind", errorContext.operation?.operation);
+                if (err.path) {
+                  Sentry.getCurrentScope().addBreadcrumb({
+                    category: "query-path",
+                    message: err.path.join(" > "),
+                  });
+                }
 
-                  scope.setExtra("query", errorContext.request.query);
-                  scope.setExtra("variables", errorContext.request.variables);
-
-                  if (user) {
-                    scope.setUser({
-                      id: user.entity.metadata.recordId.entityId,
-                      email: user.emails[0],
-                      shortname: user.shortname,
-                    });
-                  }
-
-                  if (err.path) {
-                    scope.addBreadcrumb({
-                      category: "query-path",
-                      message: err.path.join(" > "),
-                    });
-                  }
-
-                  Sentry.captureException(err);
-                });
-              }
-            },
-
-            didResolveOperation: async (didResolveOperationCtx) => {
-              if (didResolveOperationCtx.operationName) {
-                statsd?.increment(didResolveOperationCtx.operationName, [
-                  "graphql",
-                ]);
+                Sentry.captureException(err);
               }
             },
 
@@ -136,32 +137,36 @@ export const createApolloServer = ({
                 // Ignore introspection queries from graphiql
                 return;
               }
-              const elapsed = performance.now() - startedAt;
+              const elapsed = performance.now() - startTimestamp;
 
               // take the first part of the UA to help identify browser vs server requests
               const userAgent =
                 ctx.context.req.headers["user-agent"]?.split(" ")[0];
 
               const msg = {
-                message: "graphql",
                 operation: willSendResponseCtx.operationName,
                 elapsed: `${elapsed.toFixed(2)}ms`,
+                graphqlClient:
+                  ctx.context.req.headers["apollographql-client-name"],
+                ip: ctx.context.req.ip,
                 userAgent,
               };
               if (willSendResponseCtx.errors) {
-                willSendResponseCtx.logger.error({
-                  ...msg,
-                  errors: willSendResponseCtx.errors,
-                  stack: willSendResponseCtx.errors
-                    .map((err) => err.stack)
-                    // Filter stacks caused by an apollo Forbidden error to prevent cluttering logs
-                    // with errors caused by a user being logged out.
-                    .filter(
-                      (stack) => stack && !stack.startsWith("ForbiddenError"),
-                    ),
-                });
+                willSendResponseCtx.logger.error(
+                  JSON.stringify({
+                    ...msg,
+                    errors: willSendResponseCtx.errors,
+                    stack: willSendResponseCtx.errors
+                      .map((err) => err.stack)
+                      // Filter stacks caused by an apollo Forbidden error to prevent cluttering logs
+                      // with errors caused by a user being logged out.
+                      .filter(
+                        (stack) => stack && !stack.startsWith("ForbiddenError"),
+                      ),
+                  }),
+                );
               } else {
-                willSendResponseCtx.logger.info(msg);
+                willSendResponseCtx.logger.info(JSON.stringify(msg));
                 if (willSendResponseCtx.operationName) {
                   statsd?.timing(
                     willSendResponseCtx.operationName,
@@ -176,7 +181,10 @@ export const createApolloServer = ({
         },
       },
       ApolloServerPluginLandingPageGraphQLPlayground({
-        settings: { "request.credentials": "include" },
+        settings: {
+          "request.credentials": "include",
+          "schema.polling.enable": false,
+        },
       }),
     ],
   });

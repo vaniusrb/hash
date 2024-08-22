@@ -1,12 +1,7 @@
-import {
-  Box,
-  Stack,
-  SxProps,
-  Theme,
-  Typography,
-  typographyClasses,
-} from "@mui/material";
-import { forwardRef, ForwardRefRenderFunction, useMemo } from "react";
+import type { SxProps, Theme } from "@mui/material";
+import { Box, Stack, Typography, typographyClasses } from "@mui/material";
+import type { ForwardRefRenderFunction } from "react";
+import { forwardRef, useMemo } from "react";
 
 import { IconRainbowHash } from "./icon-rainbow-hash";
 
@@ -31,7 +26,10 @@ const OntologyChip: ForwardRefRenderFunction<
     return match
       ? {
           shortname: match[1],
-          between: match[2] ? `${match[2]}${match[3] ? "/" : ""}` : undefined,
+          between:
+            (match[2] ?? match[3])
+              ? `${match[2] ?? ""}${match[3] ? "/" : ""}`
+              : undefined,
           slug: match[3],
           after: match[4],
         }
@@ -91,6 +89,7 @@ const OntologyChip: ForwardRefRenderFunction<
       <Typography
         component={Stack}
         direction="row"
+        data-testid="ontology-chip-path"
         sx={(theme) => ({
           alignItems: "center",
           pr: 1.25,

@@ -1,9 +1,5 @@
-import {
-  Components,
-  inputAdornmentClasses,
-  outlinedInputClasses,
-  Theme,
-} from "@mui/material";
+import type { Components, Theme } from "@mui/material";
+import { inputAdornmentClasses, outlinedInputClasses } from "@mui/material";
 
 export const textFieldBorderRadius = 6;
 
@@ -19,6 +15,7 @@ export const MuiOutlinedInputThemeOptions: Components<Theme>["MuiOutlinedInput"]
         paddingRight: 0,
         boxShadow: theme.boxShadows.xs,
         backgroundColor: theme.palette.white,
+        overflow: "hidden",
 
         "&.Mui-focused, &.Mui-focused:hover": {
           [`& .${outlinedInputClasses.notchedOutline}`]: {
@@ -63,6 +60,10 @@ export const MuiOutlinedInputThemeOptions: Components<Theme>["MuiOutlinedInput"]
           "&::placeholder": {
             color: theme.palette.gray[50],
             opacity: 1,
+          },
+
+          "&:-webkit-autofill": {
+            borderRadius: 0,
           },
 
           ...(error && {

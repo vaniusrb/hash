@@ -1,3 +1,4 @@
+import type { SizedGridColumn } from "@glideapps/glide-data-grid";
 import {
   CheckIcon,
   Chip,
@@ -5,45 +6,53 @@ import {
   EyeSlashIconRegular,
   IconButton,
 } from "@hashintel/design-system";
-import {
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type {
   AccountGroupId,
   AccountId,
+} from "@local/hash-graph-types/account";
+import type {
   DataTypeWithMetadata,
-  Entity,
   EntityTypeWithMetadata,
+  PropertyTypeWithMetadata,
+} from "@local/hash-graph-types/ontology";
+import { isBaseUrl } from "@local/hash-graph-types/ontology";
+import {
   extractOwnedByIdFromEntityId,
   isExternalOntologyElementMetadata,
-  PropertyTypeWithMetadata,
 } from "@local/hash-subgraph";
+import type { SxProps, Theme, TooltipProps } from "@mui/material";
 import {
   Box,
-  buttonClasses,
   Checkbox,
   chipClasses,
   FormControlLabel,
   formControlLabelClasses,
   styled,
-  SxProps,
-  Theme,
   Tooltip,
   tooltipClasses,
-  TooltipProps,
 } from "@mui/material";
-import {
+import type {
   Dispatch,
   FunctionComponent,
+  MutableRefObject,
   ReactNode,
   SetStateAction,
-  useMemo,
-  useState,
 } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import type { Row } from "../components/grid/utils/rows";
+import type { MinimalUser } from "../lib/user-and-org";
+import type { TypeEntitiesRow } from "../pages/shared/entities-table/use-entities-table";
+import type { TypesTableRow } from "../pages/types/[[...type-kind]].page/types-table";
 import { EarthAmericasRegularIcon } from "./icons/earth-americas-regular";
 import { FilterListIcon } from "./icons/filter-list-icon";
 import { HouseRegularIcon } from "./icons/house-regular-icon";
 import { MagnifyingGlassRegularIcon } from "./icons/magnifying-glass-regular-icon";
 import { BulkActionsDropdown } from "./table-header/bulk-actions-dropdown";
-import { Button } from "./ui";
+import type { GenerateCsvFileFunction } from "./table-header/export-to-csv-button";
+import { ExportToCsvButton } from "./table-header/export-to-csv-button";
+import { TableHeaderButton } from "./table-header/table-header-button";
 
 export const tableHeaderHeight = 50;
 
@@ -102,6 +111,11 @@ export type FilterState = {
   includeGlobal: boolean;
 };
 
+export type GetAdditionalCsvDataFunction = () => Promise<{
+  prependedData: string[][];
+  appendedData: string[][];
+} | null>;
+
 type TableHeaderProps = {
   internalWebIds: (AccountId | AccountGroupId)[];
   itemLabelPlural: "entities" | "pages" | "types";
@@ -119,6 +133,10 @@ type TableHeaderProps = {
   )[];
   filterState: FilterState;
   endAdornment?: ReactNode;
+  title: string;
+  columns: SizedGridColumn[];
+  currentlyDisplayedRowsRef: MutableRefObject<Row[] | null>;
+  getAdditionalCsvData?: GetAdditionalCsvDataFunction;
   setFilterState: Dispatch<SetStateAction<FilterState>>;
   toggleSearch?: () => void;
   onBulkActionCompleted?: () => void;
@@ -137,6 +155,10 @@ export const TableHeader: FunctionComponent<TableHeaderProps> = ({
   selectedItems,
   filterState,
   endAdornment,
+  title,
+  columns,
+  currentlyDisplayedRowsRef,
+  getAdditionalCsvData,
   setFilterState,
   toggleSearch,
   onBulkActionCompleted,
@@ -163,6 +185,81 @@ export const TableHeader: FunctionComponent<TableHeaderProps> = ({
     items && typeof numberOfUserWebItems !== "undefined"
       ? items.length - numberOfUserWebItems
       : undefined;
+
+  const generateCsvFile = useCallback<GenerateCsvFileFunction>(async () => {
+    const currentlyDisplayedRows = currentlyDisplayedRowsRef.current;
+    if (!currentlyDisplayedRows) {
+      return null;
+    }
+
+    const additionalCsvData = getAdditionalCsvData
+      ? await getAdditionalCsvData()
+      : undefined;
+
+    const { prependedData, appendedData } = additionalCsvData ?? {};
+
+    const prependedColumnTitles = prependedData?.[0];
+    const prependedRows = prependedData?.splice(1);
+
+    const appendedColumnTitles = appendedData?.[0];
+    const appendedRows = appendedData?.splice(1);
+
+    // Entity metadata columns (i.e. what's already being displayed in the entities table)
+
+    const columnRowKeys = columns.map(({ id }) => id).flat();
+
+    const tableContentColumnTitles = columns.map((column) =>
+      /**
+       * If the column is the entity label column, add the word "label" to the
+       * column title. Otherwise we'd end up with an "Entity" or "Page" column title,
+       * making it harder to distinguish from the property/outgoing link columns.
+       */
+      column.id === "entityLabel" ? `${column.title} label` : column.title,
+    );
+
+    // Collate the contents of the CSV file row by row (including the header)
+    const content: string[][] = [
+      [
+        ...(prependedColumnTitles ?? []),
+        ...tableContentColumnTitles,
+        ...(appendedColumnTitles ?? []),
+      ],
+      ...currentlyDisplayedRows.map((row, i) => {
+        const tableCells = columnRowKeys.map((key) => {
+          const value = row[key];
+
+          if (typeof value === "string") {
+            return value;
+          } else if (key === "lastEditedBy") {
+            const user = value as MinimalUser | undefined;
+
+            return user?.displayName ?? "";
+          } else if (isBaseUrl(key)) {
+            /**
+             * If the key is a base URL, then the value needs to be obtained
+             * from the nested `properties` field on the row.
+             */
+            return (row as TypeEntitiesRow).properties?.[key] ?? "";
+          } else if (key === "archived") {
+            return (row as TypesTableRow).archived ? "Yes" : "No";
+          }
+
+          return "";
+        });
+
+        const prependedCells = prependedRows?.[i];
+        const appendedCells = appendedRows?.[i];
+
+        return [
+          ...(prependedCells ?? []),
+          ...tableCells,
+          ...(appendedCells ?? []),
+        ];
+      }),
+    ];
+
+    return { title, content };
+  }, [title, columns, currentlyDisplayedRowsRef, getAdditionalCsvData]);
 
   return (
     <Box
@@ -269,7 +366,7 @@ export const TableHeader: FunctionComponent<TableHeaderProps> = ({
           </IconButton>
         ) : null}
       </Box>
-      <Box display="flex" columnGap={1}>
+      <Box display="flex" alignItems="center" columnGap={1}>
         <Box
           sx={{
             display: "flex",
@@ -283,34 +380,13 @@ export const TableHeader: FunctionComponent<TableHeaderProps> = ({
             borderRadius: 15,
           }}
         >
-          <Button
+          <TableHeaderButton
             variant="tertiary_quiet"
             onClick={() => setDisplayFilters(!displayFilters)}
             startIcon={<FilterListIcon />}
-            sx={{
-              py: 0.25,
-              px: 2,
-              borderRadius: 15,
-              background: "transparent",
-              minHeight: "unset",
-              minWidth: "unset",
-              fontWeight: 500,
-              fontSize: 13,
-              color: ({ palette }) => palette.gray[70],
-              [`.${buttonClasses.startIcon}`]: {
-                color: ({ palette }) => palette.gray[70],
-              },
-              ":hover": {
-                color: ({ palette }) => palette.gray[90],
-                background: ({ palette }) => palette.gray[30],
-                [`.${buttonClasses.startIcon}`]: {
-                  color: ({ palette }) => palette.gray[90],
-                },
-              },
-            }}
           >
             Filter
-          </Button>
+          </TableHeaderButton>
           <Box
             sx={{
               transition: ({ transitions }) => transitions.create("max-width"),
@@ -350,6 +426,7 @@ export const TableHeader: FunctionComponent<TableHeaderProps> = ({
             </Box>
           </Box>
         </Box>
+        <ExportToCsvButton generateCsvFile={generateCsvFile} />
         {endAdornment}
       </Box>
     </Box>

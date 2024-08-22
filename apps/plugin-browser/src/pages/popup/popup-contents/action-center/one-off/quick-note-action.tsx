@@ -1,46 +1,25 @@
-import type { VersionedUrl } from "@blockprotocol/graph";
 import { Button } from "@hashintel/design-system";
 import { paragraphBlockComponentId } from "@local/hash-isomorphic-utils/blocks";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import {
-  BlockProperties,
-  HasIndexedContentProperties,
-  TextProperties,
+import type { QuickNote } from "@local/hash-isomorphic-utils/system-types/quicknote";
+import type {
+  Block,
+  HasData,
+  HasIndexedContent,
+  Text,
 } from "@local/hash-isomorphic-utils/system-types/shared";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import { Entity, EntityPropertiesObject, LinkData } from "@local/hash-subgraph";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
 import { Box } from "@mui/material";
 import { generateKeyBetween } from "fractional-indexing";
 
-import {
-  CreateEntityMutation,
-  CreateEntityMutationVariables,
-} from "../../../../../graphql/api-types.gen";
-import { createEntityMutation } from "../../../../../graphql/queries/entity.queries";
-import { queryGraphQlApi } from "../../../../../shared/query-graphql-api";
-import { useLocalStorage } from "../../../../shared/use-local-storage";
+import { createEntity } from "../../../../../shared/create-entity";
+import { useStorageSync } from "../../../../shared/use-storage-sync";
 import { Section } from "../shared/section";
 import { TextFieldWithDarkMode } from "../text-field-with-dark-mode";
 import { QuickNoteIcon } from "./quick-note-action/quick-note-icon";
-
-const createEntity = (params: {
-  entityTypeId: VersionedUrl;
-  properties: EntityPropertiesObject;
-  linkData?: LinkData;
-}): Promise<Entity> =>
-  queryGraphQlApi<CreateEntityMutation, CreateEntityMutationVariables>(
-    createEntityMutation,
-    {
-      entityTypeId: params.entityTypeId,
-      properties: params.properties,
-      linkData: params.linkData,
-    },
-  ).then(({ data }) => {
-    return data.createEntity;
-  });
 
 const createQuickNote = async (text: string) => {
   const paragraphs = text
@@ -54,31 +33,53 @@ const createQuickNote = async (text: string) => {
     .filter((paragraph) => paragraph.length > 0);
 
   const [quickNoteEntity, ...blockEntities] = await Promise.all([
-    createEntity({
+    createEntity<QuickNote>({
       entityTypeId: systemEntityTypes.quickNote.entityTypeId,
-      properties: {},
+      properties: { value: {} },
     }),
     ...paragraphs.map(async (paragraph) => {
       const [textEntity, blockEntity] = await Promise.all([
-        createEntity({
+        createEntity<Text>({
           entityTypeId: systemEntityTypes.text.entityTypeId,
           properties: {
-            "https://blockprotocol.org/@blockprotocol/types/property-type/textual-content/":
-              [{ tokenType: "text", text: paragraph }] satisfies TextToken[],
-          } as TextProperties,
+            value: {
+              "https://blockprotocol.org/@blockprotocol/types/property-type/textual-content/":
+                {
+                  value: [
+                    {
+                      value: {
+                        tokenType: "text",
+                        text: paragraph,
+                      } satisfies TextToken,
+                      metadata: {
+                        dataTypeId:
+                          "https://blockprotocol.org/@blockprotocol/types/data-type/object/v/1",
+                      },
+                    },
+                  ],
+                },
+            },
+          },
         }),
-        createEntity({
+        createEntity<Block>({
           entityTypeId: systemEntityTypes.block.entityTypeId,
           properties: {
-            "https://hash.ai/@hash/types/property-type/component-id/":
-              paragraphBlockComponentId,
-          } as BlockProperties,
+            value: {
+              "https://hash.ai/@hash/types/property-type/component-id/": {
+                value: paragraphBlockComponentId,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                },
+              },
+            },
+          },
         }),
       ]);
 
-      await createEntity({
+      await createEntity<HasData>({
         entityTypeId: systemLinkEntityTypes.hasData.linkEntityTypeId,
-        properties: {},
+        properties: { value: {} },
         linkData: {
           leftEntityId: blockEntity.metadata.recordId.entityId,
           rightEntityId: textEntity.metadata.recordId.entityId,
@@ -97,12 +98,19 @@ const createQuickNote = async (text: string) => {
 
   await Promise.all(
     blockEntities.map(async (blockEntity, index) =>
-      createEntity({
+      createEntity<HasIndexedContent>({
         entityTypeId: systemLinkEntityTypes.hasIndexedContent.linkEntityTypeId,
         properties: {
-          "https://hash.ai/@hash/types/property-type/fractional-index/":
-            fractionalIndexes[index]!,
-        } as HasIndexedContentProperties,
+          value: {
+            "https://hash.ai/@hash/types/property-type/fractional-index/": {
+              value: fractionalIndexes[index]!,
+              metadata: {
+                dataTypeId:
+                  "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+              },
+            },
+          },
+        },
         linkData: {
           leftEntityId: quickNoteEntity.metadata.recordId.entityId,
           rightEntityId: blockEntity.metadata.recordId.entityId,
@@ -115,7 +123,7 @@ const createQuickNote = async (text: string) => {
 };
 
 export const QuickNoteAction = () => {
-  const [draftQuickNote, setDraftQuickNote] = useLocalStorage(
+  const [draftQuickNote, setDraftQuickNote] = useStorageSync(
     "draftQuickNote",
     "",
   );

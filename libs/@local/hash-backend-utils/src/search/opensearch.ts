@@ -1,10 +1,11 @@
-import { JsonObject } from "@blockprotocol/core";
-import { Client, ClientOptions, errors } from "@opensearch-project/opensearch";
+import type { JsonObject } from "@blockprotocol/core";
+import type { ClientOptions } from "@opensearch-project/opensearch";
+import { Client, errors } from "@opensearch-project/opensearch";
 import { DataSource } from "apollo-datasource";
 
-import { Logger } from "../logger";
-import { sleep } from "../utils";
-import {
+import type { Logger } from "../logger.js";
+import { sleep } from "../utils.js";
+import type {
   SearchAdapter,
   SearchField,
   SearchFieldPresence,
@@ -12,7 +13,7 @@ import {
   SearchParameters,
   SearchResult,
   SearchResultPaginated,
-} from "./adapter";
+} from "./adapter.js";
 
 const KEEP_ALIVE_CURSOR_DURATION = "10m";
 
@@ -91,7 +92,7 @@ const generateSearchBody = (params: SearchParameters) => {
         // eslint-disable-next-line no-param-reassign
         state[presence] = [matchField];
       } else {
-        state[presence]!.push(matchField);
+        state[presence].push(matchField);
       }
       return state;
     }, {});
@@ -144,14 +145,16 @@ export class OpenSearch extends DataSource implements SearchAdapter {
         return new OpenSearch(client, logger);
       } catch (err) {
         connErr = err;
-        logger.info({
-          message: `Unable to connect to OpenSearch cluster at ${node} (attempt ${
-            i + 1
-          }/${attempts}). Trying again in ${
-            retryIntervalMillis / 1000
-          } seconds`,
-          error: err,
-        });
+        logger.info(
+          JSON.stringify({
+            message: `Unable to connect to OpenSearch cluster at ${node} (attempt ${
+              i + 1
+            }/${attempts}). Trying again in ${
+              retryIntervalMillis / 1000
+            } seconds`,
+            error: err,
+          }),
+        );
         await sleep(retryIntervalMillis);
       }
     }
@@ -227,6 +230,7 @@ export class OpenSearch extends DataSource implements SearchAdapter {
     }
 
     const hits = (body.hits.hits as RawHit[]).map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (hit: any): SearchHit => ({
         index: hit._index as string,
         id: hit._id as string,
@@ -400,6 +404,7 @@ export class OpenSearch extends DataSource implements SearchAdapter {
     }
 
     const hits = (body.hits.hits as RawHit[]).map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (hit: any): SearchHit => ({
         index: hit._index as string,
         id: hit._id as string,

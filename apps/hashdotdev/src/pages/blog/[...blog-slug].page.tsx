@@ -1,11 +1,13 @@
-import { GetStaticPaths, GetStaticProps, NextPage } from "next";
-import { MDXRemoteSerializeResult } from "next-mdx-remote";
+import type { GetStaticPaths, GetStaticProps, NextPage } from "next";
+import type { MDXRemoteSerializeResult } from "next-mdx-remote";
 
-import {
+import type {
   BlogPagePhotos,
+  BlogPostPagePhoto,
+} from "../../components/blog-post";
+import {
   BlogPostContent,
   BlogPostHead,
-  BlogPostPagePhoto,
   BlogPostPhotosContext,
 } from "../../components/blog-post";
 import { MdxPageContent } from "../../components/mdx-page-content";
@@ -23,7 +25,8 @@ export type BlogPost = {
   subtitle: string;
   categories?: string[];
   authors: BlogPostAuthorWithPhotoSrc[];
-  date: string;
+  dateFirstPublished: string;
+  dateLastUpdated: string;
   postPhoto: string;
   postPhotoSquare?: string;
 };
@@ -138,7 +141,8 @@ const BlogPostPage: NextPage<BlogPostPageProps> = ({
         subtitle={data.subtitle}
         categories={data.categories}
         authors={data.authors}
-        date={data.date}
+        dateFirstPublished={data.dateFirstPublished}
+        dateLastUpdated={data.dateLastUpdated}
       />
       <BlogPostContent>
         <MdxPageContent serializedPage={serializedPage} />

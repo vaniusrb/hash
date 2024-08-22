@@ -12,6 +12,7 @@ on:
       - "apps/hash-api/**"
       - "apps/hash-external-services/temporal/**"
       - "apps/hash-external-services/kratos/**"
+      - "apps/hash-external-services/hydra/**"
       - "libs/@local/**"
       - "infra/docker/api/prod/**"
 
@@ -25,12 +26,13 @@ env:
   HASH_API_RESOURCE_NAME: ${{ secrets.HASH_API_RESOURCE_NAME }}
   HASH_GRAPH_RESOURCE_NAME: ${{ secrets.HASH_GRAPH_RESOURCE_NAME }}
   HASH_KRATOS_RESOURCE_NAME: ${{ secrets.HASH_KRATOS_RESOURCE_NAME }}
+  HASH_HYDRA_RESOURCE_NAME: ${{ secrets.HASH_HYDRA_RESOURCE_NAME }}
   HASH_TEMPORAL_AI_TS_WORKER_RESOURCE_NAME: h-hash-prod-usea1-temporalworkeraits
   HASH_TEMPORAL_INTEGRATION_WORKER_RESOURCE_NAME: h-hash-prod-usea1-temporalworkerintegration
 
   HASH_TEMPORAL_SETUP_RESOURCE_NAME: h-temporal-prod-usea1-setup
   HASH_TEMPORAL_MIGRATE_RESOURCE_NAME: h-temporal-prod-usea1-migrate
-  HASH_TEMPORAL_VERSION: 1.21.0.0
+  HASH_TEMPORAL_VERSION: 1.23.1.0
 
   HASH_ECS_CLUSTER_NAME: h-hash-prod-usea1-ecs
   HASH_APP_SERVICE_NAME: h-hash-prod-usea1-appsvc
@@ -49,11 +51,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -87,11 +89,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -125,11 +127,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -159,6 +161,46 @@ jobs:
             ENV=prod
             API_SECRET=${{ secrets.HASH_KRATOS_API_SECRET }}
 
+  build-hydra:
+    name: Build and push Hydra image
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Authenticate Vault
+        id: secrets
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
+        with:
+          exportToken: true
+          url: ${{ env.VAULT_ADDR }}
+          method: jwt
+          role: prod
+          # Even though it could look like separate calls to fetch the secrets
+          # the responses here are cached, so we're only issuing a single set of credentials
+          secrets: |
+            aws/creds/prod-deploy access_key | AWS_ACCESS_KEY_ID ;
+            aws/creds/prod-deploy secret_key | AWS_SECRET_ACCESS_KEY ;
+            aws/creds/prod-deploy security_token | AWS_SESSION_TOKEN
+
+      - name: Docker image build through docker-build-push
+        uses: ./.github/actions/docker-build-push
+        id: build
+        with:
+          SHORTNAME: "hydra"
+          CONTEXT_PATH: ${{ github.workspace }}/apps/hash-external-services/hydra
+          DOCKERFILE_LOCATION: ${{ github.workspace }}/apps/hash-external-services/hydra/Dockerfile
+          AWS_ACCESS_KEY_ID: ${{ steps.secrets.outputs.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.secrets.outputs.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ steps.secrets.outputs.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          AWS_ECR_URL: ${{ env.AWS_ECR_URL }}
+          IMAGE_NAME: ${{ env.HASH_HYDRA_RESOURCE_NAME }}
+          BUILD_ARGS: |
+            ENV=prod
+
   build-ts-worker:
     name: Build and push Temporal TS AI Worker
     runs-on: ubuntu-latest
@@ -166,11 +208,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -204,11 +246,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -242,11 +284,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -283,11 +325,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -324,15 +366,16 @@ jobs:
       - build-ts-worker
       - build-api
       - build-kratos
+      - build-hydra
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -365,11 +408,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -402,11 +445,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -440,11 +483,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Authenticate Vault
         id: secrets
-        uses: hashicorp/vault-action@affa6f04da5c2d55e6e115b7d1b044a6b1af8c74 # v2.7.4
+        uses: hashicorp/vault-action@d1720f055e0635fd932a1d2a48f87a666a57906c # v3.0.0
         with:
           exportToken: true
           url: ${{ env.VAULT_ADDR }}
@@ -479,10 +522,10 @@ jobs:
     if: ${{ failure() }}
     steps:
       - name: Slack Notification
-        uses: rtCamp/action-slack-notify@b24d75fe0e728a4bf9fc42ee217caa686d141ee8
+        uses: rtCamp/action-slack-notify@4c6d89edb6a46b698c3c9c6fd890946d510d0b7b
         env:
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: "Error deploying the HASH backend <@U0143NL4GMP> <@U027NPY8Y3X> <@U02NLJY0FGX>"
+          SLACK_MESSAGE: "Error deploying the HASH backend <@U0143NL4GMP> <@U02NLJY0FGX>" # Notifies C & T
           SLACK_TITLE: Backend deployment failed
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_USERNAME: GitHub

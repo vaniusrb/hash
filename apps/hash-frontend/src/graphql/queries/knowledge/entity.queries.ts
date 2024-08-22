@@ -5,9 +5,10 @@ export const createEntityMutation = gql`
   mutation createEntity(
     $entityTypeId: VersionedUrl!
     $ownedById: OwnedById
-    $properties: EntityPropertiesObject!
+    $properties: PropertyObjectWithMetadata!
     $linkData: LinkData
     $draft: Boolean
+    $relationships: [EntityRelationAndSubject!]
   ) {
     # This is a scalar, which has no selection.
     createEntity(
@@ -16,6 +17,7 @@ export const createEntityMutation = gql`
       properties: $properties
       linkData: $linkData
       draft: $draft
+      relationships: $relationships
     )
   }
 `;
@@ -53,12 +55,12 @@ export const queryEntitiesQuery = gql`
   ${subgraphFieldsFragment}
 `;
 
-export const structuralQueryEntitiesQuery = gql`
-  query structuralQueryEntities(
-    $query: EntityStructuralQuery!
+export const getEntitySubgraphQuery = gql`
+  query getEntitySubgraph(
+    $request: GetEntitySubgraphRequest!
     $includePermissions: Boolean!
   ) {
-    structuralQueryEntities(query: $query) {
+    getEntitySubgraph(request: $request) {
       userPermissionsOnEntities @include(if: $includePermissions)
       subgraph {
         ...SubgraphFields
@@ -69,29 +71,27 @@ export const structuralQueryEntitiesQuery = gql`
 `;
 
 export const updateEntityMutation = gql`
-  mutation updateEntity(
-    $entityId: EntityId!
-    $updatedProperties: EntityPropertiesObject!
-    $leftToRightOrder: Int
-    $rightToLeftOrder: Int
-    $entityTypeId: VersionedUrl
-    $draft: Boolean
-  ) {
+  mutation updateEntity($entityUpdate: EntityUpdateDefinition!) {
     # This is a scalar, which has no selection.
-    updateEntity(
-      entityId: $entityId
-      updatedProperties: $updatedProperties
-      leftToRightOrder: $leftToRightOrder
-      rightToLeftOrder: $rightToLeftOrder
-      entityTypeId: $entityTypeId
-      draft: $draft
-    )
+    updateEntity(entityUpdate: $entityUpdate)
+  }
+`;
+
+export const updateEntitiesMutation = gql`
+  mutation updateEntities($entityUpdates: [EntityUpdateDefinition!]!) {
+    updateEntities(entityUpdates: $entityUpdates)
   }
 `;
 
 export const archiveEntityMutation = gql`
   mutation archiveEntity($entityId: EntityId!) {
     archiveEntity(entityId: $entityId)
+  }
+`;
+
+export const archiveEntitiesMutation = gql`
+  mutation archiveEntities($entityIds: [EntityId!]!) {
+    archiveEntities(entityIds: $entityIds)
   }
 `;
 
@@ -174,6 +174,15 @@ export const getEntityAuthorizationRelationshipsQuery = gql`
           public
         }
       }
+    }
+  }
+`;
+
+export const getEntityDiffsQuery = gql`
+  query getEntityDiffs($inputs: [DiffEntityInput!]!) {
+    getEntityDiffs(inputs: $inputs) {
+      input
+      diff
     }
   }
 `;

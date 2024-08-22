@@ -1,9 +1,9 @@
-import { BlockMetadata, UnknownRecord } from "@blockprotocol/core";
-import { FunctionComponent, ReactElement } from "react";
+import type { BlockMetadata, UnknownRecord } from "@blockprotocol/core";
+import type { FunctionComponent, ReactElement } from "react";
 
 import { CustomElementLoader } from "./block-renderer/custom-element";
 import { HtmlLoader } from "./block-renderer/html";
-import { UnknownBlock } from "./load-remote-block";
+import type { UnknownBlock } from "./load-remote-block";
 
 type BlockRendererProps = {
   blockSource: UnknownBlock;
@@ -57,7 +57,7 @@ export const BlockRenderer: FunctionComponent<BlockRendererProps> = ({
         `'react' entryPoint expects parsed source to be a function, but got: ${typeof blockSource}`,
       );
     }
-    const BlockComponent = blockSource as (...props: any[]) => ReactElement;
+    const BlockComponent = blockSource as (...props: unknown[]) => ReactElement;
     return <BlockComponent {...properties} />;
   }
 

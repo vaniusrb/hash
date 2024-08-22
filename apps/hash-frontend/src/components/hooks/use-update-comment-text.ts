@@ -1,9 +1,9 @@
 import { useMutation } from "@apollo/client";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import { EntityId } from "@local/hash-subgraph";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
 import { useCallback } from "react";
 
-import {
+import type {
   UpdateCommentTextMutation,
   UpdateCommentTextMutationVariables,
 } from "../../graphql/api-types.gen";

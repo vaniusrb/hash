@@ -1,30 +1,25 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { publicUserAccountId } from "@apps/hash-api/src/auth/public-user-account-id";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
-import { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
-import {
-  joinOrg,
-  User,
-} from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import type { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import { joinOrg } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import {
   createPropertyType,
   getPropertyTypeById,
   getPropertyTypeSubgraphById,
   updatePropertyType,
 } from "@apps/hash-api/src/graph/ontology/primitive/property-type";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
 import { Logger } from "@local/hash-backend-utils/logger";
+import { publicUserAccountId } from "@local/hash-backend-utils/public-user-account-id";
+import type { PropertyTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   currentTimeInstantTemporalAxes,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
-import { ConstructPropertyTypeParams } from "@local/hash-isomorphic-utils/types";
-import {
-  isOwnedOntologyElementMetadata,
-  OwnedById,
-  PropertyTypeWithMetadata,
-} from "@local/hash-subgraph";
+import type { ConstructPropertyTypeParams } from "@local/hash-isomorphic-utils/types";
+import { isOwnedOntologyElementMetadata } from "@local/hash-subgraph";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import {
@@ -34,15 +29,13 @@ import {
   textDataTypeId,
 } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 let testOrg: Org;
 let testUser: User;
@@ -50,7 +43,6 @@ let testUser2: User;
 let propertyTypeSchema: ConstructPropertyTypeParams;
 
 beforeAll(async () => {
-  await TypeSystemInitializer.initialize();
   await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
   testUser = await createTestUser(graphContext, "pt-test-1", logger);
@@ -62,7 +54,6 @@ beforeAll(async () => {
     graphContext,
     authentication,
     "propertytestorg",
-    logger,
   );
   await joinOrg(graphContext, authentication, {
     userEntityId: testUser2.entity.metadata.recordId.entityId,
@@ -77,17 +68,17 @@ beforeAll(async () => {
       },
     ],
   };
-});
 
-afterAll(async () => {
-  await deleteKratosIdentity({
-    kratosIdentityId: testUser.kratosIdentityId,
-  });
-  await deleteKratosIdentity({
-    kratosIdentityId: testUser2.kratosIdentityId,
-  });
+  return async () => {
+    await deleteKratosIdentity({
+      kratosIdentityId: testUser.kratosIdentityId,
+    });
+    await deleteKratosIdentity({
+      kratosIdentityId: testUser2.kratosIdentityId,
+    });
 
-  await resetGraph();
+    await resetGraph();
+  };
 });
 
 describe("Property type CRU", () => {

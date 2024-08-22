@@ -1,11 +1,17 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { EntityTypeMismatchError } from "@local/hash-backend-utils/error";
 import { getWebMachineActorId } from "@local/hash-backend-utils/machine-actors";
 import { createNotificationEntityPermissions } from "@local/hash-backend-utils/notifications";
+import type {
+  CreateEntityParameters,
+  Entity,
+} from "@local/hash-graph-sdk/entity";
+import { LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { EntityId } from "@local/hash-graph-types/entity";
 import {
   currentTimeInstantTemporalAxes,
   generateVersionedUrlMatchingFilter,
-  notArchivedFilter,
+  pageOrNotificationNotArchivedFilter,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
 import {
@@ -14,68 +20,84 @@ import {
   systemPropertyTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { CommentNotificationProperties } from "@local/hash-isomorphic-utils/system-types/commentnotification";
-import { MentionNotificationProperties } from "@local/hash-isomorphic-utils/system-types/mentionnotification";
-import { NotificationProperties } from "@local/hash-isomorphic-utils/system-types/notification";
-import { Entity, EntityId } from "@local/hash-subgraph";
+import type {
+  ArchivedPropertyValueWithMetadata,
+  CommentNotification as CommentNotificationEntity,
+  OccurredInBlock,
+  OccurredInEntity,
+  TriggeredByUser,
+} from "@local/hash-isomorphic-utils/system-types/commentnotification";
+import type {
+  MentionNotification as MentionNotificationEntity,
+  OccurredInComment,
+  OccurredInText,
+} from "@local/hash-isomorphic-utils/system-types/mentionnotification";
+import type { Notification as NotificationEntity } from "@local/hash-isomorphic-utils/system-types/notification";
 import {
   getOutgoingLinksForEntity,
   getRoots,
 } from "@local/hash-subgraph/stdlib";
-import {
-  extractBaseUrl,
-  LinkEntity,
-} from "@local/hash-subgraph/type-system-patch";
 
-import { ImpureGraphFunction, PureGraphFunction } from "../../context-types";
+import type {
+  ImpureGraphFunction,
+  PureGraphFunction,
+} from "../../context-types";
 import {
   createEntity,
-  CreateEntityParams,
-  getEntities,
-  updateEntityProperties,
+  getEntitySubgraph,
+  updateEntity,
 } from "../primitive/entity";
 import { createLinkEntity } from "../primitive/link-entity";
-import { Block } from "./block";
-import { Comment } from "./comment";
-import { Page } from "./page";
-import { Text } from "./text";
-import { User } from "./user";
+import type { Block } from "./block";
+import type { Comment } from "./comment";
+import type { Page } from "./page";
+import type { Text } from "./text";
+import type { User } from "./user";
 
 type Notification = {
   archived?: boolean;
-  entity: Entity<NotificationProperties>;
+  entity: Entity<NotificationEntity>;
 };
 
 export const archiveNotification: ImpureGraphFunction<
-  { notification: Notification },
-  Promise<void>
+  { notification: Notification | MentionNotification | CommentNotification },
+  Promise<void>,
+  false,
+  true
 > = async (context, authentication, params) => {
-  await updateEntityProperties(context, authentication, {
+  await updateEntity<
+    MentionNotificationEntity | CommentNotificationEntity | NotificationEntity
+  >(context, authentication, {
     entity: params.notification.entity,
-    updatedProperties: [
+    propertyPatches: [
       {
-        propertyTypeBaseUrl: extractBaseUrl(
-          systemPropertyTypes.archived.propertyTypeId,
-        ),
-        value: true,
+        op: "add",
+        path: [systemPropertyTypes.archived.propertyTypeBaseUrl],
+        property: {
+          value: true,
+          metadata: {
+            dataTypeId:
+              "https://blockprotocol.org/@blockprotocol/types/data-type/boolean/v/1",
+          },
+        } satisfies ArchivedPropertyValueWithMetadata,
       },
     ],
   });
 };
 
 export type MentionNotification = {
-  entity: Entity<MentionNotificationProperties>;
-} & Notification;
+  entity: Entity<MentionNotificationEntity>;
+} & Omit<Notification, "entity">;
 
 export const isEntityMentionNotificationEntity = (
   entity: Entity,
-): entity is Entity<MentionNotificationProperties> =>
+): entity is Entity<MentionNotificationEntity> =>
   entity.metadata.entityTypeId ===
   systemEntityTypes.mentionNotification.entityTypeId;
 
 export const getMentionNotificationFromEntity: PureGraphFunction<
   { entity: Entity },
-  Notification
+  MentionNotification
 > = ({ entity }) => {
   if (!isEntityMentionNotificationEntity(entity)) {
     throw new EntityTypeMismatchError(
@@ -91,7 +113,7 @@ export const getMentionNotificationFromEntity: PureGraphFunction<
 };
 
 export const createMentionNotification: ImpureGraphFunction<
-  Pick<CreateEntityParams, "ownedById"> & {
+  Pick<CreateEntityParameters, "ownedById"> & {
     triggeredByUser: User;
     occurredInEntity: Page;
     occurredInBlock: Block;
@@ -121,12 +143,16 @@ export const createMentionNotification: ImpureGraphFunction<
       machineActorId: webMachineActorId,
     });
 
-  const entity = await createEntity(context, botAuthentication, {
-    ownedById,
-    properties: {},
-    entityTypeId: systemEntityTypes.mentionNotification.entityTypeId,
-    relationships: notificationEntityRelationships,
-  });
+  const entity = await createEntity<MentionNotificationEntity>(
+    context,
+    botAuthentication,
+    {
+      ownedById,
+      properties: { value: {} },
+      entityTypeId: systemEntityTypes.mentionNotification.entityTypeId,
+      relationships: notificationEntityRelationships,
+    },
+  );
 
   await Promise.all(
     [
@@ -137,45 +163,58 @@ export const createMentionNotification: ImpureGraphFunction<
        *
        * Ideally we would have a global bot with restricted permissions across all webs to do this – H-1605
        */
-      createLinkEntity(context, userAuthentication, {
+      createLinkEntity<TriggeredByUser>(context, userAuthentication, {
         ownedById,
-        leftEntityId: entity.metadata.recordId.entityId,
-        rightEntityId: triggeredByUser.entity.metadata.recordId.entityId,
-        linkEntityTypeId:
-          systemLinkEntityTypes.triggeredByUser.linkEntityTypeId,
+        properties: { value: {} },
+        linkData: {
+          leftEntityId: entity.metadata.recordId.entityId,
+          rightEntityId: triggeredByUser.entity.metadata.recordId.entityId,
+        },
+        entityTypeId: systemLinkEntityTypes.triggeredByUser.linkEntityTypeId,
         relationships: linkEntityRelationships,
       }),
-      createLinkEntity(context, userAuthentication, {
+      createLinkEntity<OccurredInEntity>(context, userAuthentication, {
         ownedById,
-        leftEntityId: entity.metadata.recordId.entityId,
-        rightEntityId: occurredInEntity.entity.metadata.recordId.entityId,
-        linkEntityTypeId:
-          systemLinkEntityTypes.occurredInEntity.linkEntityTypeId,
+        properties: { value: {} },
+        linkData: {
+          leftEntityId: entity.metadata.recordId.entityId,
+          rightEntityId: occurredInEntity.entity.metadata.recordId.entityId,
+        },
+        entityTypeId: systemLinkEntityTypes.occurredInEntity.linkEntityTypeId,
         relationships: linkEntityRelationships,
       }),
-      createLinkEntity(context, userAuthentication, {
+      createLinkEntity<OccurredInBlock>(context, userAuthentication, {
         ownedById,
-        leftEntityId: entity.metadata.recordId.entityId,
-        rightEntityId: occurredInBlock.entity.metadata.recordId.entityId,
-        linkEntityTypeId:
-          systemLinkEntityTypes.occurredInBlock.linkEntityTypeId,
+        properties: { value: {} },
+        linkData: {
+          leftEntityId: entity.metadata.recordId.entityId,
+          rightEntityId: occurredInBlock.entity.metadata.recordId.entityId,
+        },
+        entityTypeId: systemLinkEntityTypes.occurredInBlock.linkEntityTypeId,
         relationships: linkEntityRelationships,
       }),
       occurredInComment
-        ? createLinkEntity(context, userAuthentication, {
+        ? createLinkEntity<OccurredInComment>(context, userAuthentication, {
             ownedById,
-            leftEntityId: entity.metadata.recordId.entityId,
-            rightEntityId: occurredInComment.entity.metadata.recordId.entityId,
-            linkEntityTypeId:
+            properties: { value: {} },
+            linkData: {
+              leftEntityId: entity.metadata.recordId.entityId,
+              rightEntityId:
+                occurredInComment.entity.metadata.recordId.entityId,
+            },
+            entityTypeId:
               systemLinkEntityTypes.occurredInComment.linkEntityTypeId,
             relationships: linkEntityRelationships,
           })
         : [],
-      createLinkEntity(context, userAuthentication, {
+      createLinkEntity<OccurredInText>(context, userAuthentication, {
         ownedById,
-        leftEntityId: entity.metadata.recordId.entityId,
-        rightEntityId: occurredInText.entity.metadata.recordId.entityId,
-        linkEntityTypeId: systemLinkEntityTypes.occurredInText.linkEntityTypeId,
+        properties: { value: {} },
+        linkData: {
+          leftEntityId: entity.metadata.recordId.entityId,
+          rightEntityId: occurredInText.entity.metadata.recordId.entityId,
+        },
+        entityTypeId: systemLinkEntityTypes.occurredInText.linkEntityTypeId,
         relationships: linkEntityRelationships,
       }),
     ].flat(),
@@ -206,31 +245,26 @@ export const getMentionNotification: ImpureGraphFunction<
     includeDrafts = false,
   } = params;
 
-  const entitiesSubgraph = await getEntities(context, authentication, {
-    query: {
-      filter: {
-        all: [
-          generateVersionedUrlMatchingFilter(
-            systemEntityTypes.mentionNotification.entityTypeId,
-            { ignoreParents: true },
-          ),
-          {
-            equal: [
-              { path: ["ownedById"] },
-              { parameter: recipient.accountId },
-            ],
-          },
-          notArchivedFilter,
-        ],
-      },
-      graphResolveDepths: {
-        ...zeroedGraphResolveDepths,
-        // Get the outgoing links of the entities
-        hasLeftEntity: { outgoing: 0, incoming: 1 },
-      },
-      temporalAxes: currentTimeInstantTemporalAxes,
-      includeDrafts,
+  const entitiesSubgraph = await getEntitySubgraph(context, authentication, {
+    filter: {
+      all: [
+        generateVersionedUrlMatchingFilter(
+          systemEntityTypes.mentionNotification.entityTypeId,
+          { ignoreParents: true },
+        ),
+        {
+          equal: [{ path: ["ownedById"] }, { parameter: recipient.accountId }],
+        },
+        pageOrNotificationNotArchivedFilter,
+      ],
     },
+    graphResolveDepths: {
+      ...zeroedGraphResolveDepths,
+      // Get the outgoing links of the entities
+      hasLeftEntity: { outgoing: 0, incoming: 1 },
+    },
+    temporalAxes: currentTimeInstantTemporalAxes,
+    includeDrafts,
   });
 
   /**
@@ -243,7 +277,7 @@ export const getMentionNotification: ImpureGraphFunction<
     const outgoingLinks = getOutgoingLinksForEntity(
       entitiesSubgraph,
       entity.metadata.recordId.entityId,
-    ) as LinkEntity[];
+    ).map((linkEntity) => new LinkEntity(linkEntity));
 
     const triggeredByUserLink = outgoingLinks.find(
       ({ metadata }) =>
@@ -312,18 +346,18 @@ export const getMentionNotification: ImpureGraphFunction<
 };
 
 export type CommentNotification = {
-  entity: Entity<MentionNotificationProperties>;
-} & Notification;
+  entity: Entity<CommentNotificationEntity>;
+} & Omit<Notification, "entity">;
 
 export const isEntityCommentNotificationEntity = (
   entity: Entity,
-): entity is Entity<CommentNotificationProperties> =>
+): entity is Entity<CommentNotificationEntity> =>
   entity.metadata.entityTypeId ===
   systemEntityTypes.commentNotification.entityTypeId;
 
 export const getCommentNotificationFromEntity: PureGraphFunction<
   { entity: Entity },
-  Notification
+  CommentNotification
 > = ({ entity }) => {
   if (!isEntityCommentNotificationEntity(entity)) {
     throw new EntityTypeMismatchError(
@@ -339,7 +373,7 @@ export const getCommentNotificationFromEntity: PureGraphFunction<
 };
 
 export const createCommentNotification: ImpureGraphFunction<
-  Pick<CreateEntityParams, "ownedById"> & {
+  Pick<CreateEntityParameters, "ownedById"> & {
     triggeredByUser: User;
     triggeredByComment: Comment;
     occurredInEntity: Page;
@@ -369,12 +403,16 @@ export const createCommentNotification: ImpureGraphFunction<
       machineActorId: webMachineActorId,
     });
 
-  const notificationEntity = await createEntity(context, authentication, {
-    ownedById,
-    properties: {},
-    entityTypeId: systemEntityTypes.commentNotification.entityTypeId,
-    relationships: notificationEntityRelationships,
-  });
+  const notificationEntity = await createEntity<CommentNotificationEntity>(
+    context,
+    authentication,
+    {
+      ownedById,
+      properties: { value: {} },
+      entityTypeId: systemEntityTypes.commentNotification.entityTypeId,
+      relationships: notificationEntityRelationships,
+    },
+  );
 
   const leftEntityId = notificationEntity.metadata.recordId.entityId;
 
@@ -409,7 +447,7 @@ export const createCommentNotification: ImpureGraphFunction<
   }
 
   await Promise.all(
-    linksToCreate.map(({ rightEntityId, linkEntityTypeId }) =>
+    linksToCreate.map(({ rightEntityId, linkEntityTypeId: entityTypeId }) =>
       /**
        * We do this separately with the user's authority because we need to use the user's authority to create the links
        * We cannot use a bot scoped to the user's web, because the thing that we are linking to (comments, pages)
@@ -418,10 +456,13 @@ export const createCommentNotification: ImpureGraphFunction<
        * Ideally we would have a global bot with restricted permissions across all webs to do this – H-1605
        */
       createLinkEntity(context, userAuthentication, {
-        linkEntityTypeId,
-        leftEntityId,
-        rightEntityId,
         ownedById,
+        properties: { value: {} },
+        linkData: {
+          leftEntityId,
+          rightEntityId,
+        },
+        entityTypeId,
         relationships: linkEntityRelationships,
       }),
     ),
@@ -440,7 +481,9 @@ export const getCommentNotification: ImpureGraphFunction<
     repliedToComment?: Comment;
     includeDrafts?: boolean;
   },
-  Promise<CommentNotification | null>
+  Promise<CommentNotification | null>,
+  false,
+  true
 > = async (context, authentication, params) => {
   const {
     recipient,
@@ -452,63 +495,54 @@ export const getCommentNotification: ImpureGraphFunction<
     includeDrafts = false,
   } = params;
 
-  const entitiesSubgraph = await getEntities(context, authentication, {
-    query: {
-      filter: {
-        all: [
-          generateVersionedUrlMatchingFilter(
-            systemEntityTypes.commentNotification.entityTypeId,
-            { ignoreParents: true },
-          ),
-          {
-            equal: [
-              { path: ["ownedById"] },
-              { parameter: recipient.accountId },
-            ],
-          },
-          /** @todo: enforce the type of these links somehow */
-          {
-            any: [
-              {
-                equal: [
-                  {
-                    path: [
-                      "properties",
-                      extractBaseUrl(
-                        systemPropertyTypes.archived.propertyTypeId,
-                      ),
-                    ],
-                  },
-                  // @ts-expect-error -- We need to update the type definition of `EntityStructuralQuery` to allow for this
-                  //   @see https://linear.app/hash/issue/H-1207
-                  null,
-                ],
-              },
-              {
-                equal: [
-                  {
-                    path: [
-                      "properties",
-                      extractBaseUrl(
-                        systemPropertyTypes.archived.propertyTypeId,
-                      ),
-                    ],
-                  },
-                  { parameter: false },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      graphResolveDepths: {
-        ...zeroedGraphResolveDepths,
-        // Get the outgoing links of the entities
-        hasLeftEntity: { outgoing: 0, incoming: 1 },
-      },
-      temporalAxes: currentTimeInstantTemporalAxes,
-      includeDrafts,
+  const entitiesSubgraph = await getEntitySubgraph(context, authentication, {
+    filter: {
+      all: [
+        generateVersionedUrlMatchingFilter(
+          systemEntityTypes.commentNotification.entityTypeId,
+          { ignoreParents: true },
+        ),
+        {
+          equal: [{ path: ["ownedById"] }, { parameter: recipient.accountId }],
+        },
+        /** @todo: enforce the type of these links somehow */
+        {
+          any: [
+            {
+              equal: [
+                {
+                  path: [
+                    "properties",
+                    systemPropertyTypes.archived.propertyTypeBaseUrl,
+                  ],
+                },
+                // @ts-expect-error -- We need to update the type definition of `EntityStructuralQuery` to allow for this
+                //   @see https://linear.app/hash/issue/H-1207
+                null,
+              ],
+            },
+            {
+              equal: [
+                {
+                  path: [
+                    "properties",
+                    systemPropertyTypes.archived.propertyTypeBaseUrl,
+                  ],
+                },
+                { parameter: false },
+              ],
+            },
+          ],
+        },
+      ],
     },
+    graphResolveDepths: {
+      ...zeroedGraphResolveDepths,
+      // Get the outgoing links of the entities
+      hasLeftEntity: { outgoing: 0, incoming: 1 },
+    },
+    temporalAxes: currentTimeInstantTemporalAxes,
+    includeDrafts,
   });
 
   /**
@@ -521,7 +555,7 @@ export const getCommentNotification: ImpureGraphFunction<
     const outgoingLinks = getOutgoingLinksForEntity(
       entitiesSubgraph,
       entity.metadata.recordId.entityId,
-    ) as LinkEntity[];
+    ).map((linkEntity) => new LinkEntity(linkEntity));
 
     const triggeredByUserLink = outgoingLinks.find(
       ({ metadata }) =>

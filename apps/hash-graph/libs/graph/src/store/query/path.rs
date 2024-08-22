@@ -1,4 +1,5 @@
-use std::{borrow::Cow, error::Error, fmt, fmt::Write};
+use alloc::borrow::Cow;
+use core::{error::Error, fmt, fmt::Write};
 
 use bytes::BytesMut;
 use postgres_types::{IsNull, ToSql, Type};
@@ -18,7 +19,7 @@ pub struct JsonPath<'p> {
 
 impl<'p> JsonPath<'p> {
     #[must_use]
-    pub fn from_path_tokens(path: Vec<PathToken<'p>>) -> Self {
+    pub const fn from_path_tokens(path: Vec<PathToken<'p>>) -> Self {
         Self { path }
     }
 
@@ -35,6 +36,20 @@ impl<'p> JsonPath<'p> {
             }
         }
         Ok(())
+    }
+
+    #[must_use]
+    pub fn into_owned(self) -> JsonPath<'static> {
+        JsonPath {
+            path: self
+                .path
+                .into_iter()
+                .map(|token| match token {
+                    PathToken::Field(field) => PathToken::Field(Cow::Owned(field.into_owned())),
+                    PathToken::Index(index) => PathToken::Index(index),
+                })
+                .collect(),
+        }
     }
 }
 

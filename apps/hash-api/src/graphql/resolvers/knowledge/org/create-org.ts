@@ -1,23 +1,24 @@
-import { Subgraph } from "@local/hash-subgraph";
+import type { Subgraph } from "@local/hash-subgraph";
 
 import { getLatestEntityRootedSubgraph } from "../../../../graph/knowledge/primitive/entity";
 import { createOrg } from "../../../../graph/knowledge/system-types/org";
 import { joinOrg } from "../../../../graph/knowledge/system-types/user";
-import { MutationCreateOrgArgs, ResolverFn } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
+import type { MutationCreateOrgArgs, ResolverFn } from "../../../api-types.gen";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 
 export const createOrgResolver: ResolverFn<
   Promise<Subgraph>,
-  {},
+  Record<string, never>,
   LoggedInGraphQLContext,
   MutationCreateOrgArgs
 > = async (
   _,
   { name, shortname, websiteUrl, hasLeftEntity, hasRightEntity },
-  { dataSources, authentication, user },
+  graphQLContext,
 ) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  const { authentication, user } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
   const org = await createOrg(context, authentication, {
     shortname,

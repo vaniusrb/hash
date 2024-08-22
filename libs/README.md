@@ -1,5 +1,4 @@
 [block protocol]: https://blockprotocol.org/?utm_medium=organic&utm_source=github_readme_hash-repo_libs
-[discord]: https://hash.ai/discord?utm_medium=organic&utm_source=github_readme_hash-repo_libs
 [hash.ai]: https://hash.ai/?utm_medium=organic&utm_source=github_readme_hash-repo_libs
 [HASH website for developers]: https://hash.dev/?utm_medium=organic&utm_source=github_readme_hash-repo_libs
 [github_banner]: https://hash.dev/?utm_medium=organic&utm_source=github_readme_hash-repo_libs
@@ -16,7 +15,7 @@
 
 [![github_banner](https://hash.ai/cdn-cgi/imagedelivery/EipKtqu98OotgfhvKf6Eew/f4e5e79c-077f-4b30-9170-e25b91286300/github)][github_banner]
 
-[![discord](https://img.shields.io/discord/840573247803097118)][discord] [![github_star](https://img.shields.io/github/stars/hashintel/hash?label=Star%20on%20GitHub&style=social)][github_star]
+[![github_star](https://img.shields.io/github/stars/hashintel/hash?label=Star%20on%20GitHub&style=social)][github_star]
 
 # Libraries
 
@@ -52,6 +51,7 @@ The following list is a non-exhaustive list of packages in `@local`:
 | [@local/hash-authorization-rs](@local/hash-authorization)       | Rust        | Not hosted    | Provides the authorization interface and logic used in the Graph       |
 | [@local/hash-graph-client](@local/hash-graph-client/typescript) | TypeScript  | To be written | A generator to create a TypeScript/JavaScript client for the Graph API |
 | [@local/hash-graph-types-rs](@local/hash-graph-types/rust)      | Rust        | Not hosted    | Types used inside of the Graph API                                     |
+| [@local/temporal-client-rs](@local/temporal-client)             | Rust        | Not hosted    | Client implementation to connect to our Temporal.io service            |
 | [@local/temporal-versioning-rs](@local/temporal-versioning)     | Rust        | Not hosted    | Implementation of temporal versioning                                  |
 
 ## Contributing

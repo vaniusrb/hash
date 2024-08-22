@@ -4,6 +4,8 @@ export const entityTypeTypedef = gql`
   scalar ConstructEntityTypeParams
   scalar EntityTypeWithMetadata
   scalar BaseUrl
+  scalar Filter
+  scalar UserPermissionsOnEntityType
 
   extend type Query {
     """
@@ -14,6 +16,7 @@ export const entityTypeTypedef = gql`
       constrainsPropertiesOn: OutgoingEdgeResolveDepthInput!
       constrainsLinksOn: OutgoingEdgeResolveDepthInput!
       constrainsLinkDestinationsOn: OutgoingEdgeResolveDepthInput!
+      filter: Filter
       inheritsFrom: OutgoingEdgeResolveDepthInput!
       latestOnly: Boolean = true
       includeArchived: Boolean = false
@@ -29,7 +32,15 @@ export const entityTypeTypedef = gql`
       constrainsLinksOn: OutgoingEdgeResolveDepthInput!
       constrainsLinkDestinationsOn: OutgoingEdgeResolveDepthInput!
       inheritsFrom: OutgoingEdgeResolveDepthInput!
+      includeArchived: Boolean = false
     ): Subgraph!
+
+    """
+    Check the requesting user's permissions on an entity type
+    """
+    checkUserPermissionsOnEntityType(
+      entityTypeId: VersionedUrl!
+    ): UserPermissionsOnEntityType!
   }
 
   extend type Mutation {

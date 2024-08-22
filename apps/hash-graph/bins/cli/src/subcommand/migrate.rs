@@ -1,8 +1,8 @@
+use authorization::NoAuthorization;
 use clap::Parser;
 use error_stack::{Result, ResultExt};
-use graph::{
-    logging::{init_logger, LoggingArgs},
-    store::{DatabaseConnectionInfo, PostgresStorePool, StoreMigration, StorePool},
+use graph::store::{
+    DatabaseConnectionInfo, DatabasePoolConfig, PostgresStorePool, StoreMigration, StorePool,
 };
 use tokio_postgres::NoTls;
 
@@ -12,16 +12,14 @@ use crate::error::GraphError;
 #[clap(version, author, about, long_about = None)]
 pub struct MigrateArgs {
     #[clap(flatten)]
-    pub log_config: LoggingArgs,
+    pub db_info: DatabaseConnectionInfo,
 
     #[clap(flatten)]
-    pub db_info: DatabaseConnectionInfo,
+    pub pool_config: DatabasePoolConfig,
 }
 
 pub async fn migrate(args: MigrateArgs) -> Result<(), GraphError> {
-    let _log_guard = init_logger(&args.log_config);
-
-    let pool = PostgresStorePool::new(&args.db_info, NoTls)
+    let pool = PostgresStorePool::new(&args.db_info, &args.pool_config, NoTls)
         .await
         .change_context(GraphError)
         .map_err(|report| {
@@ -29,16 +27,13 @@ pub async fn migrate(args: MigrateArgs) -> Result<(), GraphError> {
             report
         })?;
 
-    let mut connection = pool
-        .acquire()
+    pool.acquire(NoAuthorization, None)
         .await
         .change_context(GraphError)
         .map_err(|report| {
             tracing::error!(error = ?report, "Failed to acquire database connection");
             report
-        })?;
-
-    connection
+        })?
         .run_migrations()
         .await
         .change_context(GraphError)

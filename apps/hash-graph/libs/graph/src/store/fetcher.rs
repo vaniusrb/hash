@@ -1,4 +1,6 @@
-use std::{collections::HashSet, mem};
+use alloc::sync::Arc;
+use core::mem;
+use std::collections::HashSet;
 
 use async_trait::async_trait;
 use authorization::{
@@ -12,61 +14,66 @@ use authorization::{
 };
 use error_stack::{Report, Result, ResultExt};
 use graph_types::{
-    account::{AccountGroupId, AccountId},
-    knowledge::{
-        entity::{Entity, EntityEmbedding, EntityId, EntityMetadata, EntityProperties, EntityUuid},
-        link::{EntityLinkOrder, LinkData},
-    },
+    account::AccountId,
+    knowledge::entity::{Entity, EntityId},
     ontology::{
-        DataTypeMetadata, DataTypeWithMetadata, EntityTypeMetadata, EntityTypeWithMetadata,
-        OntologyTemporalMetadata, OntologyType, OntologyTypeClassificationMetadata,
-        OntologyTypeMetadata, OntologyTypeReference, OntologyTypeVersion, PartialDataTypeMetadata,
-        PartialEntityTypeMetadata, PartialPropertyTypeMetadata, PropertyTypeMetadata,
-        PropertyTypeWithMetadata,
+        DataTypeMetadata, EntityTypeMetadata, OntologyTemporalMetadata, OntologyType,
+        OntologyTypeClassificationMetadata, OntologyTypeMetadata, OntologyTypeReference,
+        PartialDataTypeMetadata, PartialEntityTypeMetadata, PartialPropertyTypeMetadata,
+        PropertyTypeMetadata, ProvidedOntologyEditionProvenance,
     },
     owned_by_id::OwnedById,
 };
 use tarpc::context;
-use temporal_versioning::{DecisionTime, Timestamp};
+use temporal_client::TemporalClient;
+use temporal_versioning::{DecisionTime, Timestamp, TransactionTime};
 use tokio::net::ToSocketAddrs;
 use tokio_serde::formats::Json;
 use type_fetcher::fetcher::{FetchedOntologyType, FetcherClient};
 use type_system::{
-    url::{BaseUrl, VersionedUrl},
-    DataType, EntityType, EntityTypeReference, PropertyType,
+    schema::{DataType, EntityType, EntityTypeReference, PropertyType},
+    url::VersionedUrl,
 };
-use validation::ValidationProfile;
 
 use crate::{
     ontology::domain_validator::DomainValidator,
     store::{
-        crud::Read,
-        knowledge::{EntityValidationType, ValidateEntityError},
-        query::{Filter, OntologyQueryPath},
+        account::{InsertAccountGroupIdParams, InsertAccountIdParams, InsertWebIdParams},
+        crud::{QueryResult, Read, ReadPaginated, Sorting},
+        knowledge::{
+            CountEntitiesParams, CreateEntityParams, GetEntitiesParams, GetEntitiesResponse,
+            GetEntitySubgraphParams, GetEntitySubgraphResponse, PatchEntityParams,
+            UpdateEntityEmbeddingsParams, ValidateEntityError, ValidateEntityParams,
+        },
+        ontology::{
+            ArchiveDataTypeParams, ArchiveEntityTypeParams, ArchivePropertyTypeParams,
+            CountDataTypesParams, CountEntityTypesParams, CountPropertyTypesParams,
+            CreateDataTypeParams, CreateEntityTypeParams, CreatePropertyTypeParams,
+            GetDataTypeSubgraphParams, GetDataTypeSubgraphResponse, GetDataTypesParams,
+            GetDataTypesResponse, GetEntityTypeSubgraphParams, GetEntityTypeSubgraphResponse,
+            GetEntityTypesParams, GetEntityTypesResponse, GetPropertyTypeSubgraphParams,
+            GetPropertyTypeSubgraphResponse, GetPropertyTypesParams, GetPropertyTypesResponse,
+            UnarchiveDataTypeParams, UnarchiveEntityTypeParams, UnarchivePropertyTypeParams,
+            UpdateDataTypeEmbeddingParams, UpdateDataTypesParams, UpdateEntityTypeEmbeddingParams,
+            UpdateEntityTypesParams, UpdatePropertyTypeEmbeddingParams, UpdatePropertyTypesParams,
+        },
+        query::Filter,
         AccountStore, ConflictBehavior, DataTypeStore, EntityStore, EntityTypeStore,
-        InsertionError, PropertyTypeStore, QueryError, Record, StoreError, StorePool, UpdateError,
+        InsertionError, PropertyTypeStore, QueryError, QueryRecord, StoreError, StorePool,
+        UpdateError,
     },
-    subgraph::{
-        edges::GraphResolveDepths,
-        identifier::{
-            DataTypeVertexId, EntityTypeVertexId, EntityVertexId, PropertyTypeVertexId, VertexId,
-        },
-        query::StructuralQuery,
-        temporal_axes::{
-            PinnedTemporalAxisUnresolved, QueryTemporalAxes, QueryTemporalAxesUnresolved,
-            VariableTemporalAxisUnresolved,
-        },
-        Subgraph,
+    subgraph::temporal_axes::{
+        PinnedTemporalAxisUnresolved, QueryTemporalAxes, QueryTemporalAxesUnresolved,
+        VariableTemporalAxisUnresolved,
     },
 };
 
 #[async_trait]
 pub trait TypeFetcher {
     /// Fetches the provided type reference and inserts it to the Graph.
-    async fn insert_external_ontology_type<A: AuthorizationApi + Send + Sync>(
+    async fn insert_external_ontology_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
         reference: OntologyTypeReference<'_>,
     ) -> Result<OntologyTypeMetadata, InsertionError>;
 }
@@ -107,24 +114,38 @@ where
 }
 
 #[async_trait]
-impl<P, A> StorePool for FetchingPool<P, A>
+impl<P, Add> StorePool for FetchingPool<P, Add>
 where
     P: StorePool + Send + Sync,
-    A: ToSocketAddrs + Send + Sync + Clone,
+    Add: ToSocketAddrs + Send + Sync + Clone,
 {
     type Error = P::Error;
-    type Store<'pool> = FetchingStore<P::Store<'pool>, A>;
+    type Store<'pool, A: AuthorizationApi> = FetchingStore<P::Store<'pool, A>, Add>;
 
-    async fn acquire(&self) -> Result<Self::Store<'_>, Self::Error> {
+    async fn acquire<A: AuthorizationApi>(
+        &self,
+        authorization_api: A,
+        temporal_client: Option<Arc<TemporalClient>>,
+    ) -> Result<Self::Store<'_, A>, Self::Error> {
         Ok(FetchingStore {
-            store: self.pool.acquire().await?,
+            store: self
+                .pool
+                .acquire(authorization_api, temporal_client)
+                .await?,
             connection_info: self.connection_info.clone(),
         })
     }
 
-    async fn acquire_owned(&self) -> Result<Self::Store<'static>, Self::Error> {
+    async fn acquire_owned<A: AuthorizationApi>(
+        &self,
+        authorization_api: A,
+        temporal_client: Option<Arc<TemporalClient>>,
+    ) -> Result<Self::Store<'static, A>, Self::Error> {
         Ok(FetchingStore {
-            store: self.pool.acquire_owned().await?,
+            store: self
+                .pool
+                .acquire_owned(authorization_api, temporal_client)
+                .await?,
             connection_info: self.connection_info.clone(),
         })
     }
@@ -158,7 +179,7 @@ const ENTITY_TYPE_RELATIONSHIPS: [EntityTypeRelationAndSubject; 2] = [
 
 impl<S, A> FetchingStore<S, A>
 where
-    S: Send + Sync,
+    S: Sync,
     A: ToSocketAddrs + Send + Sync,
 {
     fn connection_info(&self) -> Result<&TypeFetcherConnectionInfo<A>, StoreError> {
@@ -168,9 +189,14 @@ where
         })
     }
 
+    /// Creates the client to fetch types from.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the type fetcher is not available.
     pub async fn fetcher_client(&self) -> Result<FetcherClient, StoreError>
     where
-        A: ToSocketAddrs,
+        A: Send + ToSocketAddrs,
     {
         let connection_info = self.connection_info()?;
         let transport =
@@ -197,6 +223,7 @@ struct FetchedOntologyTypes {
     entity_types: Vec<(EntityType, PartialEntityTypeMetadata)>,
 }
 
+#[derive(Debug)]
 enum FetchBehavior {
     IncludeProvidedReferences,
     ExcludeProvidedReferences,
@@ -205,39 +232,14 @@ enum FetchBehavior {
 impl<'t, S, A> FetchingStore<S, A>
 where
     A: ToSocketAddrs + Send + Sync,
-    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send,
+    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send + Sync,
 {
-    async fn contains_ontology_type<Au: AuthorizationApi + Send + Sync>(
+    async fn contains_ontology_type(
         &self,
         actor_id: AccountId,
-        authorization_api: &Au,
         ontology_type_reference: OntologyTypeReference<'_>,
-    ) -> Result<bool, StoreError>
-    where
-        S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send,
-        A: Send + Sync,
-    {
-        fn create_query<'u, T>(versioned_url: &'u VersionedUrl) -> StructuralQuery<'u, T>
-        where
-            T: Record<QueryPath<'u>: OntologyQueryPath>,
-            T::VertexId: VertexId<BaseId = BaseUrl, RevisionId = OntologyTypeVersion>,
-        {
-            StructuralQuery {
-                filter: Filter::for_versioned_url(versioned_url),
-                graph_resolve_depths: GraphResolveDepths::default(),
-                temporal_axes: QueryTemporalAxesUnresolved::DecisionTime {
-                    pinned: PinnedTemporalAxisUnresolved::new(None),
-                    variable: VariableTemporalAxisUnresolved::new(None, None),
-                },
-                include_drafts: true,
-            }
-        }
-
-        let url = match ontology_type_reference {
-            OntologyTypeReference::DataTypeReference(reference) => reference.url(),
-            OntologyTypeReference::PropertyTypeReference(reference) => reference.url(),
-            OntologyTypeReference::EntityTypeReference(reference) => reference.url(),
-        };
+    ) -> Result<bool, StoreError> {
+        let url = ontology_type_reference.url();
 
         if let Ok(connection_info) = self.connection_info() {
             if connection_info
@@ -251,35 +253,69 @@ where
         }
 
         match ontology_type_reference {
-            OntologyTypeReference::DataTypeReference(_) => {
-                self.store
-                    .get_data_type(actor_id, authorization_api, &create_query(url), None, None)
-                    .await
-            }
-            OntologyTypeReference::PropertyTypeReference(_) => {
-                self.store
-                    .get_property_type(actor_id, authorization_api, &create_query(url), None, None)
-                    .await
-            }
-            OntologyTypeReference::EntityTypeReference(_) => {
-                self.store
-                    .get_entity_type(actor_id, authorization_api, &create_query(url), None, None)
-                    .await
-            }
+            OntologyTypeReference::DataTypeReference(_) => self
+                .store
+                .get_data_types(
+                    actor_id,
+                    GetDataTypesParams {
+                        filter: Filter::for_versioned_url(url),
+                        temporal_axes: QueryTemporalAxesUnresolved::DecisionTime {
+                            pinned: PinnedTemporalAxisUnresolved::new(None),
+                            variable: VariableTemporalAxisUnresolved::new(None, None),
+                        },
+                        after: None,
+                        limit: None,
+                        include_drafts: true,
+                        include_count: false,
+                    },
+                )
+                .await
+                .map(|response| !response.data_types.is_empty()),
+            OntologyTypeReference::PropertyTypeReference(_) => self
+                .store
+                .get_property_types(
+                    actor_id,
+                    GetPropertyTypesParams {
+                        filter: Filter::for_versioned_url(url),
+                        temporal_axes: QueryTemporalAxesUnresolved::DecisionTime {
+                            pinned: PinnedTemporalAxisUnresolved::new(None),
+                            variable: VariableTemporalAxisUnresolved::new(None, None),
+                        },
+                        after: None,
+                        limit: None,
+                        include_drafts: true,
+                        include_count: false,
+                    },
+                )
+                .await
+                .map(|response| !response.property_types.is_empty()),
+            OntologyTypeReference::EntityTypeReference(_) => self
+                .store
+                .get_entity_types(
+                    actor_id,
+                    GetEntityTypesParams {
+                        filter: Filter::for_versioned_url(url),
+                        temporal_axes: QueryTemporalAxesUnresolved::DecisionTime {
+                            pinned: PinnedTemporalAxisUnresolved::new(None),
+                            variable: VariableTemporalAxisUnresolved::new(None, None),
+                        },
+                        after: None,
+                        limit: None,
+                        include_drafts: true,
+                        include_count: false,
+                    },
+                )
+                .await
+                .map(|response| !response.entity_types.is_empty()),
         }
         .change_context(StoreError)
         .attach_printable("Could not check if ontology type exists")
-        .map(|subgraph| !subgraph.roots.is_empty())
     }
 
-    async fn collect_external_ontology_types<
-        'o,
-        T: OntologyType + Sync,
-        Au: AuthorizationApi + Send + Sync,
-    >(
+    #[tracing::instrument(level = "trace", skip(self, ontology_type))]
+    async fn collect_external_ontology_types<'o, T: OntologyType + Sync>(
         &self,
         actor_id: AccountId,
-        authorization_api: &Au,
         ontology_type: &'o T,
         bypassed_types: &HashSet<&VersionedUrl>,
     ) -> Result<Vec<OntologyTypeReference<'o>>, QueryError> {
@@ -287,7 +323,7 @@ where
         for reference in ontology_type.traverse_references() {
             if !bypassed_types.contains(reference.url())
                 && !self
-                    .contains_ontology_type(actor_id, authorization_api, reference)
+                    .contains_ontology_type(actor_id, reference)
                     .await
                     .change_context(QueryError)?
             {
@@ -298,15 +334,10 @@ where
         Ok(references)
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "Large parts of this function is is written out three times and this should be \
-                  moved to another function at some point."
-    )]
-    async fn fetch_external_ontology_types<Au: AuthorizationApi + Send + Sync>(
+    #[tracing::instrument(level = "debug", skip(self, ontology_type_references))]
+    async fn fetch_external_ontology_types(
         &self,
         actor_id: AccountId,
-        authorization_api: &Au,
         ontology_type_references: impl IntoIterator<Item = VersionedUrl> + Send,
         fetch_behavior: FetchBehavior,
         bypassed_types: &HashSet<&VersionedUrl>,
@@ -341,11 +372,18 @@ where
                 break;
             }
 
-            let ontology_types = fetcher
-                .fetch_ontology_types(context::current(), ontology_urls)
-                .await
-                .change_context(StoreError)?
-                .change_context(StoreError)?;
+            let ontology_types = {
+                let span = tracing::info_span!(
+                    "fetching ontology types from type fetcher",
+                    urls=?ontology_urls
+                );
+                let _enter = span.enter();
+                fetcher
+                    .fetch_ontology_types(context::current(), ontology_urls)
+                    .await
+                    .change_context(StoreError)?
+                    .change_context(StoreError)?
+            };
 
             for (ontology_type, fetched_at) in ontology_types {
                 match ontology_type {
@@ -358,12 +396,7 @@ where
                         };
 
                         for referenced_ontology_type in self
-                            .collect_external_ontology_types(
-                                actor_id,
-                                authorization_api,
-                                &data_type,
-                                bypassed_types,
-                            )
+                            .collect_external_ontology_types(actor_id, &data_type, bypassed_types)
                             .await
                             .change_context(StoreError)?
                         {
@@ -388,7 +421,6 @@ where
                         for referenced_ontology_type in self
                             .collect_external_ontology_types(
                                 actor_id,
-                                authorization_api,
                                 &property_type,
                                 bypassed_types,
                             )
@@ -416,12 +448,7 @@ where
                         };
 
                         for referenced_ontology_type in self
-                            .collect_external_ontology_types(
-                                actor_id,
-                                authorization_api,
-                                &entity_type,
-                                bypassed_types,
-                            )
+                            .collect_external_ontology_types(actor_id, &entity_type, bypassed_types)
                             .await
                             .change_context(StoreError)?
                         {
@@ -442,17 +469,13 @@ where
         Ok(fetched_ontology_types)
     }
 
-    async fn insert_external_types<'o, T, Au>(
+    #[tracing::instrument(level = "debug", skip(self, ontology_types))]
+    async fn insert_external_types<'o, T: OntologyType + Sync + 'o>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
         ontology_types: impl IntoIterator<Item = &'o T, IntoIter: Send> + Send,
         bypassed_types: &HashSet<&VersionedUrl>,
-    ) -> Result<(), InsertionError>
-    where
-        T: OntologyType + Sync + 'o,
-        Au: AuthorizationApi + Send + Sync,
-    {
+    ) -> Result<(), InsertionError> {
         // Without collecting it first, we get a "Higher-ranked lifetime error" because of the
         // limitations of Rust being able to look into a `Pin<Box<dyn Future>>`, which is returned
         // by `#[async_trait]` methods.
@@ -462,12 +485,7 @@ where
 
         for ontology_type in ontology_types {
             let external_types = self
-                .collect_external_ontology_types(
-                    actor_id,
-                    authorization_api,
-                    ontology_type,
-                    bypassed_types,
-                )
+                .collect_external_ontology_types(actor_id, ontology_type, bypassed_types)
                 .await
                 .change_context(InsertionError)?;
 
@@ -481,7 +499,6 @@ where
         let fetched_ontology_types = self
             .fetch_external_ontology_types(
                 actor_id,
-                authorization_api,
                 ontology_type_ids,
                 FetchBehavior::ExcludeProvidedReferences,
                 bypassed_types,
@@ -493,10 +510,16 @@ where
             self.store
                 .create_data_types(
                     actor_id,
-                    authorization_api,
-                    fetched_ontology_types.data_types,
-                    ConflictBehavior::Skip,
-                    DATA_TYPE_RELATIONSHIPS,
+                    fetched_ontology_types
+                        .data_types
+                        .into_iter()
+                        .map(|(schema, metadata)| CreateDataTypeParams {
+                            schema,
+                            classification: metadata.classification,
+                            relationships: DATA_TYPE_RELATIONSHIPS,
+                            conflict_behavior: ConflictBehavior::Skip,
+                            provenance: ProvidedOntologyEditionProvenance::default(),
+                        }),
                 )
                 .await?;
         }
@@ -505,10 +528,16 @@ where
             self.store
                 .create_property_types(
                     actor_id,
-                    authorization_api,
-                    fetched_ontology_types.property_types,
-                    ConflictBehavior::Skip,
-                    PROPERTY_TYPE_RELATIONSHIPS,
+                    fetched_ontology_types
+                        .property_types
+                        .into_iter()
+                        .map(|(schema, metadata)| CreatePropertyTypeParams {
+                            schema,
+                            classification: metadata.classification,
+                            relationships: PROPERTY_TYPE_RELATIONSHIPS,
+                            conflict_behavior: ConflictBehavior::Skip,
+                            provenance: ProvidedOntologyEditionProvenance::default(),
+                        }),
                 )
                 .await?;
         }
@@ -517,10 +546,18 @@ where
             self.store
                 .create_entity_types(
                     actor_id,
-                    authorization_api,
-                    fetched_ontology_types.entity_types,
-                    ConflictBehavior::Skip,
-                    ENTITY_TYPE_RELATIONSHIPS,
+                    fetched_ontology_types
+                        .entity_types
+                        .into_iter()
+                        .map(|(schema, metadata)| CreateEntityTypeParams {
+                            schema,
+                            classification: metadata.classification,
+                            icon: metadata.icon,
+                            label_property: metadata.label_property,
+                            relationships: ENTITY_TYPE_RELATIONSHIPS,
+                            conflict_behavior: ConflictBehavior::Skip,
+                            provenance: ProvidedOntologyEditionProvenance::default(),
+                        }),
                 )
                 .await?;
         }
@@ -528,10 +565,10 @@ where
         Ok(())
     }
 
-    async fn insert_external_types_by_reference<Au: AuthorizationApi + Send + Sync>(
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn insert_external_types_by_reference(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
         reference: OntologyTypeReference<'_>,
         on_conflict: ConflictBehavior,
         fetch_behavior: FetchBehavior,
@@ -539,14 +576,13 @@ where
     ) -> Result<Vec<OntologyTypeMetadata>, InsertionError> {
         if on_conflict == ConflictBehavior::Fail
             || !self
-                .contains_ontology_type(actor_id, authorization_api, reference)
+                .contains_ontology_type(actor_id, reference)
                 .await
                 .change_context(InsertionError)?
         {
             let fetched_ontology_types = self
                 .fetch_external_ontology_types(
                     actor_id,
-                    authorization_api,
                     [reference.url().clone()],
                     fetch_behavior,
                     bypassed_types,
@@ -560,10 +596,16 @@ where
                 self.store
                     .create_data_types(
                         actor_id,
-                        authorization_api,
-                        fetched_ontology_types.data_types,
-                        ConflictBehavior::Skip,
-                        DATA_TYPE_RELATIONSHIPS,
+                        fetched_ontology_types
+                            .data_types
+                            .into_iter()
+                            .map(|(schema, metadata)| CreateDataTypeParams {
+                                schema,
+                                classification: metadata.classification,
+                                relationships: DATA_TYPE_RELATIONSHIPS,
+                                conflict_behavior: ConflictBehavior::Skip,
+                                provenance: ProvidedOntologyEditionProvenance::default(),
+                            }),
                     )
                     .await?
             };
@@ -574,10 +616,15 @@ where
                 self.store
                     .create_property_types(
                         actor_id,
-                        authorization_api,
-                        fetched_ontology_types.property_types,
-                        ConflictBehavior::Skip,
-                        PROPERTY_TYPE_RELATIONSHIPS,
+                        fetched_ontology_types.property_types.into_iter().map(
+                            |(schema, metadata)| CreatePropertyTypeParams {
+                                schema,
+                                classification: metadata.classification,
+                                relationships: PROPERTY_TYPE_RELATIONSHIPS,
+                                conflict_behavior: ConflictBehavior::Skip,
+                                provenance: ProvidedOntologyEditionProvenance::default(),
+                            },
+                        ),
                     )
                     .await?
             };
@@ -588,10 +635,17 @@ where
                 self.store
                     .create_entity_types(
                         actor_id,
-                        authorization_api,
-                        fetched_ontology_types.entity_types,
-                        ConflictBehavior::Skip,
-                        ENTITY_TYPE_RELATIONSHIPS,
+                        fetched_ontology_types.entity_types.into_iter().map(
+                            |(schema, metadata)| CreateEntityTypeParams {
+                                schema,
+                                classification: metadata.classification,
+                                icon: metadata.icon,
+                                label_property: metadata.label_property,
+                                relationships: ENTITY_TYPE_RELATIONSHIPS,
+                                conflict_behavior: ConflictBehavior::Skip,
+                                provenance: ProvidedOntologyEditionProvenance::default(),
+                            },
+                        ),
                     )
                     .await?
             };
@@ -620,17 +674,16 @@ where
 impl<S, A> TypeFetcher for FetchingStore<S, A>
 where
     A: ToSocketAddrs + Send + Sync,
-    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send,
+    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send + Sync,
 {
-    async fn insert_external_ontology_type<Au: AuthorizationApi + Send + Sync>(
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn insert_external_ontology_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
         reference: OntologyTypeReference<'_>,
     ) -> Result<OntologyTypeMetadata, InsertionError> {
         self.insert_external_types_by_reference(
             actor_id,
-            authorization_api,
             reference,
             ConflictBehavior::Fail,
             FetchBehavior::IncludeProvidedReferences,
@@ -641,8 +694,7 @@ where
         .find(|metadata| {
             let record_id = metadata.record_id();
             let reference = reference.url();
-            record_id.base_url == reference.base_url
-                && record_id.version.inner() == reference.version
+            record_id.base_url == reference.base_url && record_id.version == reference.version
         })
         .ok_or_else(|| {
             Report::new(InsertionError).attach_printable(format!(
@@ -653,25 +705,62 @@ where
     }
 }
 
+impl<I, A, R, S> ReadPaginated<R, S> for FetchingStore<I, A>
+where
+    A: Send + Sync,
+    I: ReadPaginated<R, S> + Send,
+    R: QueryRecord,
+    S: Sorting + Sync,
+{
+    type QueryResult = I::QueryResult;
+    type ReadPaginatedStream = I::ReadPaginatedStream;
+
+    async fn read_paginated(
+        &self,
+        filter: &Filter<'_, R>,
+        temporal_axes: Option<&QueryTemporalAxes>,
+        sorting: &S,
+        limit: Option<usize>,
+        include_drafts: bool,
+    ) -> Result<
+        (
+            Self::ReadPaginatedStream,
+            <Self::QueryResult as QueryResult<R, S>>::Indices,
+        ),
+        QueryError,
+    > {
+        self.store
+            .read_paginated(filter, temporal_axes, sorting, limit, include_drafts)
+            .await
+    }
+}
+
 #[async_trait]
-impl<S, A, R: Record> Read<R> for FetchingStore<S, A>
+impl<S, A, R> Read<R> for FetchingStore<S, A>
 where
     A: Send + Sync,
     S: Read<R> + Send,
+    R: QueryRecord,
 {
     type ReadStream = S::ReadStream;
-    type Record = S::Record;
 
     async fn read(
         &self,
-        query: &Filter<Self::Record>,
+        filter: &Filter<'_, R>,
         temporal_axes: Option<&QueryTemporalAxes>,
-        start: Option<&<Self::Record as Record>::VertexId>,
-        limit: Option<usize>,
         include_drafts: bool,
     ) -> Result<Self::ReadStream, QueryError> {
+        self.store.read(filter, temporal_axes, include_drafts).await
+    }
+
+    async fn read_one(
+        &self,
+        filter: &Filter<'_, R>,
+        temporal_axes: Option<&QueryTemporalAxes>,
+        include_drafts: bool,
+    ) -> Result<R, QueryError> {
         self.store
-            .read(query, temporal_axes, start, limit, include_drafts)
+            .read_one(filter, temporal_axes, include_drafts)
             .await
     }
 }
@@ -682,42 +771,28 @@ where
     S: AccountStore + Send + Sync,
     A: Send + Sync,
 {
-    async fn insert_account_id<Au: AuthorizationApi + Send + Sync>(
+    async fn insert_account_id(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        account_id: AccountId,
+        params: InsertAccountIdParams,
     ) -> Result<(), InsertionError> {
-        self.store
-            .insert_account_id(actor_id, authorization_api, account_id)
-            .await
+        self.store.insert_account_id(actor_id, params).await
     }
 
-    async fn insert_account_group_id<Au: AuthorizationApi + Send + Sync>(
+    async fn insert_account_group_id(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        account_group_id: AccountGroupId,
+        params: InsertAccountGroupIdParams,
     ) -> Result<(), InsertionError> {
-        self.store
-            .insert_account_group_id(actor_id, authorization_api, account_group_id)
-            .await
+        self.store.insert_account_group_id(actor_id, params).await
     }
 
-    async fn insert_web_id<Au: AuthorizationApi + Send + Sync>(
+    async fn insert_web_id(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        owned_by_id: OwnedById,
-        owner: WebOwnerSubject,
+        params: InsertWebIdParams,
     ) -> Result<(), InsertionError> {
-        self.store
-            .insert_web_id(actor_id, authorization_api, owned_by_id, owner)
-            .await
-    }
-
-    async fn has_account(&self, account_id: AccountId) -> Result<bool, QueryError> {
-        self.store.has_account(account_id).await
+        self.store.insert_web_id(actor_id, params).await
     }
 
     async fn identify_owned_by_id(
@@ -728,496 +803,462 @@ where
     }
 }
 
-#[async_trait]
 impl<S, A> DataTypeStore for FetchingStore<S, A>
 where
-    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send,
+    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send + Sync,
     A: ToSocketAddrs + Send + Sync,
 {
-    async fn create_data_types<Au: AuthorizationApi + Send + Sync>(
+    async fn create_data_types<P, R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        data_types: impl IntoIterator<Item = (DataType, PartialDataTypeMetadata), IntoIter: Send> + Send,
-        on_conflict: ConflictBehavior,
-        relationships: impl IntoIterator<Item = DataTypeRelationAndSubject> + Send,
-    ) -> Result<Vec<DataTypeMetadata>, InsertionError> {
-        let data_types = data_types.into_iter().collect::<Vec<_>>();
-        let requested_types = data_types
+        params: P,
+    ) -> Result<Vec<DataTypeMetadata>, InsertionError>
+    where
+        P: IntoIterator<Item = CreateDataTypeParams<R>> + Send,
+        R: IntoIterator<Item = DataTypeRelationAndSubject> + Send + Sync,
+    {
+        let creation_parameters = params.into_iter().collect::<Vec<_>>();
+        let requested_types = creation_parameters
             .iter()
-            .map(|(data_type, _)| data_type.id())
+            .map(|parameters| parameters.schema.id())
             .collect::<HashSet<_>>();
 
         self.insert_external_types(
             actor_id,
-            authorization_api,
-            data_types.iter().map(|(data_type, _)| data_type),
+            creation_parameters
+                .iter()
+                .map(|parameters| &parameters.schema),
             &requested_types,
         )
         .await
         .attach_printable_lazy(|| {
-            data_types
+            requested_types
                 .iter()
-                .map(|(data_type, _)| data_type.id().to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", ")
         })?;
 
         self.store
-            .create_data_types(
-                actor_id,
-                authorization_api,
-                data_types,
-                on_conflict,
-                relationships,
-            )
+            .create_data_types(actor_id, creation_parameters)
             .await
     }
 
-    async fn get_data_type<Au: AuthorizationApi + Sync>(
+    async fn count_data_types(
         &self,
         actor_id: AccountId,
-        authorization_api: &Au,
-        query: &StructuralQuery<DataTypeWithMetadata>,
-        after: Option<&DataTypeVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError> {
-        self.store
-            .get_data_type(actor_id, authorization_api, query, after, limit)
-            .await
+        params: CountDataTypesParams<'_>,
+    ) -> Result<usize, QueryError> {
+        self.store.count_data_types(actor_id, params).await
     }
 
-    async fn update_data_type<Au: AuthorizationApi + Send + Sync>(
+    async fn get_data_types(
+        &self,
+        actor_id: AccountId,
+        params: GetDataTypesParams<'_>,
+    ) -> Result<GetDataTypesResponse, QueryError> {
+        self.store.get_data_types(actor_id, params).await
+    }
+
+    async fn get_data_type_subgraph(
+        &self,
+        actor_id: AccountId,
+        params: GetDataTypeSubgraphParams<'_>,
+    ) -> Result<GetDataTypeSubgraphResponse, QueryError> {
+        self.store.get_data_type_subgraph(actor_id, params).await
+    }
+
+    async fn update_data_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        data_type: DataType,
-        relationships: impl IntoIterator<Item = DataTypeRelationAndSubject> + Send,
-    ) -> Result<DataTypeMetadata, UpdateError> {
+        params: UpdateDataTypesParams<R>,
+    ) -> Result<DataTypeMetadata, UpdateError>
+    where
+        R: IntoIterator<Item = DataTypeRelationAndSubject> + Send + Sync,
+    {
         self.insert_external_types(
             actor_id,
-            authorization_api,
-            [&data_type],
-            &HashSet::from([data_type.id()]),
+            [&params.schema],
+            &HashSet::from([params.schema.id()]),
         )
         .await
         .change_context(UpdateError)
-        .attach_printable_lazy(|| data_type.id().clone())?;
+        .attach_printable_lazy(|| params.schema.id().clone())?;
 
-        self.store
-            .update_data_type(actor_id, authorization_api, data_type, relationships)
-            .await
+        self.store.update_data_type(actor_id, params).await
     }
 
-    async fn archive_data_type<Au: AuthorizationApi + Send + Sync>(
+    async fn archive_data_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        id: &VersionedUrl,
+
+        params: ArchiveDataTypeParams<'_>,
     ) -> Result<OntologyTemporalMetadata, UpdateError> {
-        self.store
-            .archive_data_type(actor_id, authorization_api, id)
-            .await
+        self.store.archive_data_type(actor_id, params).await
     }
 
-    async fn unarchive_data_type<Au: AuthorizationApi + Send + Sync>(
+    async fn unarchive_data_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        id: &VersionedUrl,
+
+        params: UnarchiveDataTypeParams,
     ) -> Result<OntologyTemporalMetadata, UpdateError> {
-        self.store
-            .unarchive_data_type(actor_id, authorization_api, id)
-            .await
+        self.store.unarchive_data_type(actor_id, params).await
     }
-}
 
-#[async_trait]
-impl<S, A> PropertyTypeStore for FetchingStore<S, A>
-where
-    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send,
-    A: ToSocketAddrs + Send + Sync,
-{
-    async fn create_property_types<Au: AuthorizationApi + Send + Sync>(
+    async fn update_data_type_embeddings(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut Au,
-        property_types: impl IntoIterator<
-            Item = (PropertyType, PartialPropertyTypeMetadata),
-            IntoIter: Send,
-        > + Send,
-        on_conflict: ConflictBehavior,
-        relationships: impl IntoIterator<Item = PropertyTypeRelationAndSubject> + Send,
-    ) -> Result<Vec<PropertyTypeMetadata>, InsertionError> {
-        let property_types = property_types.into_iter().collect::<Vec<_>>();
-        let requested_types = property_types
-            .iter()
-            .map(|(property_type, _)| property_type.id())
-            .collect::<HashSet<_>>();
 
-        self.insert_external_types(
-            actor_id,
-            authorization_api,
-            property_types
-                .iter()
-                .map(|(property_type, _)| property_type),
-            &requested_types,
-        )
-        .await
-        .attach_printable_lazy(|| {
-            property_types
-                .iter()
-                .map(|(property_type, _)| property_type.id().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })?;
-
-        self.store
-            .create_property_types(
-                actor_id,
-                authorization_api,
-                property_types,
-                on_conflict,
-                relationships,
-            )
-            .await
-    }
-
-    async fn get_property_type<Au: AuthorizationApi + Sync>(
-        &self,
-        actor_id: AccountId,
-        authorization_api: &Au,
-        query: &StructuralQuery<PropertyTypeWithMetadata>,
-        after: Option<&PropertyTypeVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError> {
-        self.store
-            .get_property_type(actor_id, authorization_api, query, after, limit)
-            .await
-    }
-
-    async fn update_property_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        property_type: PropertyType,
-        relationships: impl IntoIterator<Item = PropertyTypeRelationAndSubject> + Send,
-    ) -> Result<PropertyTypeMetadata, UpdateError> {
-        self.insert_external_types(
-            actor_id,
-            authorization_api,
-            [&property_type],
-            &HashSet::from([property_type.id()]),
-        )
-        .await
-        .change_context(UpdateError)
-        .attach_printable_lazy(|| property_type.id().clone())?;
-
-        self.store
-            .update_property_type(actor_id, authorization_api, property_type, relationships)
-            .await
-    }
-
-    async fn archive_property_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError> {
-        self.store
-            .archive_property_type(actor_id, authorization_api, id)
-            .await
-    }
-
-    async fn unarchive_property_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError> {
-        self.store
-            .unarchive_property_type(actor_id, authorization_api, id)
-            .await
-    }
-}
-
-#[async_trait]
-impl<S, A> EntityTypeStore for FetchingStore<S, A>
-where
-    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send,
-    A: ToSocketAddrs + Send + Sync,
-{
-    async fn create_entity_types<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        entity_types: impl IntoIterator<Item = (EntityType, PartialEntityTypeMetadata), IntoIter: Send>
-        + Send,
-        on_conflict: ConflictBehavior,
-        relationships: impl IntoIterator<Item = EntityTypeRelationAndSubject> + Send,
-    ) -> Result<Vec<EntityTypeMetadata>, InsertionError> {
-        let entity_types = entity_types.into_iter().collect::<Vec<_>>();
-        let requested_types = entity_types
-            .iter()
-            .map(|(entity_type, _)| entity_type.id())
-            .collect::<HashSet<_>>();
-
-        self.insert_external_types(
-            actor_id,
-            authorization_api,
-            entity_types.iter().map(|(entity_type, _)| entity_type),
-            &requested_types,
-        )
-        .await
-        .attach_printable_lazy(|| {
-            entity_types
-                .iter()
-                .map(|(entity_type, _)| entity_type.id().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })?;
-
-        self.store
-            .create_entity_types(
-                actor_id,
-                authorization_api,
-                entity_types,
-                on_conflict,
-                relationships,
-            )
-            .await
-    }
-
-    async fn get_entity_type<Au: AuthorizationApi + Sync>(
-        &self,
-        actor_id: AccountId,
-        authorization_api: &Au,
-        query: &StructuralQuery<EntityTypeWithMetadata>,
-        after: Option<&EntityTypeVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError> {
-        self.store
-            .get_entity_type(actor_id, authorization_api, query, after, limit)
-            .await
-    }
-
-    async fn update_entity_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        entity_type: EntityType,
-        label_property: Option<BaseUrl>,
-        icon: Option<String>,
-        relationships: impl IntoIterator<Item = EntityTypeRelationAndSubject> + Send,
-    ) -> Result<EntityTypeMetadata, UpdateError> {
-        self.insert_external_types(
-            actor_id,
-            authorization_api,
-            [&entity_type],
-            &HashSet::from([entity_type.id()]),
-        )
-        .await
-        .change_context(UpdateError)
-        .attach_printable_lazy(|| entity_type.id().clone())?;
-
-        self.store
-            .update_entity_type(
-                actor_id,
-                authorization_api,
-                entity_type,
-                label_property,
-                icon,
-                relationships,
-            )
-            .await
-    }
-
-    async fn archive_entity_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError> {
-        self.store
-            .archive_entity_type(actor_id, authorization_api, id)
-            .await
-    }
-
-    async fn unarchive_entity_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError> {
-        self.store
-            .unarchive_entity_type(actor_id, authorization_api, id)
-            .await
-    }
-}
-
-#[async_trait]
-impl<S, A> EntityStore for FetchingStore<S, A>
-where
-    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + EntityStore + Send,
-    A: ToSocketAddrs + Send + Sync,
-{
-    async fn create_entity<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        owned_by_id: OwnedById,
-        entity_uuid: Option<EntityUuid>,
-        decision_time: Option<Timestamp<DecisionTime>>,
-        archived: bool,
-        draft: bool,
-        entity_type_id: VersionedUrl,
-        properties: EntityProperties,
-        link_data: Option<LinkData>,
-        relationships: impl IntoIterator<Item = EntityRelationAndSubject> + Send,
-    ) -> Result<EntityMetadata, InsertionError> {
-        let entity_type_reference = EntityTypeReference::new(entity_type_id.clone());
-        self.insert_external_types_by_reference(
-            actor_id,
-            authorization_api,
-            OntologyTypeReference::EntityTypeReference(&entity_type_reference),
-            ConflictBehavior::Skip,
-            FetchBehavior::ExcludeProvidedReferences,
-            &HashSet::new(),
-        )
-        .await?;
-
-        self.store
-            .create_entity(
-                actor_id,
-                authorization_api,
-                owned_by_id,
-                entity_uuid,
-                decision_time,
-                archived,
-                draft,
-                entity_type_id,
-                properties,
-                link_data,
-                relationships,
-            )
-            .await
-    }
-
-    async fn validate_entity<Au: AuthorizationApi + Sync>(
-        &self,
-        actor_id: AccountId,
-        authorization_api: &Au,
-        consistency: Consistency<'static>,
-        entity_type: EntityValidationType<'_>,
-        properties: &EntityProperties,
-        link_data: Option<&LinkData>,
-        profile: ValidationProfile,
-    ) -> Result<(), ValidateEntityError> {
-        self.store
-            .validate_entity(
-                actor_id,
-                authorization_api,
-                consistency,
-                entity_type,
-                properties,
-                link_data,
-                profile,
-            )
-            .await
-    }
-
-    async fn insert_entities_batched_by_type<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        entities: impl IntoIterator<
-            Item = (
-                OwnedById,
-                Option<EntityUuid>,
-                EntityProperties,
-                Option<LinkData>,
-                Option<Timestamp<DecisionTime>>,
-            ),
-            IntoIter: Send,
-        > + Send,
-        entity_type_id: &VersionedUrl,
-    ) -> Result<Vec<EntityMetadata>, InsertionError> {
-        let entity_type_reference = EntityTypeReference::new(entity_type_id.clone());
-        self.insert_external_types_by_reference(
-            actor_id,
-            authorization_api,
-            OntologyTypeReference::EntityTypeReference(&entity_type_reference),
-            ConflictBehavior::Skip,
-            FetchBehavior::ExcludeProvidedReferences,
-            &HashSet::new(),
-        )
-        .await?;
-
-        self.store
-            .insert_entities_batched_by_type(actor_id, authorization_api, entities, entity_type_id)
-            .await
-    }
-
-    async fn get_entity<Au: AuthorizationApi + Sync>(
-        &self,
-        actor_id: AccountId,
-        authorization_api: &Au,
-        query: &StructuralQuery<Entity>,
-        after: Option<&EntityVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError> {
-        self.store
-            .get_entity(actor_id, authorization_api, query, after, limit)
-            .await
-    }
-
-    async fn update_entity<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        entity_id: EntityId,
-        decision_time: Option<Timestamp<DecisionTime>>,
-        archived: bool,
-        draft: bool,
-        entity_type_id: VersionedUrl,
-        properties: EntityProperties,
-        link_order: EntityLinkOrder,
-    ) -> Result<EntityMetadata, UpdateError> {
-        let entity_type_reference = EntityTypeReference::new(entity_type_id.clone());
-        self.insert_external_types_by_reference(
-            actor_id,
-            authorization_api,
-            OntologyTypeReference::EntityTypeReference(&entity_type_reference),
-            ConflictBehavior::Skip,
-            FetchBehavior::ExcludeProvidedReferences,
-            &HashSet::new(),
-        )
-        .await
-        .change_context(UpdateError)?;
-
-        self.store
-            .update_entity(
-                actor_id,
-                authorization_api,
-                entity_id,
-                decision_time,
-                archived,
-                draft,
-                entity_type_id,
-                properties,
-                link_order,
-            )
-            .await
-    }
-
-    async fn update_entity_embeddings<Au: AuthorizationApi + Send + Sync>(
-        &mut self,
-        actor_id: AccountId,
-        authorization_api: &mut Au,
-        embeddings: impl IntoIterator<Item = EntityEmbedding<'_>> + Send,
+        params: UpdateDataTypeEmbeddingParams<'_>,
     ) -> Result<(), UpdateError> {
         self.store
-            .update_entity_embeddings(actor_id, authorization_api, embeddings)
+            .update_data_type_embeddings(actor_id, params)
             .await
+    }
+}
+
+impl<S, A> PropertyTypeStore for FetchingStore<S, A>
+where
+    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send + Sync,
+    A: ToSocketAddrs + Send + Sync,
+{
+    async fn create_property_types<P, R>(
+        &mut self,
+        actor_id: AccountId,
+        params: P,
+    ) -> Result<Vec<PropertyTypeMetadata>, InsertionError>
+    where
+        P: IntoIterator<Item = CreatePropertyTypeParams<R>, IntoIter: Send> + Send,
+        R: IntoIterator<Item = PropertyTypeRelationAndSubject> + Send + Sync,
+    {
+        let creation_parameters = params.into_iter().collect::<Vec<_>>();
+        let requested_types = creation_parameters
+            .iter()
+            .map(|parameters| parameters.schema.id())
+            .collect::<HashSet<_>>();
+
+        self.insert_external_types(
+            actor_id,
+            creation_parameters
+                .iter()
+                .map(|parameters| &parameters.schema),
+            &requested_types,
+        )
+        .await
+        .attach_printable_lazy(|| {
+            requested_types
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })?;
+
+        self.store
+            .create_property_types(actor_id, creation_parameters)
+            .await
+    }
+
+    async fn count_property_types(
+        &self,
+        actor_id: AccountId,
+        params: CountPropertyTypesParams<'_>,
+    ) -> Result<usize, QueryError> {
+        self.store.count_property_types(actor_id, params).await
+    }
+
+    async fn get_property_types(
+        &self,
+        actor_id: AccountId,
+        params: GetPropertyTypesParams<'_>,
+    ) -> Result<GetPropertyTypesResponse, QueryError> {
+        self.store.get_property_types(actor_id, params).await
+    }
+
+    async fn get_property_type_subgraph(
+        &self,
+        actor_id: AccountId,
+        params: GetPropertyTypeSubgraphParams<'_>,
+    ) -> Result<GetPropertyTypeSubgraphResponse, QueryError> {
+        self.store
+            .get_property_type_subgraph(actor_id, params)
+            .await
+    }
+
+    async fn update_property_type<R>(
+        &mut self,
+        actor_id: AccountId,
+        params: UpdatePropertyTypesParams<R>,
+    ) -> Result<PropertyTypeMetadata, UpdateError>
+    where
+        R: IntoIterator<Item = PropertyTypeRelationAndSubject> + Send + Sync,
+    {
+        self.insert_external_types(
+            actor_id,
+            [&params.schema],
+            &HashSet::from([params.schema.id()]),
+        )
+        .await
+        .change_context(UpdateError)
+        .attach_printable_lazy(|| params.schema.id().clone())?;
+
+        self.store.update_property_type(actor_id, params).await
+    }
+
+    async fn archive_property_type(
+        &mut self,
+        actor_id: AccountId,
+
+        params: ArchivePropertyTypeParams<'_>,
+    ) -> Result<OntologyTemporalMetadata, UpdateError> {
+        self.store.archive_property_type(actor_id, params).await
+    }
+
+    async fn unarchive_property_type(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UnarchivePropertyTypeParams<'_>,
+    ) -> Result<OntologyTemporalMetadata, UpdateError> {
+        self.store.unarchive_property_type(actor_id, params).await
+    }
+
+    async fn update_property_type_embeddings(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UpdatePropertyTypeEmbeddingParams<'_>,
+    ) -> Result<(), UpdateError> {
+        self.store
+            .update_property_type_embeddings(actor_id, params)
+            .await
+    }
+}
+
+impl<S, A> EntityTypeStore for FetchingStore<S, A>
+where
+    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + Send + Sync,
+    A: ToSocketAddrs + Send + Sync,
+{
+    async fn create_entity_types<P, R>(
+        &mut self,
+        actor_id: AccountId,
+        params: P,
+    ) -> Result<Vec<EntityTypeMetadata>, InsertionError>
+    where
+        P: IntoIterator<Item = CreateEntityTypeParams<R>, IntoIter: Send> + Send,
+        R: IntoIterator<Item = EntityTypeRelationAndSubject> + Send + Sync,
+    {
+        let creation_parameters = params.into_iter().collect::<Vec<_>>();
+        let requested_types = creation_parameters
+            .iter()
+            .map(|parameters| parameters.schema.id())
+            .collect::<HashSet<_>>();
+
+        self.insert_external_types(
+            actor_id,
+            creation_parameters
+                .iter()
+                .map(|parameters| &parameters.schema),
+            &requested_types,
+        )
+        .await
+        .attach_printable_lazy(|| {
+            requested_types
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })?;
+
+        self.store
+            .create_entity_types(actor_id, creation_parameters)
+            .await
+    }
+
+    async fn count_entity_types(
+        &self,
+        actor_id: AccountId,
+        params: CountEntityTypesParams<'_>,
+    ) -> Result<usize, QueryError> {
+        self.store.count_entity_types(actor_id, params).await
+    }
+
+    async fn get_entity_types(
+        &self,
+        actor_id: AccountId,
+        params: GetEntityTypesParams<'_>,
+    ) -> Result<GetEntityTypesResponse, QueryError> {
+        self.store.get_entity_types(actor_id, params).await
+    }
+
+    async fn get_entity_type_subgraph(
+        &self,
+        actor_id: AccountId,
+        params: GetEntityTypeSubgraphParams<'_>,
+    ) -> Result<GetEntityTypeSubgraphResponse, QueryError> {
+        self.store.get_entity_type_subgraph(actor_id, params).await
+    }
+
+    async fn update_entity_type<R>(
+        &mut self,
+        actor_id: AccountId,
+        params: UpdateEntityTypesParams<R>,
+    ) -> Result<EntityTypeMetadata, UpdateError>
+    where
+        R: IntoIterator<Item = EntityTypeRelationAndSubject> + Send + Sync,
+    {
+        self.insert_external_types(
+            actor_id,
+            [&params.schema],
+            &HashSet::from([params.schema.id()]),
+        )
+        .await
+        .change_context(UpdateError)
+        .attach_printable_lazy(|| params.schema.id().clone())?;
+
+        self.store.update_entity_type(actor_id, params).await
+    }
+
+    async fn archive_entity_type(
+        &mut self,
+        actor_id: AccountId,
+
+        params: ArchiveEntityTypeParams<'_>,
+    ) -> Result<OntologyTemporalMetadata, UpdateError> {
+        self.store.archive_entity_type(actor_id, params).await
+    }
+
+    async fn unarchive_entity_type(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UnarchiveEntityTypeParams<'_>,
+    ) -> Result<OntologyTemporalMetadata, UpdateError> {
+        self.store.unarchive_entity_type(actor_id, params).await
+    }
+
+    async fn update_entity_type_embeddings(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UpdateEntityTypeEmbeddingParams<'_>,
+    ) -> Result<(), UpdateError> {
+        self.store
+            .update_entity_type_embeddings(actor_id, params)
+            .await
+    }
+}
+
+impl<S, A> EntityStore for FetchingStore<S, A>
+where
+    S: DataTypeStore + PropertyTypeStore + EntityTypeStore + EntityStore + Send + Sync,
+    A: ToSocketAddrs + Send + Sync,
+{
+    async fn create_entities<R>(
+        &mut self,
+        actor_id: AccountId,
+        params: Vec<CreateEntityParams<R>>,
+    ) -> Result<Vec<Entity>, InsertionError>
+    where
+        R: IntoIterator<Item = EntityRelationAndSubject> + Send,
+    {
+        let type_ids = params
+            .iter()
+            .flat_map(|params| &params.entity_type_ids)
+            .collect::<HashSet<_>>();
+
+        for entity_type_id in type_ids {
+            let entity_type_reference = EntityTypeReference {
+                url: entity_type_id.clone(),
+            };
+            self.insert_external_types_by_reference(
+                actor_id,
+                OntologyTypeReference::EntityTypeReference(&entity_type_reference),
+                ConflictBehavior::Skip,
+                FetchBehavior::ExcludeProvidedReferences,
+                &HashSet::new(),
+            )
+            .await?;
+        }
+
+        self.store.create_entities(actor_id, params).await
+    }
+
+    async fn validate_entities(
+        &self,
+        actor_id: AccountId,
+        consistency: Consistency<'_>,
+        params: Vec<ValidateEntityParams<'_>>,
+    ) -> Result<(), ValidateEntityError> {
+        self.store
+            .validate_entities(actor_id, consistency, params)
+            .await
+    }
+
+    async fn get_entities(
+        &self,
+        actor_id: AccountId,
+        params: GetEntitiesParams<'_>,
+    ) -> Result<GetEntitiesResponse<'static>, QueryError> {
+        self.store.get_entities(actor_id, params).await
+    }
+
+    async fn get_entity_subgraph(
+        &self,
+        actor_id: AccountId,
+        params: GetEntitySubgraphParams<'_>,
+    ) -> Result<GetEntitySubgraphResponse<'static>, QueryError> {
+        self.store.get_entity_subgraph(actor_id, params).await
+    }
+
+    async fn get_entity_by_id(
+        &self,
+        actor_id: AccountId,
+        entity_id: EntityId,
+        transaction_time: Option<Timestamp<TransactionTime>>,
+        decision_time: Option<Timestamp<DecisionTime>>,
+    ) -> Result<Entity, QueryError> {
+        self.store
+            .get_entity_by_id(actor_id, entity_id, transaction_time, decision_time)
+            .await
+    }
+
+    async fn count_entities(
+        &self,
+        actor_id: AccountId,
+        params: CountEntitiesParams<'_>,
+    ) -> Result<usize, QueryError> {
+        self.store.count_entities(actor_id, params).await
+    }
+
+    async fn patch_entity(
+        &mut self,
+        actor_id: AccountId,
+        params: PatchEntityParams,
+    ) -> Result<Entity, UpdateError> {
+        for entity_type_id in &params.entity_type_ids {
+            self.insert_external_types_by_reference(
+                actor_id,
+                OntologyTypeReference::EntityTypeReference(&EntityTypeReference {
+                    url: entity_type_id.clone(),
+                }),
+                ConflictBehavior::Skip,
+                FetchBehavior::ExcludeProvidedReferences,
+                &HashSet::new(),
+            )
+            .await
+            .change_context(UpdateError)?;
+        }
+
+        self.store.patch_entity(actor_id, params).await
+    }
+
+    async fn update_entity_embeddings(
+        &mut self,
+        actor_id: AccountId,
+        params: UpdateEntityEmbeddingsParams<'_>,
+    ) -> Result<(), UpdateError> {
+        self.store.update_entity_embeddings(actor_id, params).await
     }
 }

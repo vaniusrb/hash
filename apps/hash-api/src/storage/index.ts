@@ -1,46 +1,35 @@
-import { extractBaseUrl } from "@blockprotocol/type-system";
-import { apiOrigin } from "@local/hash-isomorphic-utils/environment";
+import { getAwsS3Config } from "@local/hash-backend-utils/aws-config";
+import type {
+  FileStorageProvider,
+  StorageType,
+  UploadableStorageProvider,
+} from "@local/hash-backend-utils/file-storage";
 import {
-  fullDecisionTimeAxis,
-  zeroedGraphResolveDepths,
-} from "@local/hash-isomorphic-utils/graph-queries";
+  isStorageType,
+  storageProviderLookup,
+} from "@local/hash-backend-utils/file-storage";
+import { AwsS3StorageProvider } from "@local/hash-backend-utils/file-storage/aws-s3-storage-provider";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import { apiOrigin } from "@local/hash-isomorphic-utils/environment";
+import { fullDecisionTimeAxis } from "@local/hash-isomorphic-utils/graph-queries";
 import {
   blockProtocolPropertyTypes,
   systemPropertyTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { FileProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import {
-  Entity,
-  EntityId,
-  EntityRootType,
-  isEntityId,
-  splitEntityId,
-} from "@local/hash-subgraph";
-import {
-  getRoots,
-  mapGraphApiSubgraphToSubgraph,
-} from "@local/hash-subgraph/stdlib";
-import { Express } from "express";
+import type { File as FileEntity } from "@local/hash-isomorphic-utils/system-types/shared";
+import { isEntityId, splitEntityId } from "@local/hash-subgraph";
+import type { Express } from "express";
 
 import { getActorIdFromRequest } from "../auth/get-actor-id";
-import { CacheAdapter } from "../cache";
-import { ImpureGraphContext } from "../graph/context-types";
-import { AuthenticationContext } from "../graphql/authentication-context";
-import { getAwsS3Config } from "../lib/aws-config";
+import type { CacheAdapter } from "../cache";
+import type { ImpureGraphContext } from "../graph/context-types";
+import { getEntities } from "../graph/knowledge/primitive/entity";
 import { LOCAL_FILE_UPLOAD_PATH } from "../lib/config";
 import { logger } from "../logger";
-import { AwsS3StorageProvider } from "./aws-s3-storage-provider";
 import { LocalFileSystemStorageProvider } from "./local-file-storage";
-import {
-  StorageProvider,
-  StorageType,
-  storageTypes,
-  UploadableStorageProvider,
-} from "./storage-provider";
-
-export * from "./aws-s3-storage-provider";
-export * from "./storage-provider";
 
 // S3-like APIs have a upper bound.
 // 7 days.
@@ -49,14 +38,9 @@ const DOWNLOAD_URL_EXPIRATION_SECONDS = 60 * 60 * 24 * 7;
 // 1 hour.
 const DOWNLOAD_URL_CACHE_OFFSET_SECONDS = 60 * 60;
 
-/** Helper type to create a typed "dictionary" of storage types to their storage provider instance */
-export type StorageProviderLookup = Partial<
-  Record<StorageType, StorageProvider | UploadableStorageProvider>
->;
-
 type StorageProviderInitialiser = (
   app: Express,
-) => StorageProvider | UploadableStorageProvider;
+) => FileStorageProvider | UploadableStorageProvider;
 
 const storageProviderInitialiserLookup: Record<
   StorageType,
@@ -71,17 +55,16 @@ const storageProviderInitialiserLookup: Record<
     }),
 };
 
-/**
- * All storage providers usable by the API should be added here.
- * Even if not currently used for upload, they need to be available for downloads.
- */
-const storageProviderLookup: StorageProviderLookup = {};
 let uploadStorageProvider: StorageType = "LOCAL_FILE_SYSTEM";
 
-const initialiseStorageProvider = (app: Express, provider: StorageType) => {
+export const initialiseStorageProvider = (
+  app: Express,
+  provider: StorageType,
+) => {
   const initialiser = storageProviderInitialiserLookup[provider];
 
   const newProvider = initialiser(app);
+
   storageProviderLookup[provider] = newProvider;
   return newProvider;
 };
@@ -105,63 +88,65 @@ export const setupStorageProviders = (
   return getUploadStorageProvider();
 };
 
-const isFileEntity = (entity: Entity): entity is Entity<FileProperties> =>
+const isFileEntity = (entity: Entity): entity is Entity<FileEntity> =>
   systemPropertyTypes.fileStorageKey.propertyTypeBaseUrl in entity.properties &&
   blockProtocolPropertyTypes.fileUrl.propertyTypeBaseUrl in entity.properties;
 
-const isStorageType = (storageType: string): storageType is StorageType =>
-  storageTypes.includes(storageType as StorageType);
-
 const getFileEntity = async (
-  { graphApi }: ImpureGraphContext,
-  { actorId }: AuthenticationContext,
+  context: ImpureGraphContext,
+  authentication: AuthenticationContext,
   params: { entityId: EntityId; key: string; includeDrafts?: boolean },
 ) => {
   const { entityId, key, includeDrafts = false } = params;
   const [ownedById, entityUuid] = splitEntityId(entityId);
 
-  const [fileEntity, ...unexpectedEntities] = await graphApi
-    .getEntitiesByQuery(actorId, {
-      filter: {
-        all: [
-          {
-            equal: [{ path: ["uuid"] }, { parameter: entityUuid }],
-          },
-          {
-            equal: [{ path: ["ownedById"] }, { parameter: ownedById }],
-          },
-          {
-            equal: [
-              {
-                path: [
-                  "properties",
-                  extractBaseUrl(
-                    systemPropertyTypes.fileStorageKey.propertyTypeId,
-                  ),
-                ],
-              },
-              { parameter: key },
-            ],
-          },
-        ],
-      },
-      graphResolveDepths: zeroedGraphResolveDepths,
-      temporalAxes: fullDecisionTimeAxis,
-      includeDrafts,
-    })
-    .then(({ data }) => {
-      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
+  const fileEntityRevisions = await getEntities(context, authentication, {
+    filter: {
+      all: [
+        {
+          equal: [{ path: ["uuid"] }, { parameter: entityUuid }],
+        },
+        {
+          equal: [{ path: ["ownedById"] }, { parameter: ownedById }],
+        },
+        {
+          equal: [
+            {
+              path: [
+                "properties",
+                systemPropertyTypes.fileStorageKey.propertyTypeBaseUrl,
+              ],
+            },
+            { parameter: key },
+          ],
+        },
+      ],
+    },
+    temporalAxes: fullDecisionTimeAxis,
+    includeDrafts,
+  });
 
-      return getRoots(subgraph);
-    });
+  const latestFileEntityRevision = fileEntityRevisions.reduce<
+    Entity | undefined
+  >((previousLatestRevision, currentRevision) => {
+    if (!previousLatestRevision) {
+      return currentRevision;
+    }
 
-  if (unexpectedEntities.length > 0) {
-    throw new Error(
-      `Critical: More than one file entity with entityId ${entityId} and key ${key}.`,
+    const currentCreatedAt = new Date(
+      currentRevision.metadata.temporalVersioning.decisionTime.start.limit,
     );
-  }
 
-  return fileEntity;
+    const previousLatestRevisionCreatedAt = new Date(
+      previousLatestRevision.metadata.temporalVersioning.decisionTime.start.limit,
+    );
+
+    return previousLatestRevisionCreatedAt < currentCreatedAt
+      ? currentRevision
+      : previousLatestRevision;
+  }, fileEntityRevisions[0]);
+
+  return latestFileEntityRevision;
 };
 
 /**
@@ -192,8 +177,9 @@ export const setupFileDownloadProxyHandler = (
       res.status(400).json({
         error: `File path ${key} is invalid – should be of the form [EntityId]/[EditionTimestamp]/[Filename], with an optional leading [Prefix]/`,
       });
+      return;
     }
-    if (!entityId || !isEntityId(entityId)) {
+    if (!isEntityId(entityId)) {
       res.status(400).json({
         error: `File path contains invalid entityId ${entityId} in ${key}`,
       });
@@ -255,6 +241,7 @@ export const setupFileDownloadProxyHandler = (
       }
 
       let storageProvider = storageProviderLookup[storageProviderName];
+
       if (!storageProvider) {
         try {
           storageProvider = initialiseStorageProvider(app, storageProviderName);

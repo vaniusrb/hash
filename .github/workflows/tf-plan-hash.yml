@@ -30,7 +30,7 @@ jobs:
         run: |
           # We only have a single environment, so that's all we need to plan
           # TODO: use the `env` input to determine which environments to plan
-          echo "matrix=[\"prod\"]" >> $GITHUB_OUTPUT
+          echo "matrix=[\"prod\"]" | tee -a $GITHUB_OUTPUT
 
   terraform:
     runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
       matrix:
         env: ${{ fromJson(needs.matrix-eval.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Prepare SSH key
         run: |

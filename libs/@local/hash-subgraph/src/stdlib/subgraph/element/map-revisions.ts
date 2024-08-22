@@ -1,6 +1,4 @@
-import { mapElementsIntoRevisions as mapElementsIntoRevisionsBp } from "@blockprotocol/graph/temporal/stdlib";
-
-import { Vertex } from "../../../main";
+import type { Vertex } from "../../../main.js";
 
 type BaseIdToRevisions<GraphElementType extends Vertex["inner"]> = Record<
   /*
@@ -22,4 +20,16 @@ export const mapElementsIntoRevisions = <
   GraphElementType extends Vertex["inner"],
 >(
   elements: GraphElementType[],
-): BaseIdToRevisions<GraphElementType> => mapElementsIntoRevisionsBp(elements);
+): BaseIdToRevisions<GraphElementType> =>
+  elements.reduce((revisionMap, element) => {
+    const baseId =
+      "entityId" in element.metadata.recordId
+        ? element.metadata.recordId.entityId
+        : element.metadata.recordId.baseUrl;
+
+    // eslint-disable-next-line no-param-reassign
+    revisionMap[baseId] ??= [];
+    revisionMap[baseId].push(element);
+
+    return revisionMap;
+  }, {} as BaseIdToRevisions<GraphElementType>);

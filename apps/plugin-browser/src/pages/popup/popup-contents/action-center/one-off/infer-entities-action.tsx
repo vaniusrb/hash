@@ -1,20 +1,24 @@
 import { Button, CaretDownSolidIcon } from "@hashintel/design-system";
 import { Box, Collapse, Stack, Typography } from "@mui/material";
 import { useMemo, useState } from "react";
-import browser, { Tabs } from "webextension-polyfill";
+import type { Tabs } from "webextension-polyfill";
+import browser from "webextension-polyfill";
 
-import {
-  GetSiteContentRequest,
-  GetSiteContentReturn,
+import { FlowRunStatus } from "../../../../../graphql/api-types.gen";
+import { createDefaultSettings } from "../../../../../shared/create-default-settings";
+import type {
+  GetTabContentRequest,
+  GetTabContentReturn,
 } from "../../../../../shared/messages";
-import { LocalStorage } from "../../../../../shared/storage";
+import type { LocalStorage } from "../../../../../shared/storage";
 import { sendMessageToBackground } from "../../../../shared/messages";
 import { borderColors } from "../../../../shared/style-values";
-import { useLocalStorage } from "../../../../shared/use-local-storage";
+import { useStorageSync } from "../../../../shared/use-storage-sync";
 import { EntityTypeSelector } from "../shared/entity-type-selector";
 import { ModelSelector } from "../shared/model-selector";
 import { Section } from "../shared/section";
 import { SelectWebTarget } from "../shared/select-web-target";
+import { useFlowRuns } from "../shared/use-flow-runs";
 import { ArrowUpToLineIcon } from "./infer-entities-action/arrow-up-to-line-icon";
 import { CreateEntityIcon } from "./infer-entities-action/create-entity-icon";
 
@@ -25,14 +29,10 @@ export const InferEntitiesAction = ({
   activeTab?: Tabs.Tab | null;
   user: NonNullable<LocalStorage["user"]>;
 }) => {
-  const [manualInferenceConfig, setManualInferenceConfig] = useLocalStorage(
+  const [manualInferenceConfig, setManualInferenceConfig] = useStorageSync(
     "manualInferenceConfig",
-    {
-      createAs: "draft",
-      model: "gpt-4-turbo",
-      ownedById: user.webOwnedById,
-      targetEntityTypeIds: [],
-    },
+    createDefaultSettings({ userWebOwnedById: user.webOwnedById })
+      .manualInferenceConfig,
   );
 
   const [showAdditionalConfig, setShowAdditionalConfig] = useState(false);
@@ -40,25 +40,16 @@ export const InferEntitiesAction = ({
   const { createAs, model, ownedById, targetEntityTypeIds } =
     manualInferenceConfig;
 
-  const [inferenceRequests] = useLocalStorage("inferenceRequests", []);
+  const { flowRuns } = useFlowRuns();
 
   const pendingInferenceRequest = useMemo(
     () =>
-      inferenceRequests.some(
-        ({ entityTypeIds: requestEntityTypes, sourceUrl, status }) => {
-          return (
-            requestEntityTypes.length === targetEntityTypeIds.length &&
-            requestEntityTypes.every((versionedUrl) =>
-              targetEntityTypeIds.some(
-                (targetTypeId) => targetTypeId === versionedUrl,
-              ),
-            ) &&
-            sourceUrl === activeTab?.url &&
-            status === "pending"
-          );
-        },
-      ),
-    [activeTab, inferenceRequests, targetEntityTypeIds],
+      flowRuns.some(({ status, webPage }) => {
+        return (
+          webPage.url === activeTab?.url && status === FlowRunStatus.Running
+        );
+      }),
+    [activeTab, flowRuns],
   );
 
   const inferEntitiesFromPage = async () => {
@@ -66,24 +57,22 @@ export const InferEntitiesAction = ({
       throw new Error("No active tab");
     }
 
-    const message: GetSiteContentRequest = {
-      type: "get-site-content",
+    const message: GetTabContentRequest = {
+      type: "get-tab-content",
     };
 
     try {
-      const siteContent = await (browser.tabs.sendMessage(
+      const sourceWebPage = await (browser.tabs.sendMessage(
         activeTab.id,
         message,
-      ) as Promise<GetSiteContentReturn>);
+      ) as Promise<GetTabContentReturn>);
 
       void sendMessageToBackground({
         createAs,
         entityTypeIds: targetEntityTypeIds,
         model,
         ownedById,
-        sourceTitle: siteContent.pageTitle,
-        sourceUrl: siteContent.pageUrl,
-        textInput: siteContent.innerText,
+        sourceWebPage,
         type: "infer-entities",
       });
     } catch (err) {
@@ -112,10 +101,19 @@ export const InferEntitiesAction = ({
           <EntityTypeSelector
             inputHeight="auto"
             multiple
-            setTargetEntityTypeIds={(newTargetIds) =>
+            popperPlacement={
+              user.enabledFeatureFlags.includes("notes") ? "top" : "bottom"
+            }
+            setTargetEntityTypeIds={({
+              selectedEntityTypeIds,
+              linkedEntityTypeIds,
+            }) =>
               setManualInferenceConfig({
                 ...manualInferenceConfig,
-                targetEntityTypeIds: newTargetIds,
+                targetEntityTypeIds: [
+                  ...selectedEntityTypeIds,
+                  ...linkedEntityTypeIds,
+                ],
               })
             }
             targetEntityTypeIds={targetEntityTypeIds}

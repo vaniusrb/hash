@@ -1,22 +1,21 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import {
   createFileFromExternalUrl,
   createFileFromUploadRequest,
 } from "@apps/hash-api/src/graph/knowledge/system-types/file";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { Logger } from "@local/hash-backend-utils/logger";
-import { EntityId, OwnedById, Timestamp } from "@local/hash-subgraph";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { Timestamp } from "@local/hash-graph-types/temporal-versioning";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import { createTestImpureGraphContext, createTestUser } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
@@ -25,19 +24,18 @@ describe("File", () => {
   let testUser: User;
 
   beforeAll(async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
-    await TypeSystemInitializer.initialize();
+    const graphContext = createTestImpureGraphContext();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "fileTest", logger);
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   it("createFileFromUploadRequest can create a file entity from a file", async () => {
@@ -51,14 +49,29 @@ describe("File", () => {
     const uploadUrl = "mock-upload-url";
 
     graphContext.uploadProvider = {
-      getFileEntityStorageKey: jest.fn(() => fileKey),
-      presignDownload: jest.fn(() => Promise.resolve(downloadUrl)),
-      presignUpload: jest.fn(() =>
+      getFileEntityStorageKey: vi.fn(() => fileKey),
+      presignDownload: vi.fn(() => Promise.resolve(downloadUrl)),
+      presignUpload: vi.fn(() =>
         Promise.resolve({
           fileStorageProperties: {
-            key: fileKey,
-            provider: "LOCAL_FILE_SYSTEM" as const,
-          },
+            value: {
+              "https://hash.ai/@hash/types/property-type/file-storage-key/": {
+                value: fileKey,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                },
+              },
+              "https://hash.ai/@hash/types/property-type/file-storage-provider/":
+                {
+                  value: "LOCAL_FILE_SYSTEM",
+                  metadata: {
+                    dataTypeId:
+                      "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                  },
+                },
+            },
+          } as const,
           presignedPut: { url: uploadUrl },
         }),
       ),
@@ -92,7 +105,7 @@ describe("File", () => {
   const externalUrl = "https://placekitten.com/200/300";
 
   it("createFileFromExternalUrl can create a file entity from an external link", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
     const authentication = { actorId: testUser.accountId };
 
     const file = await createFileFromExternalUrl(graphContext, authentication, {

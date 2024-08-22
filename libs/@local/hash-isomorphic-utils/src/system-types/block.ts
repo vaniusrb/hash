@@ -2,23 +2,28 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   Block,
   BlockHasDataLink,
   BlockOutgoingLinkAndTarget,
   BlockOutgoingLinksByLinkEntityTypeId,
   BlockProperties,
+  BlockPropertiesWithMetadata,
   ComponentIdPropertyValue,
+  ComponentIdPropertyValueWithMetadata,
   HasData,
   HasDataOutgoingLinkAndTarget,
   HasDataOutgoingLinksByLinkEntityTypeId,
   HasDataProperties,
+  HasDataPropertiesWithMetadata,
   Link,
   LinkOutgoingLinkAndTarget,
   LinkOutgoingLinksByLinkEntityTypeId,
   LinkProperties,
+  LinkPropertiesWithMetadata,
   TextDataType,
-} from "./shared";
+  TextDataTypeWithMetadata,
+} from "./shared.js";
 
 export type {
   Block,
@@ -26,14 +31,19 @@ export type {
   BlockOutgoingLinkAndTarget,
   BlockOutgoingLinksByLinkEntityTypeId,
   BlockProperties,
+  BlockPropertiesWithMetadata,
   ComponentIdPropertyValue,
+  ComponentIdPropertyValueWithMetadata,
   HasData,
   HasDataOutgoingLinkAndTarget,
   HasDataOutgoingLinksByLinkEntityTypeId,
   HasDataProperties,
+  HasDataPropertiesWithMetadata,
   Link,
   LinkOutgoingLinkAndTarget,
   LinkOutgoingLinksByLinkEntityTypeId,
   LinkProperties,
+  LinkPropertiesWithMetadata,
   TextDataType,
+  TextDataTypeWithMetadata,
 };

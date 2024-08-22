@@ -1,12 +1,14 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { AsteriskRegularIcon } from "@hashintel/design-system";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { isPageEntityTypeId } from "@local/hash-isomorphic-utils/page-entity-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { PageProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import { Entity, EntityTypeWithMetadata } from "@local/hash-subgraph";
+import type { PageProperties } from "@local/hash-isomorphic-utils/system-types/shared";
 import { Box } from "@mui/material";
-import { ReactNode, useMemo } from "react";
+import type { ReactNode } from "react";
+import { useMemo } from "react";
 
 import { FileRegularIcon } from "./icons/file-regular-icon";
 import { UserIcon } from "./icons/user-icon";
@@ -58,10 +60,10 @@ export const useEntityIcon = (params: {
         // @todo when implementing H-783 – do we need this check? see comment above
         isPageEntityTypeId(entity.metadata.entityTypeId)
         ? pageIcon
-        : entityTypeIcons[entity.metadata.entityTypeId] ??
+        : (entityTypeIcons[entity.metadata.entityTypeId] ??
             entityType?.metadata.icon ?? (
               <AsteriskRegularIcon sx={{ fontSize: 12 }} />
-            );
+            ));
     }
   }, [entity, entityType, pageIcon]);
 };

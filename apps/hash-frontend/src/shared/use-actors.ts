@@ -1,4 +1,5 @@
 import { useQuery } from "@apollo/client";
+import type { AccountId } from "@local/hash-graph-types/account";
 import {
   currentTimeInstantTemporalAxes,
   generateVersionedUrlMatchingFilter,
@@ -6,26 +7,29 @@ import {
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { MachineProperties } from "@local/hash-isomorphic-utils/system-types/machine";
-import { AccountId, EntityRootType } from "@local/hash-subgraph";
+import type { MachineProperties } from "@local/hash-isomorphic-utils/system-types/machine";
+import type { EntityRootType } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
 import { useMemo } from "react";
 
 import { useUsers } from "../components/hooks/use-users";
-import {
-  StructuralQueryEntitiesQuery,
-  StructuralQueryEntitiesQueryVariables,
+import type {
+  GetEntitySubgraphQuery,
+  GetEntitySubgraphQueryVariables,
 } from "../graphql/api-types.gen";
-import { structuralQueryEntitiesQuery } from "../graphql/queries/knowledge/entity.queries";
-import { MinimalUser } from "../lib/user-and-org";
+import { getEntitySubgraphQuery } from "../graphql/queries/knowledge/entity.queries";
+import type { MinimalUser } from "../lib/user-and-org";
 
-export type MinimalActor =
-  | MinimalUser
-  | {
-      accountId: AccountId;
-      kind: "machine";
-      displayName: string;
-    };
+type MachineActor = {
+  accountId: AccountId;
+  kind: "machine";
+  displayName: string;
+};
+
+export const isAiMachineActor = (actor: MachineActor): actor is MachineActor =>
+  actor.displayName.toLowerCase() === "hash ai";
+
+export type MinimalActor = MinimalUser | MachineActor;
 
 export const useActors = (params: {
   accountIds?: AccountId[];
@@ -34,23 +38,24 @@ export const useActors = (params: {
 
   const { users, loading: usersLoading } = useUsers();
 
-  const userActors = users?.filter(
-    (user) => accountIds?.includes(user.accountId),
+  const userActors = useMemo(
+    () => users?.filter((user) => accountIds?.includes(user.accountId)),
+    [users, accountIds],
   );
 
   const { data: machineActorsData, loading: machinesLoading } = useQuery<
-    StructuralQueryEntitiesQuery,
-    StructuralQueryEntitiesQueryVariables
-  >(structuralQueryEntitiesQuery, {
+    GetEntitySubgraphQuery,
+    GetEntitySubgraphQueryVariables
+  >(getEntitySubgraphQuery, {
     variables: {
       includePermissions: false,
-      query: {
+      request: {
         filter: {
           any: (params.accountIds ?? []).map((accountId) => ({
             all: [
               {
                 equal: [
-                  { path: ["editionCreatedById"] },
+                  { path: ["editionProvenance", "createdById"] },
                   { parameter: accountId },
                 ],
               },
@@ -79,7 +84,7 @@ export const useActors = (params: {
     }
 
     const subgraph = mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
-      machineActorsData.structuralQueryEntities.subgraph,
+      machineActorsData.getEntitySubgraph.subgraph,
     );
 
     const machineActors = getRoots(subgraph).map((entity) => {

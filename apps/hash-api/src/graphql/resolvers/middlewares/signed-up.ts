@@ -1,12 +1,12 @@
 import { ForbiddenError } from "apollo-server-express";
 
-import { LoggedInGraphQLContext } from "../../context";
-import { ResolverMiddleware } from "./middleware-types";
+import type { LoggedInGraphQLContext } from "../../context";
+import type { ResolverMiddleware } from "./middleware-types";
 
 export const signedUpMiddleware: ResolverMiddleware<
   LoggedInGraphQLContext,
-  any
-> = (next) => (obj: any, args: any, ctx: LoggedInGraphQLContext, info: any) => {
+  Record<string, unknown>
+> = (next) => (obj, args, ctx: LoggedInGraphQLContext, info) => {
   if (!ctx.user.isAccountSignupComplete) {
     throw new ForbiddenError(
       "You must complete the sign-up process to perform this action.",

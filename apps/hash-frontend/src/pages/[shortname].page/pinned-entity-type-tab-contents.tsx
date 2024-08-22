@@ -1,14 +1,11 @@
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { isPageEntityTypeId } from "@local/hash-isomorphic-utils/page-entity-type-ids";
-import {
-  Entity,
-  EntityRootType,
-  EntityTypeWithMetadata,
-  extractEntityUuidFromEntityId,
-  OwnedById,
-  Subgraph,
-} from "@local/hash-subgraph";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
+import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
 import {
   Box,
   Divider,
@@ -23,17 +20,13 @@ import {
   isBefore,
   subWeeks,
 } from "date-fns";
-import {
-  Fragment,
-  FunctionComponent,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
+import type { FunctionComponent } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 
 import { useAccountPages } from "../../components/hooks/use-account-pages";
 import { useCreatePage } from "../../components/hooks/use-create-page";
-import { Org, User } from "../../lib/user-and-org";
+import type { Org, User } from "../../lib/user-and-org";
+import { useEntityTypesContextRequired } from "../../shared/entity-types-context/hooks/use-entity-types-context-required";
 import { ArrowDownAZRegularIcon } from "../../shared/icons/arrow-down-a-z-regular-icon";
 import { ArrowUpZARegularIcon } from "../../shared/icons/arrow-up-a-z-regular-icon";
 import { CanvasIcon } from "../../shared/icons/canvas-icon";
@@ -44,7 +37,7 @@ import { Button, Link, MenuItem } from "../../shared/ui";
 import { useEntityIcon } from "../../shared/use-entity-icon";
 import { ProfileSectionHeading } from "../[shortname]/shared/profile-section-heading";
 import { InlineSelect } from "../shared/inline-select";
-import { ProfilePageTab } from "./util";
+import type { ProfilePageTab } from "./util";
 
 const EntityRow: FunctionComponent<{
   entity: Entity;
@@ -201,6 +194,12 @@ export const PinnedEntityTypeTabContents: FunctionComponent<{
   const isPagesTab =
     currentTab.entityTypeBaseUrl === systemEntityTypes.page.entityTypeBaseUrl;
 
+  const { isSpecialEntityTypeLookup } = useEntityTypesContextRequired();
+
+  const isLinkEntityType = currentTab.entityType
+    ? isSpecialEntityTypeLookup?.[currentTab.entityType.schema.$id]?.isLink
+    : undefined;
+
   return (
     <Box mb={6}>
       <Box display="flex" alignItems="center" columnGap={1.5} marginBottom={1}>
@@ -282,7 +281,7 @@ export const PinnedEntityTypeTabContents: FunctionComponent<{
                 No {currentTab.pluralTitle?.toLowerCase()} could be found in @
                 {profile.shortname}
               </Typography>
-              {isEditable ? (
+              {isEditable && !isLinkEntityType ? (
                 <Box marginTop={2}>
                   <Button
                     startIcon={<PlusRegularIcon />}

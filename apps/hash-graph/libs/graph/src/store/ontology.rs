@@ -1,38 +1,152 @@
-use std::iter;
+use alloc::borrow::Cow;
+use core::iter;
 
-use async_trait::async_trait;
-use authorization::{
-    schema::{
-        DataTypeRelationAndSubject, EntityTypeRelationAndSubject, PropertyTypeRelationAndSubject,
-    },
-    AuthorizationApi,
+use authorization::schema::{
+    DataTypeRelationAndSubject, EntityTypeRelationAndSubject, PropertyTypeRelationAndSubject,
 };
 use error_stack::Result;
 use graph_types::{
     account::AccountId,
     ontology::{
         DataTypeMetadata, DataTypeWithMetadata, EntityTypeMetadata, EntityTypeWithMetadata,
-        OntologyTemporalMetadata, PartialDataTypeMetadata, PartialEntityTypeMetadata,
-        PartialPropertyTypeMetadata, PropertyTypeMetadata, PropertyTypeWithMetadata,
+        OntologyTemporalMetadata, OntologyTypeClassificationMetadata, PropertyTypeMetadata,
+        PropertyTypeWithMetadata, ProvidedOntologyEditionProvenance,
     },
+    Embedding,
 };
+use serde::{Deserialize, Serialize};
+use temporal_versioning::{Timestamp, TransactionTime};
 use type_system::{
+    schema::{DataType, EntityType, PropertyType},
     url::{BaseUrl, VersionedUrl},
-    DataType, EntityType, PropertyType,
 };
 
 use crate::{
-    store::{crud, ConflictBehavior, InsertionError, QueryError, UpdateError},
+    store::{query::Filter, ConflictBehavior, InsertionError, QueryError, UpdateError},
     subgraph::{
+        edges::GraphResolveDepths,
         identifier::{DataTypeVertexId, EntityTypeVertexId, PropertyTypeVertexId},
-        query::StructuralQuery,
+        temporal_axes::QueryTemporalAxesUnresolved,
         Subgraph,
     },
 };
 
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(
+    rename_all = "camelCase",
+    deny_unknown_fields,
+    bound(deserialize = "R: Deserialize<'de>")
+)]
+pub struct CreateDataTypeParams<R> {
+    pub schema: DataType,
+    pub classification: OntologyTypeClassificationMetadata,
+    pub relationships: R,
+    pub conflict_behavior: ConflictBehavior,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetDataTypeSubgraphParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, DataTypeWithMetadata>,
+    pub graph_resolve_depths: GraphResolveDepths,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+    #[serde(default)]
+    pub after: Option<DataTypeVertexId>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub include_count: bool,
+}
+
+#[derive(Debug)]
+pub struct GetDataTypeSubgraphResponse {
+    pub subgraph: Subgraph,
+    pub cursor: Option<DataTypeVertexId>,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CountDataTypesParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, DataTypeWithMetadata>,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetDataTypesParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, DataTypeWithMetadata>,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+    #[serde(default)]
+    pub after: Option<DataTypeVertexId>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub include_count: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct GetDataTypesResponse {
+    pub data_types: Vec<DataTypeWithMetadata>,
+    pub cursor: Option<DataTypeVertexId>,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateDataTypesParams<R> {
+    pub schema: DataType,
+    pub relationships: R,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArchiveDataTypeParams<'a> {
+    #[serde(borrow)]
+    pub data_type_id: Cow<'a, VersionedUrl>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnarchiveDataTypeParams {
+    pub data_type_id: VersionedUrl,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateDataTypeEmbeddingParams<'a> {
+    #[serde(borrow)]
+    pub data_type_id: Cow<'a, VersionedUrl>,
+    #[serde(borrow)]
+    pub embedding: Embedding<'a>,
+    pub updated_at_transaction_time: Timestamp<TransactionTime>,
+    pub reset: bool,
+}
+
 /// Describes the API of a store implementation for [`DataType`]s.
-#[async_trait]
-pub trait DataTypeStore: crud::Read<DataTypeWithMetadata> {
+pub trait DataTypeStore {
     /// Creates a new [`DataType`].
     ///
     /// # Errors:
@@ -41,25 +155,22 @@ pub trait DataTypeStore: crud::Read<DataTypeWithMetadata> {
     /// - if the [`BaseUrl`] of the `data_type` already exists.
     ///
     /// [`BaseUrl`]: type_system::url::BaseUrl
-    async fn create_data_type<A: AuthorizationApi + Send + Sync>(
+    fn create_data_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        schema: DataType,
-        metadata: PartialDataTypeMetadata,
-        relationships: impl IntoIterator<Item = DataTypeRelationAndSubject> + Send,
-    ) -> Result<DataTypeMetadata, InsertionError> {
-        Ok(self
-            .create_data_types(
-                actor_id,
-                authorization_api,
-                iter::once((schema, metadata)),
-                ConflictBehavior::Fail,
-                relationships,
-            )
-            .await?
-            .pop()
-            .expect("created exactly one data type"))
+        params: CreateDataTypeParams<R>,
+    ) -> impl Future<Output = Result<DataTypeMetadata, InsertionError>> + Send
+    where
+        Self: Send,
+        R: IntoIterator<Item = DataTypeRelationAndSubject> + Send + Sync,
+    {
+        async move {
+            Ok(self
+                .create_data_types(actor_id, iter::once(params))
+                .await?
+                .pop()
+                .expect("created exactly one data type"))
+        }
     }
 
     /// Creates the provided [`DataType`]s.
@@ -70,70 +181,210 @@ pub trait DataTypeStore: crud::Read<DataTypeWithMetadata> {
     /// - if any [`BaseUrl`] of the data type already exists.
     ///
     /// [`BaseUrl`]: type_system::url::BaseUrl
-    async fn create_data_types<A: AuthorizationApi + Send + Sync>(
+    fn create_data_types<P, R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        data_types: impl IntoIterator<Item = (DataType, PartialDataTypeMetadata), IntoIter: Send> + Send,
-        on_conflict: ConflictBehavior,
-        relationships: impl IntoIterator<Item = DataTypeRelationAndSubject> + Send,
-    ) -> Result<Vec<DataTypeMetadata>, InsertionError>;
+        params: P,
+    ) -> impl Future<Output = Result<Vec<DataTypeMetadata>, InsertionError>> + Send
+    where
+        P: IntoIterator<Item = CreateDataTypeParams<R>, IntoIter: Send> + Send,
+        R: IntoIterator<Item = DataTypeRelationAndSubject> + Send + Sync;
 
-    /// Get the [`Subgraph`] specified by the [`StructuralQuery`].
+    /// Count the number of [`DataType`]s specified by the [`CountDataTypesParams`].
+    ///
+    /// # Errors
+    ///
+    /// - if the underlying store fails to count the data types.
+    fn count_data_types(
+        &self,
+        actor_id: AccountId,
+        params: CountDataTypesParams<'_>,
+    ) -> impl Future<Output = Result<usize, QueryError>> + Send;
+
+    /// Get the [`DataTypes`] specified by the [`GetDataTypesParams`].
     ///
     /// # Errors
     ///
     /// - if the requested [`DataType`] doesn't exist.
-    async fn get_data_type<A: AuthorizationApi + Sync>(
+    ///
+    /// [`DataTypes`]: DataType
+    fn get_data_types(
         &self,
         actor_id: AccountId,
-        authorization_api: &A,
-        query: &StructuralQuery<DataTypeWithMetadata>,
-        after: Option<&DataTypeVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError>;
+        params: GetDataTypesParams<'_>,
+    ) -> impl Future<Output = Result<GetDataTypesResponse, QueryError>> + Send;
+
+    /// Get the [`Subgraph`] specified by the [`GetDataTypeSubgraphParams`].
+    ///
+    /// # Errors
+    ///
+    /// - if the requested [`DataType`] doesn't exist.
+    fn get_data_type_subgraph(
+        &self,
+        actor_id: AccountId,
+        params: GetDataTypeSubgraphParams<'_>,
+    ) -> impl Future<Output = Result<GetDataTypeSubgraphResponse, QueryError>> + Send;
 
     /// Update the definition of an existing [`DataType`].
     ///
     /// # Errors
     ///
     /// - if the [`DataType`] doesn't exist.
-    async fn update_data_type<A: AuthorizationApi + Send + Sync>(
+    fn update_data_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        data_type: DataType,
-        relationships: impl IntoIterator<Item = DataTypeRelationAndSubject> + Send,
-    ) -> Result<DataTypeMetadata, UpdateError>;
+        params: UpdateDataTypesParams<R>,
+    ) -> impl Future<Output = Result<DataTypeMetadata, UpdateError>> + Send
+    where
+        R: IntoIterator<Item = DataTypeRelationAndSubject> + Send + Sync;
 
     /// Archives the definition of an existing [`DataType`].
     ///
     /// # Errors
     ///
     /// - if the [`DataType`] doesn't exist.
-    async fn archive_data_type<A: AuthorizationApi + Send + Sync>(
+    fn archive_data_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError>;
+        params: ArchiveDataTypeParams,
+    ) -> impl Future<Output = Result<OntologyTemporalMetadata, UpdateError>> + Send;
 
     /// Restores the definition of an existing [`DataType`].
     ///
     /// # Errors
     ///
     /// - if the [`DataType`] doesn't exist.
-    async fn unarchive_data_type<A: AuthorizationApi + Send + Sync>(
+    fn unarchive_data_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError>;
+
+        params: UnarchiveDataTypeParams,
+    ) -> impl Future<Output = Result<OntologyTemporalMetadata, UpdateError>> + Send;
+
+    fn update_data_type_embeddings(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UpdateDataTypeEmbeddingParams<'_>,
+    ) -> impl Future<Output = Result<(), UpdateError>> + Send;
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(
+    rename_all = "camelCase",
+    deny_unknown_fields,
+    bound(deserialize = "R: Deserialize<'de>")
+)]
+pub struct CreatePropertyTypeParams<R> {
+    pub schema: PropertyType,
+    pub classification: OntologyTypeClassificationMetadata,
+    pub relationships: R,
+    pub conflict_behavior: ConflictBehavior,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetPropertyTypeSubgraphParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, PropertyTypeWithMetadata>,
+    pub graph_resolve_depths: GraphResolveDepths,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+    #[serde(default)]
+    pub after: Option<PropertyTypeVertexId>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub include_count: bool,
+}
+
+#[derive(Debug)]
+pub struct GetPropertyTypeSubgraphResponse {
+    pub subgraph: Subgraph,
+    pub cursor: Option<PropertyTypeVertexId>,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CountPropertyTypesParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, PropertyTypeWithMetadata>,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetPropertyTypesParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, PropertyTypeWithMetadata>,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+    #[serde(default)]
+    pub after: Option<PropertyTypeVertexId>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub include_count: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct GetPropertyTypesResponse {
+    pub property_types: Vec<PropertyTypeWithMetadata>,
+    pub cursor: Option<PropertyTypeVertexId>,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdatePropertyTypesParams<R> {
+    pub schema: PropertyType,
+    pub relationships: R,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArchivePropertyTypeParams<'a> {
+    #[serde(borrow)]
+    pub property_type_id: Cow<'a, VersionedUrl>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnarchivePropertyTypeParams<'a> {
+    pub property_type_id: Cow<'a, VersionedUrl>,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdatePropertyTypeEmbeddingParams<'a> {
+    #[serde(borrow)]
+    pub property_type_id: Cow<'a, VersionedUrl>,
+    #[serde(borrow)]
+    pub embedding: Embedding<'a>,
+    pub updated_at_transaction_time: Timestamp<TransactionTime>,
+    pub reset: bool,
 }
 
 /// Describes the API of a store implementation for [`PropertyType`]s.
-#[async_trait]
-pub trait PropertyTypeStore: crud::Read<PropertyTypeWithMetadata> {
+pub trait PropertyTypeStore {
     /// Creates a new [`PropertyType`].
     ///
     /// # Errors:
@@ -142,25 +393,22 @@ pub trait PropertyTypeStore: crud::Read<PropertyTypeWithMetadata> {
     /// - if the [`BaseUrl`] of the `property_type` already exists.
     ///
     /// [`BaseUrl`]: type_system::url::BaseUrl
-    async fn create_property_type<A: AuthorizationApi + Send + Sync>(
+    fn create_property_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        schema: PropertyType,
-        metadata: PartialPropertyTypeMetadata,
-        relationships: impl IntoIterator<Item = PropertyTypeRelationAndSubject> + Send,
-    ) -> Result<PropertyTypeMetadata, InsertionError> {
-        Ok(self
-            .create_property_types(
-                actor_id,
-                authorization_api,
-                iter::once((schema, metadata)),
-                ConflictBehavior::Fail,
-                relationships,
-            )
-            .await?
-            .pop()
-            .expect("created exactly one property type"))
+        params: CreatePropertyTypeParams<R>,
+    ) -> impl Future<Output = Result<PropertyTypeMetadata, InsertionError>> + Send
+    where
+        Self: Send,
+        R: IntoIterator<Item = PropertyTypeRelationAndSubject> + Send + Sync,
+    {
+        async move {
+            Ok(self
+                .create_property_types(actor_id, iter::once(params))
+                .await?
+                .pop()
+                .expect("created exactly one property type"))
+        }
     }
 
     /// Creates the provided [`PropertyType`]s.
@@ -171,73 +419,213 @@ pub trait PropertyTypeStore: crud::Read<PropertyTypeWithMetadata> {
     /// - if any [`BaseUrl`] of the property type already exists.
     ///
     /// [`BaseUrl`]: type_system::url::BaseUrl
-    async fn create_property_types<A: AuthorizationApi + Send + Sync>(
+    fn create_property_types<P, R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        property_types: impl IntoIterator<
-            Item = (PropertyType, PartialPropertyTypeMetadata),
-            IntoIter: Send,
-        > + Send,
-        on_conflict: ConflictBehavior,
-        relationships: impl IntoIterator<Item = PropertyTypeRelationAndSubject> + Send,
-    ) -> Result<Vec<PropertyTypeMetadata>, InsertionError>;
+        params: P,
+    ) -> impl Future<Output = Result<Vec<PropertyTypeMetadata>, InsertionError>> + Send
+    where
+        P: IntoIterator<Item = CreatePropertyTypeParams<R>, IntoIter: Send> + Send,
+        R: IntoIterator<Item = PropertyTypeRelationAndSubject> + Send + Sync;
 
-    /// Get the [`Subgraph`] specified by the [`StructuralQuery`].
+    /// Count the number of [`PropertyType`]s specified by the [`CountPropertyTypesParams`].
+    ///
+    /// # Errors
+    ///
+    /// - if the underlying store fails to count the property types.
+    fn count_property_types(
+        &self,
+        actor_id: AccountId,
+        params: CountPropertyTypesParams<'_>,
+    ) -> impl Future<Output = Result<usize, QueryError>> + Send;
+
+    /// Get the [`Subgraph`] specified by the [`GetPropertyTypeSubgraphParams`].
     ///
     /// # Errors
     ///
     /// - if the requested [`PropertyType`] doesn't exist.
-    async fn get_property_type<A: AuthorizationApi + Sync>(
+    fn get_property_type_subgraph(
         &self,
         actor_id: AccountId,
-        authorization_api: &A,
-        query: &StructuralQuery<PropertyTypeWithMetadata>,
-        after: Option<&PropertyTypeVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError>;
+        params: GetPropertyTypeSubgraphParams<'_>,
+    ) -> impl Future<Output = Result<GetPropertyTypeSubgraphResponse, QueryError>> + Send;
+
+    /// Get the [`PropertyTypes`] specified by the [`GetPropertyTypesParams`].
+    ///
+    /// # Errors
+    ///
+    /// - if the requested [`PropertyType`] doesn't exist.
+    ///
+    /// [`PropertyTypes`]: PropertyType
+    fn get_property_types(
+        &self,
+        actor_id: AccountId,
+        params: GetPropertyTypesParams<'_>,
+    ) -> impl Future<Output = Result<GetPropertyTypesResponse, QueryError>> + Send;
 
     /// Update the definition of an existing [`PropertyType`].
     ///
     /// # Errors
     ///
     /// - if the [`PropertyType`] doesn't exist.
-    async fn update_property_type<A: AuthorizationApi + Send + Sync>(
+    fn update_property_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        property_type: PropertyType,
-        relationships: impl IntoIterator<Item = PropertyTypeRelationAndSubject> + Send,
-    ) -> Result<PropertyTypeMetadata, UpdateError>;
+        params: UpdatePropertyTypesParams<R>,
+    ) -> impl Future<Output = Result<PropertyTypeMetadata, UpdateError>> + Send
+    where
+        R: IntoIterator<Item = PropertyTypeRelationAndSubject> + Send + Sync;
 
     /// Archives the definition of an existing [`PropertyType`].
     ///
     /// # Errors
     ///
     /// - if the [`PropertyType`] doesn't exist.
-    async fn archive_property_type<A: AuthorizationApi + Send + Sync>(
+    fn archive_property_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError>;
+
+        params: ArchivePropertyTypeParams<'_>,
+    ) -> impl Future<Output = Result<OntologyTemporalMetadata, UpdateError>> + Send;
 
     /// Restores the definition of an existing [`PropertyType`].
     ///
     /// # Errors
     ///
     /// - if the [`PropertyType`] doesn't exist.
-    async fn unarchive_property_type<A: AuthorizationApi + Send + Sync>(
+    fn unarchive_property_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError>;
+
+        params: UnarchivePropertyTypeParams<'_>,
+    ) -> impl Future<Output = Result<OntologyTemporalMetadata, UpdateError>> + Send;
+
+    fn update_property_type_embeddings(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UpdatePropertyTypeEmbeddingParams<'_>,
+    ) -> impl Future<Output = Result<(), UpdateError>> + Send;
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(
+    rename_all = "camelCase",
+    deny_unknown_fields,
+    bound(deserialize = "R: Deserialize<'de>")
+)]
+pub struct CreateEntityTypeParams<R> {
+    pub schema: EntityType,
+    pub classification: OntologyTypeClassificationMetadata,
+    pub label_property: Option<BaseUrl>,
+    pub icon: Option<String>,
+    pub relationships: R,
+    pub conflict_behavior: ConflictBehavior,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetEntityTypeSubgraphParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, EntityTypeWithMetadata>,
+    pub graph_resolve_depths: GraphResolveDepths,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub after: Option<EntityTypeVertexId>,
+    pub limit: Option<usize>,
+    pub include_drafts: bool,
+    #[serde(default)]
+    pub include_count: bool,
+}
+
+#[derive(Debug)]
+pub struct GetEntityTypeSubgraphResponse {
+    pub subgraph: Subgraph,
+    pub cursor: Option<EntityTypeVertexId>,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CountEntityTypesParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, EntityTypeWithMetadata>,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GetEntityTypesParams<'p> {
+    #[serde(borrow)]
+    pub filter: Filter<'p, EntityTypeWithMetadata>,
+    pub temporal_axes: QueryTemporalAxesUnresolved,
+    pub include_drafts: bool,
+    #[serde(default)]
+    pub after: Option<EntityTypeVertexId>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub include_count: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct GetEntityTypesResponse {
+    pub entity_types: Vec<EntityTypeWithMetadata>,
+    pub cursor: Option<EntityTypeVertexId>,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateEntityTypesParams<R> {
+    pub schema: EntityType,
+    pub label_property: Option<BaseUrl>,
+    pub icon: Option<String>,
+    pub relationships: R,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArchiveEntityTypeParams<'a> {
+    #[serde(borrow)]
+    pub entity_type_id: Cow<'a, VersionedUrl>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnarchiveEntityTypeParams<'a> {
+    pub entity_type_id: Cow<'a, VersionedUrl>,
+    #[serde(default, skip_serializing_if = "UserDefinedProvenanceData::is_empty")]
+    pub provenance: ProvidedOntologyEditionProvenance,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateEntityTypeEmbeddingParams<'a> {
+    #[serde(borrow)]
+    pub entity_type_id: Cow<'a, VersionedUrl>,
+    #[serde(borrow)]
+    pub embedding: Embedding<'a>,
+    pub updated_at_transaction_time: Timestamp<TransactionTime>,
+    pub reset: bool,
 }
 
 /// Describes the API of a store implementation for [`EntityType`]s.
-#[async_trait]
-pub trait EntityTypeStore: crud::Read<EntityTypeWithMetadata> {
+pub trait EntityTypeStore {
     /// Creates a new [`EntityType`].
     ///
     /// # Errors:
@@ -246,25 +634,22 @@ pub trait EntityTypeStore: crud::Read<EntityTypeWithMetadata> {
     /// - if the [`BaseUrl`] of the `entity_type` already exists.
     ///
     /// [`BaseUrl`]: type_system::url::BaseUrl
-    async fn create_entity_type<A: AuthorizationApi + Send + Sync>(
+    fn create_entity_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        schema: EntityType,
-        metadata: PartialEntityTypeMetadata,
-        relationships: impl IntoIterator<Item = EntityTypeRelationAndSubject> + Send,
-    ) -> Result<EntityTypeMetadata, InsertionError> {
-        Ok(self
-            .create_entity_types(
-                actor_id,
-                authorization_api,
-                iter::once((schema, metadata)),
-                ConflictBehavior::Fail,
-                relationships,
-            )
-            .await?
-            .pop()
-            .expect("created exactly one entity type"))
+        params: CreateEntityTypeParams<R>,
+    ) -> impl Future<Output = Result<EntityTypeMetadata, InsertionError>> + Send
+    where
+        Self: Send,
+        R: IntoIterator<Item = EntityTypeRelationAndSubject> + Send + Sync,
+    {
+        async move {
+            Ok(self
+                .create_entity_types(actor_id, iter::once(params))
+                .await?
+                .pop()
+                .expect("created exactly one entity type"))
+        }
     }
 
     /// Creates the provided [`EntityType`]s.
@@ -275,66 +660,91 @@ pub trait EntityTypeStore: crud::Read<EntityTypeWithMetadata> {
     /// - if any [`BaseUrl`] of the entity type already exists.
     ///
     /// [`BaseUrl`]: type_system::url::BaseUrl
-    async fn create_entity_types<A: AuthorizationApi + Send + Sync>(
+    fn create_entity_types<P, R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        entity_types: impl IntoIterator<Item = (EntityType, PartialEntityTypeMetadata), IntoIter: Send>
-        + Send,
-        on_conflict: ConflictBehavior,
-        relationships: impl IntoIterator<Item = EntityTypeRelationAndSubject> + Send,
-    ) -> Result<Vec<EntityTypeMetadata>, InsertionError>;
+        params: P,
+    ) -> impl Future<Output = Result<Vec<EntityTypeMetadata>, InsertionError>> + Send
+    where
+        P: IntoIterator<Item = CreateEntityTypeParams<R>, IntoIter: Send> + Send,
+        R: IntoIterator<Item = EntityTypeRelationAndSubject> + Send + Sync;
 
-    /// Get the [`Subgraph`]s specified by the [`StructuralQuery`].
+    /// Count the number of [`EntityType`]s specified by the [`CountEntityTypesParams`].
+    ///
+    /// # Errors
+    ///
+    /// - if the underlying store fails to count the entity types.
+    fn count_entity_types(
+        &self,
+        actor_id: AccountId,
+        params: CountEntityTypesParams<'_>,
+    ) -> impl Future<Output = Result<usize, QueryError>> + Send;
+
+    /// Get the [`Subgraph`]s specified by the [`GetEntityTypeSubgraphParams`].
     ///
     /// # Errors
     ///
     /// - if the requested [`EntityType`] doesn't exist.
-    async fn get_entity_type<A: AuthorizationApi + Sync>(
+    fn get_entity_type_subgraph(
         &self,
         actor_id: AccountId,
-        authorization_api: &A,
-        query: &StructuralQuery<EntityTypeWithMetadata>,
-        after: Option<&EntityTypeVertexId>,
-        limit: Option<usize>,
-    ) -> Result<Subgraph, QueryError>;
+        params: GetEntityTypeSubgraphParams<'_>,
+    ) -> impl Future<Output = Result<GetEntityTypeSubgraphResponse, QueryError>> + Send;
+
+    /// Get the [`EntityTypes`] specified by the [`GetEntityTypesParams`].
+    ///
+    /// # Errors
+    ///
+    /// - if the requested [`EntityType`] doesn't exist.
+    ///
+    /// [`EntityTypes`]: EntityType
+    fn get_entity_types(
+        &self,
+        actor_id: AccountId,
+        params: GetEntityTypesParams<'_>,
+    ) -> impl Future<Output = Result<GetEntityTypesResponse, QueryError>> + Send;
 
     /// Update the definition of an existing [`EntityType`].
     ///
     /// # Errors
     ///
     /// - if the [`EntityType`] doesn't exist.
-    async fn update_entity_type<A: AuthorizationApi + Send + Sync>(
+    fn update_entity_type<R>(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        entity_type: EntityType,
-        label_property: Option<BaseUrl>,
-        icon: Option<String>,
-        relationships: impl IntoIterator<Item = EntityTypeRelationAndSubject> + Send,
-    ) -> Result<EntityTypeMetadata, UpdateError>;
+        params: UpdateEntityTypesParams<R>,
+    ) -> impl Future<Output = Result<EntityTypeMetadata, UpdateError>> + Send
+    where
+        R: IntoIterator<Item = EntityTypeRelationAndSubject> + Send + Sync;
 
     /// Archives the definition of an existing [`EntityType`].
     ///
     /// # Errors
     ///
     /// - if the [`EntityType`] doesn't exist.
-    async fn archive_entity_type<A: AuthorizationApi + Send + Sync>(
+    fn archive_entity_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError>;
+
+        params: ArchiveEntityTypeParams,
+    ) -> impl Future<Output = Result<OntologyTemporalMetadata, UpdateError>> + Send;
 
     /// Restores the definition of an existing [`EntityType`].
     ///
     /// # Errors
     ///
     /// - if the [`EntityType`] doesn't exist.
-    async fn unarchive_entity_type<A: AuthorizationApi + Send + Sync>(
+    fn unarchive_entity_type(
         &mut self,
         actor_id: AccountId,
-        authorization_api: &mut A,
-        id: &VersionedUrl,
-    ) -> Result<OntologyTemporalMetadata, UpdateError>;
+
+        params: UnarchiveEntityTypeParams,
+    ) -> impl Future<Output = Result<OntologyTemporalMetadata, UpdateError>> + Send;
+
+    fn update_entity_type_embeddings(
+        &mut self,
+        actor_id: AccountId,
+
+        params: UpdateEntityTypeEmbeddingParams<'_>,
+    ) -> impl Future<Output = Result<(), UpdateError>> + Send;
 }

@@ -1,13 +1,17 @@
 import { useMutation } from "@apollo/client";
-import { Entity, extractOwnedByIdFromEntityId } from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import {
+  extractDraftIdFromEntityId,
+  extractOwnedByIdFromEntityId,
+} from "@local/hash-subgraph";
 
 import { useBlockProtocolArchiveEntity } from "../../../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-archive-entity";
-import {
+import type {
   CreateEntityMutation,
   CreateEntityMutationVariables,
 } from "../../../../../graphql/api-types.gen";
 import { createEntityMutation } from "../../../../../graphql/queries/knowledge/entity.queries";
-import {
+import type {
   DraftLinksToArchive,
   DraftLinksToCreate,
 } from "./use-draft-link-state";
@@ -38,12 +42,14 @@ export const useApplyDraftLinkEntityChanges = () => {
             entityTypeId: linkEntity.metadata.entityTypeId,
             // The link should be in the same web as the source entity.
             ownedById: extractOwnedByIdFromEntityId(leftEntityId),
-            properties: {},
+            properties: { value: {} },
             linkData: {
               leftEntityId,
               rightEntityId: rightEntity.metadata.recordId.entityId,
             },
-            draft: leftEntity.metadata.draft,
+            draft: !!extractDraftIdFromEntityId(
+              leftEntity.metadata.recordId.entityId,
+            ),
           },
         }),
     );

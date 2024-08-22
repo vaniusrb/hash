@@ -7,7 +7,7 @@
       "name": "HASH"
     },
     "license": {
-      "name": ""
+      "name": "AGPL-3"
     },
     "version": "0.0.0"
   },
@@ -30,6 +30,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsertAccountGroupIdParams"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "The schema of the created account",
@@ -214,6 +224,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsertAccountIdParams"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "The schema of the created account",
@@ -374,7 +394,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ArchiveDataTypeRequest"
+                "$ref": "#/components/schemas/ArchiveDataTypeParams"
               }
             }
           },
@@ -399,6 +419,47 @@
           },
           "422": {
             "description": "Provided request body is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/data-types/embeddings": {
+      "post": {
+        "tags": [
+          "Graph",
+          "DataType"
+        ],
+        "operationId": "update_data_type_embeddings",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDataTypeEmbeddingParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The embeddings were created"
+          },
+          "403": {
+            "description": "Insufficient permissions to update the data type"
           },
           "500": {
             "description": "Store error occurred"
@@ -463,7 +524,7 @@
           "Graph",
           "DataType"
         ],
-        "operationId": "get_data_types_by_query",
+        "operationId": "get_data_types",
         "parameters": [
           {
             "name": "X-Authenticated-User-Actor-Id",
@@ -479,7 +540,55 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DataTypeStructuralQuery"
+                "$ref": "#/components/schemas/GetDataTypesParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Gets a a list of data types that satisfy the given query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetDataTypesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Provided query is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/data-types/query/subgraph": {
+      "post": {
+        "tags": [
+          "Graph",
+          "DataType"
+        ],
+        "operationId": "get_data_type_subgraph",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetDataTypeSubgraphParams"
               }
             }
           },
@@ -488,18 +597,10 @@
         "responses": {
           "200": {
             "description": "Gets a subgraph rooted at all data types that satisfy the given query, each resolved to the requested depth.",
-            "headers": {
-              "Link": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "The link to be used to query the next page of data types"
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Subgraph"
+                  "$ref": "#/components/schemas/GetDataTypeSubgraphResponse"
                 }
               }
             }
@@ -576,7 +677,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UnarchiveDataTypeRequest"
+                "$ref": "#/components/schemas/UnarchiveDataTypeParams"
               }
             }
           },
@@ -738,11 +839,11 @@
         },
         "responses": {
           "200": {
-            "description": "The metadata of the created entity",
+            "description": "The created entity",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EntityMetadata"
+                  "$ref": "#/components/schemas/Entity"
                 }
               }
             }
@@ -758,12 +859,12 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
           "Graph",
           "Entity"
         ],
-        "operationId": "update_entity",
+        "operationId": "patch_entity",
         "parameters": [
           {
             "name": "X-Authenticated-User-Actor-Id",
@@ -779,7 +880,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateEntityRequest"
+                "$ref": "#/components/schemas/PatchEntityParams"
               }
             }
           },
@@ -787,11 +888,11 @@
         },
         "responses": {
           "200": {
-            "description": "The metadata of the updated entity",
+            "description": "The updated entity",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EntityMetadata"
+                  "$ref": "#/components/schemas/Entity"
                 }
               }
             }
@@ -804,6 +905,114 @@
           },
           "423": {
             "description": "The entity that should be updated was unexpectedly updated at the same time"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/entities/bulk": {
+      "post": {
+        "tags": [
+          "Graph",
+          "Entity"
+        ],
+        "operationId": "create_entities",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CreateEntityRequest"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The created entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Entity"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity Type URL was not found"
+          },
+          "422": {
+            "description": "Provided request body is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/entities/diff": {
+      "post": {
+        "tags": [
+          "Graph",
+          "Entity"
+        ],
+        "operationId": "diff_entity",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiffEntityParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The difference between the two entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiffEntityResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity ID was not found"
+          },
+          "422": {
+            "description": "Provided request body is invalid"
           },
           "500": {
             "description": "Store error occurred"
@@ -833,7 +1042,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateEntityRequest"
+                "$ref": "#/components/schemas/UpdateEntityEmbeddingsParams"
               }
             }
           },
@@ -858,7 +1067,7 @@
           "Graph",
           "Entity"
         ],
-        "operationId": "get_entities_by_query",
+        "operationId": "get_entities",
         "parameters": [
           {
             "name": "X-Authenticated-User-Actor-Id",
@@ -895,7 +1104,125 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EntityStructuralQuery"
+                "$ref": "#/components/schemas/GetEntitiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A list of entities that satisfy the given query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEntitiesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Provided query is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/entities/query/count": {
+      "post": {
+        "tags": [
+          "Graph",
+          "Entity"
+        ],
+        "operationId": "count_entities",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountEntitiesParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Provided query is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/entities/query/subgraph": {
+      "post": {
+        "tags": [
+          "Graph",
+          "Entity"
+        ],
+        "operationId": "get_entity_subgraph",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "The cursor to start reading from",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of entities to read",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetEntitySubgraphRequest"
               }
             }
           },
@@ -904,18 +1231,10 @@
         "responses": {
           "200": {
             "description": "A subgraph rooted at entities that satisfy the given query, each resolved to the requested depth.",
-            "headers": {
-              "Link": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "The link to be used to query the next page of entities"
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Subgraph"
+                  "$ref": "#/components/schemas/GetEntitySubgraphResponse"
                 }
               }
             }
@@ -992,7 +1311,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ValidateEntityRequest"
+                "$ref": "#/components/schemas/ValidateEntityParams"
               }
             }
           },
@@ -1458,7 +1777,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ArchiveEntityTypeRequest"
+                "$ref": "#/components/schemas/ArchiveEntityTypeParams"
               }
             }
           },
@@ -1483,6 +1802,47 @@
           },
           "422": {
             "description": "Provided request body is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/entity-types/embeddings": {
+      "post": {
+        "tags": [
+          "Graph",
+          "EntityType"
+        ],
+        "operationId": "update_entity_type_embeddings",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEntityTypeEmbeddingParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The embeddings were created"
+          },
+          "403": {
+            "description": "Insufficient permissions to update the entity type"
           },
           "500": {
             "description": "Store error occurred"
@@ -1568,7 +1928,7 @@
           "Graph",
           "EntityType"
         ],
-        "operationId": "get_entity_types_by_query",
+        "operationId": "get_entity_types",
         "parameters": [
           {
             "name": "X-Authenticated-User-Actor-Id",
@@ -1584,7 +1944,55 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EntityTypeStructuralQuery"
+                "$ref": "#/components/schemas/GetEntityTypesParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Gets a a list of entity types that satisfy the given query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetEntityTypesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Provided query is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/entity-types/query/subgraph": {
+      "post": {
+        "tags": [
+          "Graph",
+          "EntityType"
+        ],
+        "operationId": "get_entity_type_subgraph",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetEntityTypeSubgraphParams"
               }
             }
           },
@@ -1593,18 +2001,10 @@
         "responses": {
           "200": {
             "description": "A subgraph rooted at entity types that satisfy the given query, each resolved to the requested depth.",
-            "headers": {
-              "Link": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "The link to be used to query the next page of entity types"
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Subgraph"
+                  "$ref": "#/components/schemas/GetEntityTypeSubgraphResponse"
                 }
               }
             }
@@ -1681,7 +2081,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UnarchiveEntityTypeRequest"
+                "$ref": "#/components/schemas/UnarchiveEntityTypeParams"
               }
             }
           },
@@ -1956,7 +2356,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ArchivePropertyTypeRequest"
+                "$ref": "#/components/schemas/ArchivePropertyTypeParams"
               }
             }
           },
@@ -1981,6 +2381,47 @@
           },
           "422": {
             "description": "Provided request body is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/property-types/embeddings": {
+      "post": {
+        "tags": [
+          "Graph",
+          "PropertyType"
+        ],
+        "operationId": "update_property_type_embeddings",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePropertyTypeEmbeddingParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The embeddings were created"
+          },
+          "403": {
+            "description": "Insufficient permissions to update the property type"
           },
           "500": {
             "description": "Store error occurred"
@@ -2045,7 +2486,7 @@
           "Graph",
           "PropertyType"
         ],
-        "operationId": "get_property_types_by_query",
+        "operationId": "get_property_types",
         "parameters": [
           {
             "name": "X-Authenticated-User-Actor-Id",
@@ -2061,7 +2502,55 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PropertyTypeStructuralQuery"
+                "$ref": "#/components/schemas/GetPropertyTypesParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Gets a a list of property types that satisfy the given query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPropertyTypesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Provided query is invalid"
+          },
+          "500": {
+            "description": "Store error occurred"
+          }
+        }
+      }
+    },
+    "/property-types/query/subgraph": {
+      "post": {
+        "tags": [
+          "Graph",
+          "PropertyType"
+        ],
+        "operationId": "get_property_type_subgraph",
+        "parameters": [
+          {
+            "name": "X-Authenticated-User-Actor-Id",
+            "in": "header",
+            "description": "The ID of the actor which is used to authorize the request",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AccountId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetPropertyTypeSubgraphParams"
               }
             }
           },
@@ -2081,7 +2570,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Subgraph"
+                  "$ref": "#/components/schemas/GetPropertyTypeSubgraphResponse"
                 }
               }
             }
@@ -2158,7 +2647,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UnarchivePropertyTypeRequest"
+                "$ref": "#/components/schemas/UnarchivePropertyTypeParams"
               }
             }
           },
@@ -2312,7 +2801,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateWebRequest"
+                "$ref": "#/components/schemas/InsertWebIdParams"
               }
             }
           },
@@ -2487,38 +2976,69 @@
         "type": "string",
         "format": "uuid"
       },
-      "ArchiveDataTypeRequest": {
-        "type": "object",
-        "required": [
-          "typeToArchive"
-        ],
-        "properties": {
-          "typeToArchive": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
-          }
-        }
+      "ActorType": {
+        "type": "string",
+        "enum": [
+          "human",
+          "ai",
+          "machine"
+        ]
       },
-      "ArchiveEntityTypeRequest": {
+      "ArchiveDataTypeParams": {
         "type": "object",
         "required": [
-          "typeToArchive"
+          "dataTypeId"
         ],
         "properties": {
-          "typeToArchive": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "dataTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "ArchivePropertyTypeRequest": {
+      "ArchiveEntityTypeParams": {
         "type": "object",
         "required": [
-          "typeToArchive"
+          "entityTypeId"
         ],
         "properties": {
-          "typeToArchive": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "entityTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
           }
-        }
+        },
+        "additionalProperties": false
+      },
+      "ArchivePropertyTypeParams": {
+        "type": "object",
+        "required": [
+          "propertyTypeId"
+        ],
+        "properties": {
+          "propertyTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ArrayMetadata": {
+        "type": "object",
+        "properties": {
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/PropertyProvenance"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaseUrl": {
+        "type": "string",
+        "format": "uri"
       },
       "ClosedTemporalBound": {
         "oneOf": [
@@ -2546,6 +3066,32 @@
           "propertyName": "kind"
         }
       },
+      "Confidence": {
+        "type": "number",
+        "format": "double",
+        "maximum": 1,
+        "minimum": 0
+      },
+      "CountEntitiesParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateDataTypeRequest": {
         "type": "object",
         "required": [
@@ -2556,6 +3102,9 @@
         "properties": {
           "ownedById": {
             "$ref": "#/components/schemas/OwnedById"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           },
           "relationships": {
             "type": "array",
@@ -2576,23 +3125,41 @@
               }
             ]
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateEntityRequest": {
         "type": "object",
         "required": [
-          "properties",
-          "entityTypeId",
           "ownedById",
+          "entityTypeIds",
+          "properties",
           "draft",
           "relationships"
         ],
         "properties": {
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "decisionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
           "draft": {
             "type": "boolean"
           },
-          "entityTypeId": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "entityTypeIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionedUrl"
+            }
           },
           "entityUuid": {
             "allOf": [
@@ -2612,7 +3179,10 @@
             "$ref": "#/components/schemas/OwnedById"
           },
           "properties": {
-            "$ref": "#/components/schemas/EntityProperties"
+            "$ref": "#/components/schemas/PropertyWithMetadataObject"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedEntityEditionProvenance"
           },
           "relationships": {
             "type": "array",
@@ -2620,7 +3190,8 @@
               "$ref": "#/components/schemas/EntityRelationAndSubject"
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateEntityTypeRequest": {
         "type": "object",
@@ -2635,10 +3206,18 @@
             "nullable": true
           },
           "labelProperty": {
-            "$ref": "./models/shared.json#/definitions/BaseUrl"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BaseUrl"
+              }
+            ],
+            "nullable": true
           },
           "ownedById": {
             "$ref": "#/components/schemas/OwnedById"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           },
           "relationships": {
             "type": "array",
@@ -2659,7 +3238,8 @@
               }
             ]
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreatePropertyTypeRequest": {
         "type": "object",
@@ -2671,6 +3251,9 @@
         "properties": {
           "ownedById": {
             "$ref": "#/components/schemas/OwnedById"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           },
           "relationships": {
             "type": "array",
@@ -2691,22 +3274,8 @@
               }
             ]
           }
-        }
-      },
-      "CreateWebRequest": {
-        "type": "object",
-        "required": [
-          "ownedById",
-          "owner"
-        ],
-        "properties": {
-          "ownedById": {
-            "$ref": "#/components/schemas/OwnedById"
-          },
-          "owner": {
-            "$ref": "#/components/schemas/WebOwnerSubject"
-          }
-        }
+        },
+        "additionalProperties": false
       },
       "CreatedById": {
         "type": "string",
@@ -2728,7 +3297,7 @@
                 "$ref": "#/components/schemas/OwnedById"
               },
               "provenance": {
-                "$ref": "#/components/schemas/OntologyProvenanceMetadata"
+                "$ref": "#/components/schemas/OntologyProvenance"
               },
               "recordId": {
                 "$ref": "#/components/schemas/OntologyTypeRecordId"
@@ -2752,7 +3321,7 @@
                 "$ref": "#/components/schemas/Timestamp"
               },
               "provenance": {
-                "$ref": "#/components/schemas/OntologyProvenanceMetadata"
+                "$ref": "#/components/schemas/OntologyProvenance"
               },
               "recordId": {
                 "$ref": "#/components/schemas/OntologyTypeRecordId"
@@ -2804,11 +3373,13 @@
           "version",
           "versionedUrl",
           "ownedById",
-          "editionCreatedById",
-          "editionArchivedById",
           "title",
           "description",
-          "type"
+          "type",
+          "inheritsFrom",
+          "children",
+          "editionProvenance",
+          "embedding"
         ]
       },
       "DataTypeRelationAndSubject": {
@@ -2854,29 +3425,6 @@
           "propertyName": "relation"
         }
       },
-      "DataTypeStructuralQuery": {
-        "type": "object",
-        "required": [
-          "filter",
-          "graphResolveDepths",
-          "temporalAxes",
-          "includeDrafts"
-        ],
-        "properties": {
-          "filter": {
-            "$ref": "#/components/schemas/Filter"
-          },
-          "graphResolveDepths": {
-            "$ref": "#/components/schemas/GraphResolveDepths"
-          },
-          "includeDrafts": {
-            "type": "boolean"
-          },
-          "temporalAxes": {
-            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
-          }
-        }
-      },
       "DataTypeVertexId": {
         "type": "object",
         "required": [
@@ -2885,7 +3433,7 @@
         ],
         "properties": {
           "baseId": {
-            "$ref": "./models/shared.json#/definitions/BaseUrl"
+            "$ref": "#/components/schemas/BaseUrl"
           },
           "revisionId": {
             "$ref": "#/components/schemas/OntologyTypeVersion"
@@ -2932,6 +3480,79 @@
           "decisionTime"
         ]
       },
+      "DiffEntityParams": {
+        "type": "object",
+        "required": [
+          "firstEntityId",
+          "firstDecisionTime",
+          "firstTransactionTime",
+          "secondEntityId",
+          "secondDecisionTime",
+          "secondTransactionTime"
+        ],
+        "properties": {
+          "firstDecisionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ],
+            "nullable": true
+          },
+          "firstEntityId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "firstTransactionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ],
+            "nullable": true
+          },
+          "secondDecisionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ],
+            "nullable": true
+          },
+          "secondEntityId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "secondTransactionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiffEntityResult": {
+        "type": "object",
+        "properties": {
+          "draftState": {
+            "type": "boolean"
+          },
+          "entityTypeIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityTypeIdDiff"
+            }
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyDiff"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "EdgeResolveDepths": {
         "type": "object",
         "required": [
@@ -2949,7 +3570,8 @@
             "format": "int32",
             "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Edges": {
         "type": "object",
@@ -3004,7 +3626,7 @@
             "$ref": "#/components/schemas/EntityMetadata"
           },
           "properties": {
-            "$ref": "#/components/schemas/EntityProperties"
+            "$ref": "#/components/schemas/PropertyObject"
           }
         }
       },
@@ -3032,6 +3654,7 @@
             "type": "object",
             "required": [
               "subjectId",
+              "subjectSet",
               "kind"
             ],
             "properties": {
@@ -3043,6 +3666,9 @@
               },
               "subjectId": {
                 "$ref": "#/components/schemas/AccountGroupId"
+              },
+              "subjectSet": {
+                "$ref": "#/components/schemas/EntitySubjectSet"
               }
             }
           }
@@ -3055,16 +3681,30 @@
         "type": "string",
         "format": "uuid"
       },
-      "EntityEditionProvenanceMetadata": {
-        "type": "object",
-        "required": [
-          "createdById"
-        ],
-        "properties": {
-          "createdById": {
-            "$ref": "#/components/schemas/EditionCreatedById"
+      "EntityEditionProvenance": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProvidedEntityEditionProvenance"
+          },
+          {
+            "type": "object",
+            "required": [
+              "createdById"
+            ],
+            "properties": {
+              "archivedById": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EditionArchivedById"
+                  }
+                ]
+              },
+              "createdById": {
+                "$ref": "#/components/schemas/EditionCreatedById"
+              }
+            }
           }
-        }
+        ]
       },
       "EntityEditorSubject": {
         "oneOf": [
@@ -3090,6 +3730,7 @@
             "type": "object",
             "required": [
               "subjectId",
+              "subjectSet",
               "kind"
             ],
             "properties": {
@@ -3101,6 +3742,9 @@
               },
               "subjectId": {
                 "$ref": "#/components/schemas/AccountGroupId"
+              },
+              "subjectSet": {
+                "$ref": "#/components/schemas/EntitySubjectSet"
               }
             }
           }
@@ -3112,15 +3756,11 @@
       "EntityEmbedding": {
         "type": "object",
         "required": [
-          "entityId",
           "embedding"
         ],
         "properties": {
           "embedding": {
             "$ref": "#/components/schemas/Embedding"
-          },
-          "entityId": {
-            "$ref": "#/components/schemas/EntityId"
           },
           "property": {
             "allOf": [
@@ -3129,20 +3769,6 @@
               }
             ],
             "nullable": true
-          }
-        }
-      },
-      "EntityEmbeddingUpdateRequest": {
-        "type": "object",
-        "required": [
-          "embeddings"
-        ],
-        "properties": {
-          "embeddings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EntityEmbedding"
-            }
           }
         }
       },
@@ -3164,48 +3790,38 @@
           }
         }
       },
-      "EntityLinkOrder": {
-        "type": "object",
-        "properties": {
-          "leftToRightOrder": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LinkOrder"
-              }
-            ]
-          },
-          "rightToLeftOrder": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LinkOrder"
-              }
-            ]
-          }
-        }
-      },
       "EntityMetadata": {
         "type": "object",
         "description": "The metadata of an [`Entity`] record.",
         "required": [
           "recordId",
           "temporalVersioning",
-          "entityTypeId",
-          "provenance",
+          "entityTypeIds",
           "archived",
-          "draft"
+          "provenance"
         ],
         "properties": {
           "archived": {
             "type": "boolean"
           },
-          "draft": {
-            "type": "boolean"
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
           },
-          "entityTypeId": {
-            "type": "string"
+          "entityTypeIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionedUrl"
+            }
+          },
+          "properties": {
+            "$ref": "#/components/schemas/PropertyMetadataObject"
           },
           "provenance": {
-            "$ref": "#/components/schemas/EntityProvenanceMetadata"
+            "$ref": "#/components/schemas/EntityProvenance"
           },
           "recordId": {
             "$ref": "#/components/schemas/EntityRecordId"
@@ -3213,7 +3829,8 @@
           "temporalVersioning": {
             "$ref": "#/components/schemas/EntityTemporalMetadata"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "EntityOwnerSubject": {
         "oneOf": [
@@ -3248,32 +3865,75 @@
           "view"
         ]
       },
-      "EntityProperties": {
-        "type": "object",
-        "description": "The properties of an entity.\n\nWhen expressed as JSON, this should validate against its respective entity type(s)."
+      "EntityProvenance": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/InferredEntityProvenance"
+          },
+          {
+            "type": "object",
+            "required": [
+              "edition"
+            ],
+            "properties": {
+              "edition": {
+                "$ref": "#/components/schemas/EntityEditionProvenance"
+              }
+            }
+          }
+        ]
       },
-      "EntityProvenanceMetadata": {
+      "EntityQueryCursor": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "EntityQuerySortingPath": {
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "$ref": "#/components/schemas/EntityQuerySortingToken"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "EntityQuerySortingRecord": {
         "type": "object",
         "required": [
-          "createdById",
-          "createdAtTransactionTime",
-          "createdAtDecisionTime",
-          "edition"
+          "path",
+          "ordering",
+          "nulls"
         ],
         "properties": {
-          "createdAtDecisionTime": {
-            "$ref": "#/components/schemas/Timestamp"
+          "nulls": {
+            "$ref": "#/components/schemas/NullOrdering"
           },
-          "createdAtTransactionTime": {
-            "$ref": "#/components/schemas/Timestamp"
+          "ordering": {
+            "$ref": "#/components/schemas/Ordering"
           },
-          "createdById": {
-            "$ref": "#/components/schemas/CreatedById"
-          },
-          "edition": {
-            "$ref": "#/components/schemas/EntityEditionProvenanceMetadata"
+          "path": {
+            "$ref": "#/components/schemas/EntityQuerySortingPath"
           }
         }
+      },
+      "EntityQuerySortingToken": {
+        "type": "string",
+        "enum": [
+          "archived",
+          "properties",
+          "recordCreatedAtTransactionTime",
+          "recordCreatedAtDecisionTime",
+          "createdAtTransactionTime",
+          "createdAtDecisionTime"
+        ]
       },
       "EntityQueryToken": {
         "type": "string",
@@ -3281,22 +3941,18 @@
         "enum": [
           "uuid",
           "editionId",
+          "draftId",
           "archived",
-          "draft",
           "ownedById",
-          "editionCreatedById",
-          "createdById",
-          "createdAtTransactionTime",
-          "createdAtDecisionTime",
           "type",
           "properties",
+          "provenance",
+          "editionProvenance",
           "embedding",
           "incomingLinks",
           "outgoingLinks",
           "leftEntity",
-          "rightEntity",
-          "leftToRightOrder",
-          "rightToLeftOrder"
+          "rightEntity"
         ]
       },
       "EntityRecordId": {
@@ -3444,28 +4100,12 @@
           "propertyName": "kind"
         }
       },
-      "EntityStructuralQuery": {
-        "type": "object",
-        "required": [
-          "filter",
-          "graphResolveDepths",
-          "temporalAxes",
-          "includeDrafts"
-        ],
-        "properties": {
-          "filter": {
-            "$ref": "#/components/schemas/Filter"
-          },
-          "graphResolveDepths": {
-            "$ref": "#/components/schemas/GraphResolveDepths"
-          },
-          "includeDrafts": {
-            "type": "boolean"
-          },
-          "temporalAxes": {
-            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
-          }
-        }
+      "EntitySubjectSet": {
+        "type": "string",
+        "enum": [
+          "administrator",
+          "member"
+        ]
       },
       "EntityTemporalMetadata": {
         "type": "object",
@@ -3480,7 +4120,8 @@
           "transactionTime": {
             "$ref": "#/components/schemas/LeftClosedTemporalInterval"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "EntityTypeEditorSubject": {
         "oneOf": [
@@ -3523,6 +4164,64 @@
         ],
         "discriminator": {
           "propertyName": "kind"
+        }
+      },
+      "EntityTypeEmbedding": {
+        "type": "object",
+        "required": [
+          "entityTypeId",
+          "embedding"
+        ],
+        "properties": {
+          "embedding": {
+            "$ref": "#/components/schemas/Embedding"
+          },
+          "entityTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          }
+        }
+      },
+      "EntityTypeIdDiff": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "added",
+              "op"
+            ],
+            "properties": {
+              "added": {
+                "$ref": "#/components/schemas/VersionedUrl"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "added"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "removed",
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "removed"
+                ]
+              },
+              "removed": {
+                "$ref": "#/components/schemas/VersionedUrl"
+              }
+            }
+          }
+        ],
+        "discriminator": {
+          "propertyName": "op"
         }
       },
       "EntityTypeInstantiatorSubject": {
@@ -3604,7 +4303,7 @@
                 "$ref": "#/components/schemas/OwnedById"
               },
               "provenance": {
-                "$ref": "#/components/schemas/OntologyProvenanceMetadata"
+                "$ref": "#/components/schemas/OntologyProvenance"
               },
               "recordId": {
                 "$ref": "#/components/schemas/OntologyTypeRecordId"
@@ -3634,7 +4333,7 @@
                 "$ref": "#/components/schemas/BaseUrl"
               },
               "provenance": {
-                "$ref": "#/components/schemas/OntologyProvenanceMetadata"
+                "$ref": "#/components/schemas/OntologyProvenance"
               },
               "recordId": {
                 "$ref": "#/components/schemas/OntologyTypeRecordId"
@@ -3687,8 +4386,6 @@
           "version",
           "versionedUrl",
           "ownedById",
-          "editionCreatedById",
-          "editionArchivedById",
           "title",
           "description",
           "examples",
@@ -3696,9 +4393,11 @@
           "required",
           "labelProperty",
           "icon",
+          "editionProvenance",
           "links",
           "inheritsFrom",
-          "children"
+          "children",
+          "embedding"
         ]
       },
       "EntityTypeRelationAndSubject": {
@@ -3829,29 +4528,6 @@
           "propertyName": "kind"
         }
       },
-      "EntityTypeStructuralQuery": {
-        "type": "object",
-        "required": [
-          "filter",
-          "graphResolveDepths",
-          "temporalAxes",
-          "includeDrafts"
-        ],
-        "properties": {
-          "filter": {
-            "$ref": "#/components/schemas/Filter"
-          },
-          "graphResolveDepths": {
-            "$ref": "#/components/schemas/GraphResolveDepths"
-          },
-          "includeDrafts": {
-            "type": "boolean"
-          },
-          "temporalAxes": {
-            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
-          }
-        }
-      },
       "EntityTypeVertexId": {
         "type": "object",
         "required": [
@@ -3860,7 +4536,7 @@
         ],
         "properties": {
           "baseId": {
-            "$ref": "./models/shared.json#/definitions/BaseUrl"
+            "$ref": "#/components/schemas/BaseUrl"
           },
           "revisionId": {
             "$ref": "#/components/schemas/OntologyTypeVersion"
@@ -3903,6 +4579,22 @@
       "EntityUuid": {
         "type": "string",
         "format": "uuid"
+      },
+      "EntityValidationType": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "./models/entity_type.json"
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionedUrl"
+            }
+          }
+        ]
       },
       "EntityVertexId": {
         "type": "object",
@@ -3957,6 +4649,7 @@
             "type": "object",
             "required": [
               "subjectId",
+              "subjectSet",
               "kind"
             ],
             "properties": {
@@ -3968,6 +4661,9 @@
               },
               "subjectId": {
                 "$ref": "#/components/schemas/AccountGroupId"
+              },
+              "subjectSet": {
+                "$ref": "#/components/schemas/EntitySubjectSet"
               }
             }
           }
@@ -4045,6 +4741,74 @@
             ],
             "properties": {
               "notEqual": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FilterExpression"
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "GreaterFilter",
+            "required": [
+              "notEqual"
+            ],
+            "properties": {
+              "greater": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FilterExpression"
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "GreaterOrEqualFilter",
+            "required": [
+              "notEqual"
+            ],
+            "properties": {
+              "greaterOrEqual": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FilterExpression"
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "LessFilter",
+            "required": [
+              "notEqual"
+            ],
+            "properties": {
+              "less": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FilterExpression"
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "LessOrEqualFilter",
+            "required": [
+              "notEqual"
+            ],
+            "properties": {
+              "lessOrEqual": {
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/FilterExpression"
@@ -4175,6 +4939,513 @@
           }
         ]
       },
+      "GetDataTypeSubgraphParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "graphResolveDepths",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "after": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "graphResolveDepths": {
+            "$ref": "#/components/schemas/GraphResolveDepths"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetDataTypeSubgraphResponse": {
+        "type": "object",
+        "required": [
+          "subgraph"
+        ],
+        "properties": {
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "subgraph": {
+            "$ref": "#/components/schemas/Subgraph"
+          }
+        }
+      },
+      "GetDataTypesParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "after": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetDataTypesResponse": {
+        "type": "object",
+        "required": [
+          "dataTypes"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "dataTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataTypeWithMetadata"
+            }
+          }
+        }
+      },
+      "GetEntitiesRequest": {
+        "type": "object",
+        "required": [
+          "filter",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityQueryCursor"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "sortingPaths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityQuerySortingRecord"
+            },
+            "nullable": true
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetEntitiesResponse": {
+        "type": "object",
+        "required": [
+          "entities"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityQueryCursor"
+              }
+            ],
+            "nullable": true
+          },
+          "entities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entity"
+            }
+          }
+        }
+      },
+      "GetEntitySubgraphRequest": {
+        "type": "object",
+        "required": [
+          "filter",
+          "graphResolveDepths",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityQueryCursor"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "graphResolveDepths": {
+            "$ref": "#/components/schemas/GraphResolveDepths"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "sortingPaths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityQuerySortingRecord"
+            },
+            "nullable": true
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetEntitySubgraphResponse": {
+        "type": "object",
+        "required": [
+          "subgraph"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityQueryCursor"
+              }
+            ],
+            "nullable": true
+          },
+          "subgraph": {
+            "$ref": "#/components/schemas/Subgraph"
+          }
+        }
+      },
+      "GetEntityTypeSubgraphParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "graphResolveDepths",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "after": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "graphResolveDepths": {
+            "$ref": "#/components/schemas/GraphResolveDepths"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetEntityTypeSubgraphResponse": {
+        "type": "object",
+        "required": [
+          "subgraph"
+        ],
+        "properties": {
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "subgraph": {
+            "$ref": "#/components/schemas/Subgraph"
+          }
+        }
+      },
+      "GetEntityTypesParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "after": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetEntityTypesResponse": {
+        "type": "object",
+        "required": [
+          "entityTypes"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "entityTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityTypeWithMetadata"
+            }
+          }
+        }
+      },
+      "GetPropertyTypeSubgraphParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "graphResolveDepths",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "after": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PropertyTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "graphResolveDepths": {
+            "$ref": "#/components/schemas/GraphResolveDepths"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetPropertyTypeSubgraphResponse": {
+        "type": "object",
+        "required": [
+          "subgraph"
+        ],
+        "properties": {
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PropertyTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "subgraph": {
+            "$ref": "#/components/schemas/Subgraph"
+          }
+        }
+      },
+      "GetPropertyTypesParams": {
+        "type": "object",
+        "required": [
+          "filter",
+          "temporalAxes",
+          "includeDrafts"
+        ],
+        "properties": {
+          "after": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PropertyTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "includeCount": {
+            "type": "boolean"
+          },
+          "includeDrafts": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "temporalAxes": {
+            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetPropertyTypesResponse": {
+        "type": "object",
+        "required": [
+          "propertyTypes"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "cursor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PropertyTypeVertexId"
+              }
+            ],
+            "nullable": true
+          },
+          "propertyTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyTypeWithMetadata"
+            }
+          }
+        }
+      },
       "GraphElementVertexId": {
         "oneOf": [
           {
@@ -4193,7 +5464,6 @@
       },
       "GraphResolveDepths": {
         "type": "object",
-        "description": "TODO: DOC - <https://app.asana.com/0/0/1203438518991188/f>",
         "required": [
           "inheritsFrom",
           "constrainsValuesOn",
@@ -4229,7 +5499,76 @@
           "isOfType": {
             "$ref": "#/components/schemas/OutgoingEdgeResolveDepth"
           }
-        }
+        },
+        "additionalProperties": false
+      },
+      "InferredEntityProvenance": {
+        "type": "object",
+        "required": [
+          "createdById",
+          "createdAtTransactionTime",
+          "createdAtDecisionTime"
+        ],
+        "properties": {
+          "createdAtDecisionTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "createdAtTransactionTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "createdById": {
+            "$ref": "#/components/schemas/CreatedById"
+          },
+          "firstNonDraftCreatedAtDecisionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
+          "firstNonDraftCreatedAtTransactionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "InsertAccountGroupIdParams": {
+        "type": "object",
+        "properties": {
+          "accountGroupId": {
+            "$ref": "#/components/schemas/AccountGroupId"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InsertAccountIdParams": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "$ref": "#/components/schemas/AccountId"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InsertWebIdParams": {
+        "type": "object",
+        "required": [
+          "ownedById",
+          "owner"
+        ],
+        "properties": {
+          "ownedById": {
+            "$ref": "#/components/schemas/OwnedById"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/WebOwnerSubject"
+          }
+        },
+        "additionalProperties": false
       },
       "KnowledgeGraphEdgeKind": {
         "type": "string",
@@ -4378,31 +5717,41 @@
         }
       },
       "LinkData": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/EntityLinkOrder"
-          },
-          {
-            "type": "object",
-            "required": [
-              "leftEntityId",
-              "rightEntityId"
-            ],
-            "properties": {
-              "leftEntityId": {
-                "$ref": "#/components/schemas/EntityId"
-              },
-              "rightEntityId": {
-                "$ref": "#/components/schemas/EntityId"
-              }
-            }
-          }
+        "type": "object",
+        "description": "The associated information for 'Link' entities",
+        "required": [
+          "leftEntityId",
+          "rightEntityId"
         ],
-        "description": "The associated information for 'Link' entities"
-      },
-      "LinkOrder": {
-        "type": "integer",
-        "format": "int32"
+        "properties": {
+          "leftEntityConfidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "leftEntityId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "leftEntityProvenance": {
+            "$ref": "#/components/schemas/PropertyProvenance"
+          },
+          "rightEntityConfidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "rightEntityId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "rightEntityProvenance": {
+            "$ref": "#/components/schemas/PropertyProvenance"
+          }
+        },
+        "additionalProperties": false
       },
       "LoadExternalDataTypeRequest": {
         "oneOf": [
@@ -4413,7 +5762,7 @@
             ],
             "properties": {
               "dataTypeId": {
-                "$ref": "./models/shared.json#/definitions/VersionedUrl"
+                "$ref": "#/components/schemas/VersionedUrl"
               }
             }
           },
@@ -4424,6 +5773,9 @@
               "relationships"
             ],
             "properties": {
+              "provenance": {
+                "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
+              },
               "relationships": {
                 "type": "array",
                 "items": {
@@ -4446,7 +5798,7 @@
             ],
             "properties": {
               "entityTypeId": {
-                "$ref": "./models/shared.json#/definitions/VersionedUrl"
+                "$ref": "#/components/schemas/VersionedUrl"
               }
             }
           },
@@ -4461,8 +5813,16 @@
                 "type": "string",
                 "nullable": true
               },
-              "label_property": {
-                "$ref": "./models/shared.json#/definitions/BaseUrl"
+              "labelProperty": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/BaseUrl"
+                  }
+                ],
+                "nullable": true
+              },
+              "provenance": {
+                "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
               },
               "relationships": {
                 "type": "array",
@@ -4486,7 +5846,7 @@
             ],
             "properties": {
               "propertyTypeId": {
-                "$ref": "./models/shared.json#/definitions/VersionedUrl"
+                "$ref": "#/components/schemas/VersionedUrl"
               }
             }
           },
@@ -4497,6 +5857,9 @@
               "relationships"
             ],
             "properties": {
+              "provenance": {
+                "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
+              },
               "relationships": {
                 "type": "array",
                 "items": {
@@ -4509,6 +5872,26 @@
             }
           }
         ]
+      },
+      "Location": {
+        "type": "object",
+        "description": "A location where the source material can be found.",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Encapsulates a message intended to be read by the end user."
+          },
+          "name": {
+            "type": "string",
+            "description": "A string containing the name of the location."
+          },
+          "uri": {
+            "type": "string",
+            "format": "uri",
+            "description": "A string containing a valid relative or absolute URI."
+          }
+        },
+        "additionalProperties": false
       },
       "MaybeListOfDataTypeMetadata": {
         "oneOf": [
@@ -4653,10 +6036,33 @@
           }
         }
       },
+      "NullOrdering": {
+        "type": "string",
+        "enum": [
+          "first",
+          "last"
+        ]
+      },
       "NullableTimestamp": {
         "type": "string",
         "format": "date-time",
         "nullable": true
+      },
+      "ObjectMetadata": {
+        "type": "object",
+        "properties": {
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/PropertyProvenance"
+          }
+        },
+        "additionalProperties": false
       },
       "OntologyEdgeKind": {
         "type": "string",
@@ -4668,24 +6074,30 @@
           "CONSTRAINS_LINK_DESTINATIONS_ON"
         ]
       },
-      "OntologyEditionProvenanceMetadata": {
-        "type": "object",
-        "required": [
-          "createdById"
-        ],
-        "properties": {
-          "archivedById": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/EditionArchivedById"
-              }
-            ],
-            "nullable": true
+      "OntologyEditionProvenance": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           },
-          "createdById": {
-            "$ref": "#/components/schemas/EditionCreatedById"
+          {
+            "type": "object",
+            "required": [
+              "createdById"
+            ],
+            "properties": {
+              "archivedById": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EditionArchivedById"
+                  }
+                ]
+              },
+              "createdById": {
+                "$ref": "#/components/schemas/EditionCreatedById"
+              }
+            }
           }
-        }
+        ]
       },
       "OntologyOutwardEdge": {
         "oneOf": [
@@ -4731,16 +6143,17 @@
           }
         ]
       },
-      "OntologyProvenanceMetadata": {
+      "OntologyProvenance": {
         "type": "object",
         "required": [
           "edition"
         ],
         "properties": {
           "edition": {
-            "$ref": "#/components/schemas/OntologyEditionProvenanceMetadata"
+            "$ref": "#/components/schemas/OntologyEditionProvenance"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OntologyTemporalMetadata": {
         "type": "object",
@@ -4751,7 +6164,8 @@
           "transactionTime": {
             "$ref": "#/components/schemas/LeftClosedTemporalInterval"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OntologyTypeRecordId": {
         "type": "object",
@@ -4902,6 +6316,257 @@
           "propertyName": "kind"
         }
       },
+      "Ordering": {
+        "type": "string",
+        "enum": [
+          "ascending",
+          "descending"
+        ]
+      },
+      "OriginProvenance": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "apiKeyPublicId": {
+                "type": "string"
+              },
+              "deviceId": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "semanticVersion": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "web-app"
+                ]
+              },
+              "userAgent": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "description": "The origin version, in whatever format the origin natively\nprovides."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "apiKeyPublicId": {
+                "type": "string"
+              },
+              "deviceId": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "semanticVersion": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "mobile-app"
+                ]
+              },
+              "userAgent": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "description": "The origin version, in whatever format the origin natively\nprovides."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "apiKeyPublicId": {
+                "type": "string"
+              },
+              "deviceId": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "semanticVersion": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "browser-extension"
+                ]
+              },
+              "userAgent": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "description": "The origin version, in whatever format the origin natively\nprovides."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "apiKeyPublicId": {
+                "type": "string"
+              },
+              "deviceId": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "semanticVersion": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "api"
+                ]
+              },
+              "userAgent": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "description": "The origin version, in whatever format the origin natively\nprovides."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "apiKeyPublicId": {
+                "type": "string"
+              },
+              "deviceId": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "semanticVersion": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "stepIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "flow"
+                ]
+              },
+              "userAgent": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "description": "The origin version, in whatever format the origin natively\nprovides."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "apiKeyPublicId": {
+                "type": "string"
+              },
+              "deviceId": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "semanticVersion": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "migration"
+                ]
+              },
+              "userAgent": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "description": "The origin version, in whatever format the origin natively\nprovides."
+              }
+            }
+          }
+        ]
+      },
       "OutgoingEdgeResolveDepth": {
         "type": "object",
         "required": [
@@ -4913,11 +6578,59 @@
             "format": "int32",
             "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OwnedById": {
         "type": "string",
         "format": "uuid"
+      },
+      "PatchEntityParams": {
+        "type": "object",
+        "required": [
+          "entityId"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "decisionTime": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
+          "draft": {
+            "type": "boolean"
+          },
+          "entityId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "entityTypeIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionedUrl"
+            }
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyPatchOperation"
+            }
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedEntityEditionProvenance"
+          }
+        },
+        "additionalProperties": false
       },
       "PermissionResponse": {
         "type": "object",
@@ -4929,6 +6642,262 @@
             "type": "boolean"
           }
         }
+      },
+      "Property": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            }
+          },
+          {
+            "$ref": "#/components/schemas/PropertyObject"
+          },
+          {}
+        ]
+      },
+      "PropertyDiff": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "added",
+              "op"
+            ],
+            "properties": {
+              "added": {
+                "$ref": "#/components/schemas/Property"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "added"
+                ]
+              },
+              "path": {
+                "$ref": "#/components/schemas/PropertyPath"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "removed",
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "removed"
+                ]
+              },
+              "path": {
+                "$ref": "#/components/schemas/PropertyPath"
+              },
+              "removed": {
+                "$ref": "#/components/schemas/Property"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "old",
+              "new",
+              "op"
+            ],
+            "properties": {
+              "new": {
+                "$ref": "#/components/schemas/Property"
+              },
+              "old": {
+                "$ref": "#/components/schemas/Property"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "changed"
+                ]
+              },
+              "path": {
+                "$ref": "#/components/schemas/PropertyPath"
+              }
+            }
+          }
+        ],
+        "discriminator": {
+          "propertyName": "op"
+        }
+      },
+      "PropertyMetadata": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "PropertyMetadataArray",
+            "properties": {
+              "metadata": {
+                "$ref": "#/components/schemas/ArrayMetadata"
+              },
+              "value": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PropertyMetadata"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "PropertyMetadataObject",
+            "properties": {
+              "metadata": {
+                "$ref": "#/components/schemas/ObjectMetadata"
+              },
+              "value": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/PropertyMetadata"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "PropertyMetadataValue",
+            "required": [
+              "metadata"
+            ],
+            "properties": {
+              "metadata": {
+                "$ref": "#/components/schemas/ValueMetadata"
+              }
+            }
+          }
+        ]
+      },
+      "PropertyMetadataObject": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ObjectMetadata"
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PropertyMetadata"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PropertyObject": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Property"
+        }
+      },
+      "PropertyPatchOperation": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "property",
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "add"
+                ]
+              },
+              "path": {
+                "$ref": "#/components/schemas/PropertyPath"
+              },
+              "property": {
+                "$ref": "#/components/schemas/PropertyWithMetadata"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              },
+              "path": {
+                "$ref": "#/components/schemas/PropertyPath"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "property",
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "replace"
+                ]
+              },
+              "path": {
+                "$ref": "#/components/schemas/PropertyPath"
+              },
+              "property": {
+                "$ref": "#/components/schemas/PropertyWithMetadata"
+              }
+            }
+          }
+        ],
+        "discriminator": {
+          "propertyName": "op"
+        }
+      },
+      "PropertyPath": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PropertyPathElement"
+        }
+      },
+      "PropertyPathElement": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/BaseUrl"
+          },
+          {
+            "type": "integer",
+            "minimum": 0
+          }
+        ]
+      },
+      "PropertyProvenance": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceProvenance"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "PropertyTypeEditorSubject": {
         "oneOf": [
@@ -4973,6 +6942,21 @@
           "propertyName": "kind"
         }
       },
+      "PropertyTypeEmbedding": {
+        "type": "object",
+        "required": [
+          "propertyTypeId",
+          "embedding"
+        ],
+        "properties": {
+          "embedding": {
+            "$ref": "#/components/schemas/Embedding"
+          },
+          "propertyTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          }
+        }
+      },
       "PropertyTypeMetadata": {
         "oneOf": [
           {
@@ -4989,7 +6973,7 @@
                 "$ref": "#/components/schemas/OwnedById"
               },
               "provenance": {
-                "$ref": "#/components/schemas/OntologyProvenanceMetadata"
+                "$ref": "#/components/schemas/OntologyProvenance"
               },
               "recordId": {
                 "$ref": "#/components/schemas/OntologyTypeRecordId"
@@ -5013,7 +6997,7 @@
                 "$ref": "#/components/schemas/Timestamp"
               },
               "provenance": {
-                "$ref": "#/components/schemas/OntologyProvenanceMetadata"
+                "$ref": "#/components/schemas/OntologyProvenance"
               },
               "recordId": {
                 "$ref": "#/components/schemas/OntologyTypeRecordId"
@@ -5065,12 +7049,12 @@
           "version",
           "versionedUrl",
           "ownedById",
-          "editionCreatedById",
-          "editionArchivedById",
           "title",
           "description",
+          "editionProvenance",
           "dataTypes",
-          "propertyTypes"
+          "propertyTypes",
+          "embedding"
         ]
       },
       "PropertyTypeRelationAndSubject": {
@@ -5183,29 +7167,6 @@
           "propertyName": "kind"
         }
       },
-      "PropertyTypeStructuralQuery": {
-        "type": "object",
-        "required": [
-          "filter",
-          "graphResolveDepths",
-          "temporalAxes",
-          "includeDrafts"
-        ],
-        "properties": {
-          "filter": {
-            "$ref": "#/components/schemas/Filter"
-          },
-          "graphResolveDepths": {
-            "$ref": "#/components/schemas/GraphResolveDepths"
-          },
-          "includeDrafts": {
-            "type": "boolean"
-          },
-          "temporalAxes": {
-            "$ref": "#/components/schemas/QueryTemporalAxesUnresolved"
-          }
-        }
-      },
       "PropertyTypeVertexId": {
         "type": "object",
         "required": [
@@ -5214,7 +7175,7 @@
         ],
         "properties": {
           "baseId": {
-            "$ref": "./models/shared.json#/definitions/BaseUrl"
+            "$ref": "#/components/schemas/BaseUrl"
           },
           "revisionId": {
             "$ref": "#/components/schemas/OntologyTypeVersion"
@@ -5253,6 +7214,110 @@
             "$ref": "./models/property_type.json"
           }
         }
+      },
+      "PropertyWithMetadata": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "PropertyWithMetadataArray",
+            "properties": {
+              "metadata": {
+                "$ref": "#/components/schemas/ArrayMetadata"
+              },
+              "value": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PropertyWithMetadata"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "PropertyWithMetadataObject",
+            "properties": {
+              "metadata": {
+                "$ref": "#/components/schemas/ObjectMetadata"
+              },
+              "value": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/PropertyWithMetadata"
+                }
+              }
+            }
+          },
+          {
+            "$ref": "#/components/schemas/ValueWithMetadata"
+          }
+        ]
+      },
+      "PropertyWithMetadataObject": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ObjectMetadata"
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PropertyWithMetadata"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvidedEntityEditionProvenance": {
+        "type": "object",
+        "properties": {
+          "actorType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorType"
+              }
+            ]
+          },
+          "origin": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OriginProvenance"
+              }
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceProvenance"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvidedOntologyEditionProvenance": {
+        "type": "object",
+        "properties": {
+          "actorType": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ActorType"
+              }
+            ]
+          },
+          "origin": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OriginProvenance"
+              }
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceProvenance"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "QueryTemporalAxes": {
         "oneOf": [
@@ -5461,6 +7526,69 @@
           "IS_OF_TYPE"
         ]
       },
+      "SourceProvenance": {
+        "type": "object",
+        "description": "The source material used in producing a value.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "authors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The people or organizations that authored the material."
+          },
+          "entityId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EntityId"
+              }
+            ]
+          },
+          "firstPublished": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
+          "lastUpdated": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
+          "loadedAt": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
+          "location": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Location"
+              }
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/SourceType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SourceType": {
+        "type": "string",
+        "description": "The type of source material which was used to produce a value.",
+        "enum": [
+          "webpage",
+          "document"
+        ]
+      },
       "Subgraph": {
         "type": "object",
         "required": [
@@ -5577,38 +7705,50 @@
           "transactionTime"
         ]
       },
-      "UnarchiveDataTypeRequest": {
+      "UnarchiveDataTypeParams": {
         "type": "object",
         "required": [
-          "typeToUnarchive"
+          "dataTypeId"
         ],
         "properties": {
-          "typeToUnarchive": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "dataTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "UnarchiveEntityTypeRequest": {
+      "UnarchiveEntityTypeParams": {
         "type": "object",
         "required": [
-          "typeToUnarchive"
+          "entityTypeId"
         ],
         "properties": {
-          "typeToUnarchive": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "entityTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "UnarchivePropertyTypeRequest": {
+      "UnarchivePropertyTypeParams": {
         "type": "object",
         "required": [
-          "typeToUnarchive"
+          "propertyTypeId"
         ],
         "properties": {
-          "typeToUnarchive": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "propertyTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UnresolvedRightBoundedTemporalInterval": {
         "type": "object",
@@ -5635,6 +7775,30 @@
           }
         }
       },
+      "UpdateDataTypeEmbeddingParams": {
+        "type": "object",
+        "required": [
+          "dataTypeId",
+          "embedding",
+          "updatedAtTransactionTime",
+          "reset"
+        ],
+        "properties": {
+          "dataTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/Embedding"
+          },
+          "reset": {
+            "type": "boolean"
+          },
+          "updatedAtTransactionTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateDataTypeRequest": {
         "type": "object",
         "required": [
@@ -5643,6 +7807,9 @@
           "relationships"
         ],
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
+          },
           "relationships": {
             "type": "array",
             "items": {
@@ -5653,43 +7820,65 @@
             "$ref": "./models/update_data_type.json"
           },
           "typeToUpdate": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+            "$ref": "#/components/schemas/VersionedUrl"
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "UpdateEntityRequest": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/EntityLinkOrder"
-          },
-          {
-            "type": "object",
-            "required": [
-              "properties",
-              "entityId",
-              "entityTypeId",
-              "archived",
-              "draft"
-            ],
-            "properties": {
-              "archived": {
-                "type": "boolean"
-              },
-              "draft": {
-                "type": "boolean"
-              },
-              "entityId": {
-                "$ref": "#/components/schemas/EntityId"
-              },
-              "entityTypeId": {
-                "$ref": "./models/shared.json#/definitions/VersionedUrl"
-              },
-              "properties": {
-                "$ref": "#/components/schemas/EntityProperties"
-              }
+      "UpdateEntityEmbeddingsParams": {
+        "type": "object",
+        "required": [
+          "entityId",
+          "embeddings",
+          "updatedAtTransactionTime",
+          "updatedAtDecisionTime",
+          "reset"
+        ],
+        "properties": {
+          "embeddings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityEmbedding"
             }
+          },
+          "entityId": {
+            "$ref": "#/components/schemas/EntityId"
+          },
+          "reset": {
+            "type": "boolean"
+          },
+          "updatedAtDecisionTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAtTransactionTime": {
+            "$ref": "#/components/schemas/Timestamp"
           }
-        ]
+        },
+        "additionalProperties": false
+      },
+      "UpdateEntityTypeEmbeddingParams": {
+        "type": "object",
+        "required": [
+          "entityTypeId",
+          "embedding",
+          "updatedAtTransactionTime",
+          "reset"
+        ],
+        "properties": {
+          "embedding": {
+            "$ref": "#/components/schemas/Embedding"
+          },
+          "entityTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          },
+          "reset": {
+            "type": "boolean"
+          },
+          "updatedAtTransactionTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateEntityTypeRequest": {
         "type": "object",
@@ -5704,7 +7893,15 @@
             "nullable": true
           },
           "labelProperty": {
-            "$ref": "./models/shared.json#/definitions/BaseUrl"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BaseUrl"
+              }
+            ],
+            "nullable": true
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
           },
           "relationships": {
             "type": "array",
@@ -5716,9 +7913,34 @@
             "$ref": "./models/update_entity_type.json"
           },
           "typeToUpdate": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+            "$ref": "#/components/schemas/VersionedUrl"
           }
-        }
+        },
+        "additionalProperties": false
+      },
+      "UpdatePropertyTypeEmbeddingParams": {
+        "type": "object",
+        "required": [
+          "propertyTypeId",
+          "embedding",
+          "updatedAtTransactionTime",
+          "reset"
+        ],
+        "properties": {
+          "embedding": {
+            "$ref": "#/components/schemas/Embedding"
+          },
+          "propertyTypeId": {
+            "$ref": "#/components/schemas/VersionedUrl"
+          },
+          "reset": {
+            "type": "boolean"
+          },
+          "updatedAtTransactionTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "additionalProperties": false
       },
       "UpdatePropertyTypeRequest": {
         "type": "object",
@@ -5728,6 +7950,9 @@
           "relationships"
         ],
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/ProvidedOntologyEditionProvenance"
+          },
           "relationships": {
             "type": "array",
             "items": {
@@ -5738,49 +7963,96 @@
             "$ref": "./models/update_property_type.json"
           },
           "typeToUpdate": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+            "$ref": "#/components/schemas/VersionedUrl"
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "ValidateEntityRequest": {
+      "ValidateEntityComponents": {
         "type": "object",
-        "required": [
-          "entityTypeId",
-          "properties",
-          "operations",
-          "draft"
-        ],
         "properties": {
-          "draft": {
+          "linkData": {
             "type": "boolean"
           },
-          "entityTypeId": {
-            "$ref": "./models/shared.json#/definitions/VersionedUrl"
+          "numItems": {
+            "type": "boolean"
+          },
+          "requiredProperties": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValidateEntityParams": {
+        "type": "object",
+        "required": [
+          "entityTypes",
+          "properties"
+        ],
+        "properties": {
+          "components": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ValidateEntityComponents"
+              }
+            ]
+          },
+          "entityTypes": {
+            "$ref": "#/components/schemas/EntityValidationType"
           },
           "linkData": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/LinkData"
               }
-            ],
-            "nullable": true
-          },
-          "operations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ValidationOperation"
-            }
+            ]
           },
           "properties": {
-            "$ref": "#/components/schemas/EntityProperties"
+            "$ref": "#/components/schemas/PropertyWithMetadataObject"
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "ValidationOperation": {
+      "ValueMetadata": {
+        "type": "object",
+        "properties": {
+          "confidence": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Confidence"
+              }
+            ]
+          },
+          "dataTypeId": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VersionedUrl"
+              }
+            ]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/PropertyProvenance"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValueWithMetadata": {
+        "type": "object",
+        "required": [
+          "value",
+          "metadata"
+        ],
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ValueMetadata"
+          },
+          "value": {}
+        },
+        "additionalProperties": false
+      },
+      "VersionedUrl": {
         "type": "string",
-        "enum": [
-          "all"
-        ]
+        "format": "uri"
       },
       "Vertex": {
         "oneOf": [

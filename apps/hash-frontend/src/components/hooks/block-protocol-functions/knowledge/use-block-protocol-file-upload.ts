@@ -1,9 +1,10 @@
 import { useMutation } from "@apollo/client";
-import { File as FileEntityType } from "@local/hash-isomorphic-utils/system-types/file";
-import { OwnedById } from "@local/hash-subgraph";
+import { Entity } from "@local/hash-graph-sdk/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import type { File } from "@local/hash-isomorphic-utils/system-types/shared";
 import { useCallback } from "react";
 
-import {
+import type {
   CreateFileFromUrlMutation,
   CreateFileFromUrlMutationVariables,
   RequestFileUploadMutation,
@@ -14,7 +15,7 @@ import {
   requestFileUpload,
 } from "../../../../graphql/queries/knowledge/file.queries";
 import { uploadFileToStorageProvider } from "../../../../shared/upload-to-storage-provider";
-import { UploadFileRequestCallback } from "./knowledge-shim";
+import type { UploadFileRequestCallback } from "./knowledge-shim";
 
 export const useBlockProtocolFileUpload = (
   ownedById?: OwnedById,
@@ -77,7 +78,7 @@ export const useBlockProtocolFileUpload = (
 
         const { createFileFromUrl: fileEntity } = result.data;
 
-        return { data: fileEntity as unknown as FileEntityType };
+        return { data: new Entity<File>(fileEntity) };
       }
 
       if (!("file" in fileUploadData)) {
@@ -130,7 +131,7 @@ export const useBlockProtocolFileUpload = (
 
       await uploadFileToStorageProvider(presignedPut, file);
 
-      return { data: uploadedFileEntity as unknown as FileEntityType };
+      return { data: new Entity<File>(uploadedFileEntity) };
     },
     [createFileFromUrlFn, ownedById, requestFileUploadFn],
   );

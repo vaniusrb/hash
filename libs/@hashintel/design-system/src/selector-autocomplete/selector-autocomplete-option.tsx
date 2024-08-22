@@ -1,8 +1,9 @@
-import { BaseUrl, EntityPropertiesObject } from "@blockprotocol/graph";
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { EntityPropertiesObject } from "@blockprotocol/graph";
+import type { BaseUrl, VersionedUrl } from "@blockprotocol/type-system/slim";
 import { Box, Paper, Popper, Stack, Tooltip, Typography } from "@mui/material";
 import clsx from "clsx";
-import { HTMLAttributes, ReactNode, useRef, useState } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
+import { useRef, useState } from "react";
 
 import { Chip } from "../chip";
 import { GRID_CLICK_IGNORE_CLASS } from "../constants";
@@ -34,7 +35,6 @@ export type SelectorAutocompleteOptionProps = {
   draft?: boolean;
 };
 
-// This assumes a hash.ai/blockprotocol.org type URL format ending in [slugified-title]/v/[number]
 const slugToTitleCase = (slug?: string) =>
   slug
     ? slug
@@ -77,7 +77,7 @@ export const SelectorAutocompleteOption = ({
   return (
     <li
       {...liProps}
-      data-testid="property-selector-option"
+      data-testid="selector-autocomplete-option"
       /** added GRID_CLICK_IGNORE_CLASS to be able to use this selector with Grid component */
       className={clsx(liProps.className, GRID_CLICK_IGNORE_CLASS)}
       onMouseEnter={onMouseEnter}

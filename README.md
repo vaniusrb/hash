@@ -1,8 +1,7 @@
-[discord]: https://hash.ai/discord?utm_medium=organic&utm_source=github_readme_hash-repo_root
-[hash.ai]: https://hash.ai?utm_medium=organic&utm_source=github_readme_hash-repo_root
-[hash.dev]: https://hash.dev?utm_medium=organic&utm_source=github_readme_hash-repo_root
+[app.hash.ai]: https://app.hash.ai?utm_medium=organic&utm_source=github_readme_hash-repo_root
 [development roadmap]: https://hash.dev/roadmap?utm_medium=organic&utm_source=github_readme_hash-repo_root
 [hiring]: https://hash.ai/careers?utm_medium=organic&utm_source=github_readme_hash-repo_root
+[running your own instance]: https://hash.dev/docs/get-started/setup#local-hash?utm_medium=organic&utm_source=github_readme_hash-repo_root
 
 <!-- markdownlint-disable link-fragments -->
 
@@ -21,7 +20,7 @@
 
 [![github_banner](https://hash.ai/cdn-cgi/imagedelivery/EipKtqu98OotgfhvKf6Eew/ec83e48d-5a46-4c3f-a603-5d9fc43ff400/github)][github_banner]
 
-[![discord](https://img.shields.io/discord/840573247803097118)][discord] [![github_star](https://img.shields.io/github/stars/hashintel/hash?label=Star%20on%20GitHub&style=social)][github_star]
+[![github_star](https://img.shields.io/github/stars/hashintel/hash?label=Star%20on%20GitHub&style=social)][github_star]
 
 # HASH
 
@@ -29,14 +28,12 @@ This is HASH's _public monorepo_ which contains our public code, docs, and other
 
 ## [![a](/.github/assets/gh_icon_what-is-hash_20px-base.svg)][gh-what-is-hash] &nbsp; What is HASH?
 
-**HASH is a platform for decision-making, which helps you integrate, understand and use data in a variety of different ways.**
-
-HASH does this by combining various different powerful tools together into one simple interface. These range from data pipelines and a graph database, through to an all-in-one workspace, no-code tool builder, and agent-based simulation engine. These exist at varying stages of maturity, and while some are polished, not all are ready for real-world production use. You can read more about our big-picture vision at [hash.dev]
+**HASH is a self-buliding, open-source database which grows, structures and checks itself.** With it, we're creating a platform for decision-making, which helps you integrate, understand and use data in a variety of different ways. [Read our blog post →](https://hash.ai/blog/self-building-database)
 
 ## [![a](/.github/assets/gh_icon_getting-started_20px-base.svg)][gh-getting-started] &nbsp; Getting started
 
-- 🚀 &nbsp; **Quick-start (<5 mins):** try the full hosted platform at [hash.ai], ready to go in seconds
-- 🤖 &nbsp; **Self-hosting:** check out our developer site at [hash.dev] for a guide to running your own instance of HASH
+- 🚀 &nbsp; **Quick-start (<5 mins):** try the full hosted platform at [app.hash.ai], ready to go in seconds
+- 🤖 &nbsp; **Self-hosting:** check out our developer guide to [running your own instance] of HASH
 
 ## [![a](/.github/assets/gh_icon_examples_20px-base.svg)][gh-examples] &nbsp; Examples
 
@@ -72,6 +69,6 @@ Please see [SECURITY](.github/SECURITY.md) for instructions around reporting iss
 
 ## [![a](/.github/assets/gh_icon_contact_20px-base.svg)][gh-contact] &nbsp; Contact
 
-Find us on 𝕏 at [@hashintel](https://x.com/hashintel), email [hey@hash.ai](mailto:hey@hash.ai), or join our [Discord] forum for quick help and community support.
+Find us on 𝕏 at [@hashintel](https://x.com/hashintel), email [hey@hash.ai](mailto:hey@hash.ai), create a [discussion](https://github.com/orgs/hashintel/discussions), or open an [issue](https://github.com/hashintel/hash/issues/new/choose) for quick help and community support.
 
 Project permalink: `https://github.com/hashintel/hash`

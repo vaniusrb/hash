@@ -1,5 +1,4 @@
 import { Grid } from "../../../../../../components/grid/grid";
-import { useDrawCell } from "../../../../../../components/grid/utils/use-draw-cell";
 import { renderChipCell } from "../../../../../shared/chip-cell";
 import { renderSummaryChipCell } from "../shared/summary-chip-cell";
 import { renderLinkCell } from "./link-table/cells/link-cell";
@@ -15,7 +14,6 @@ interface LinkTableProps {
 
 export const LinkTable = ({ showSearch, onSearchClose }: LinkTableProps) => {
   const rows = useRows();
-  const drawCell = useDrawCell();
   const createGetCellContent = useCreateGetCellContent();
 
   return (
@@ -23,7 +21,7 @@ export const LinkTable = ({ showSearch, onSearchClose }: LinkTableProps) => {
       columns={linkGridColumns}
       rows={rows}
       createGetCellContent={createGetCellContent}
-      drawCell={drawCell}
+      dataLoading={false}
       showSearch={showSearch}
       onSearchClose={onSearchClose}
       // define max height if there are lots of rows

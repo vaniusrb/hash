@@ -9,6 +9,7 @@ export const getEntityTypeQuery = gql`
     $constrainsLinksOn: OutgoingEdgeResolveDepthInput!
     $constrainsLinkDestinationsOn: OutgoingEdgeResolveDepthInput!
     $inheritsFrom: OutgoingEdgeResolveDepthInput!
+    $includeArchived: Boolean = false
   ) {
     getEntityType(
       entityTypeId: $entityTypeId
@@ -17,6 +18,7 @@ export const getEntityTypeQuery = gql`
       constrainsLinksOn: $constrainsLinksOn
       constrainsLinkDestinationsOn: $constrainsLinkDestinationsOn
       inheritsFrom: $inheritsFrom
+      includeArchived: $includeArchived
     ) {
       ...SubgraphFields
     }
@@ -30,6 +32,7 @@ export const queryEntityTypesQuery = gql`
     $constrainsPropertiesOn: OutgoingEdgeResolveDepthInput!
     $constrainsLinksOn: OutgoingEdgeResolveDepthInput!
     $constrainsLinkDestinationsOn: OutgoingEdgeResolveDepthInput!
+    $filter: Filter
     $inheritsFrom: OutgoingEdgeResolveDepthInput!
     $latestOnly: Boolean = true
     $includeArchived: Boolean = false
@@ -39,6 +42,7 @@ export const queryEntityTypesQuery = gql`
       constrainsPropertiesOn: $constrainsPropertiesOn
       constrainsLinksOn: $constrainsLinksOn
       constrainsLinkDestinationsOn: $constrainsLinkDestinationsOn
+      filter: $filter
       inheritsFrom: $inheritsFrom
       latestOnly: $latestOnly
       includeArchived: $includeArchived
@@ -54,12 +58,14 @@ export const createEntityTypeMutation = gql`
     $ownedById: OwnedById!
     $entityType: ConstructEntityTypeParams!
     $icon: String
+    $labelProperty: BaseUrl
   ) {
     # This is a scalar, which has no selection.
     createEntityType(
       ownedById: $ownedById
       entityType: $entityType
       icon: $icon
+      labelProperty: $labelProperty
     )
   }
 `;
@@ -69,11 +75,13 @@ export const updateEntityTypeMutation = gql`
     $entityTypeId: VersionedUrl!
     $updatedEntityType: ConstructEntityTypeParams!
     $icon: String
+    $labelProperty: BaseUrl
   ) {
     updateEntityType(
       entityTypeId: $entityTypeId
       updatedEntityType: $updatedEntityType
       icon: $icon
+      labelProperty: $labelProperty
     )
   }
 `;
@@ -87,5 +95,11 @@ export const archiveEntityTypeMutation = gql`
 export const unarchiveEntityTypeMutation = gql`
   mutation unarchiveEntityType($entityTypeId: VersionedUrl!) {
     unarchiveEntityType(entityTypeId: $entityTypeId)
+  }
+`;
+
+export const checkUserPermissionsOnEntityTypeQuery = gql`
+  query checkUserPermissionsOnEntityType($entityTypeId: VersionedUrl!) {
+    checkUserPermissionsOnEntityType(entityTypeId: $entityTypeId)
   }
 `;

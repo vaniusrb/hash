@@ -1,0 +1,34 @@
+{
+  "name": "@blockprotocol/type-system-rs",
+  "version": "0.0.0-private",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./pkg/type-system.js",
+    "./wasm": "./pkg/type-system_bg.wasm"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./pkg/type-system.d.ts"
+      ],
+      "wasm": [
+        "./pkg/type-system_bg.wasm.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "build:wasm": "wasm-pack build --target web --out-name type-system --scope blockprotocol --release . && rm pkg/package.json",
+    "fix:clippy": "just clippy --fix",
+    "lint:clippy": "just clippy && just clippy --target wasm32-unknown-unknown",
+    "test:unit": "cargo hack nextest run --feature-powerset --all-targets && cargo test --all-features --doc"
+  },
+  "dependencies": {
+    "@rust/codec": "0.0.0-private"
+  },
+  "devDependencies": {
+    "@rust/graph-test-data": "0.0.0-private",
+    "wasm-pack": "0.13.0"
+  }
+}

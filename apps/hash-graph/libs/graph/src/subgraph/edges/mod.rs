@@ -2,11 +2,12 @@ mod edge;
 mod endpoint;
 mod kind;
 
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    fmt::Debug,
+use alloc::collections::BTreeMap;
+use core::{
+    fmt::{self, Debug},
     hash::Hash,
 };
+use std::collections::{HashMap, HashSet};
 
 pub use self::{
     edge::{EdgeDirection, OutwardEdge},
@@ -128,7 +129,7 @@ where
     K: Debug,
     E: EdgeEndpointSet + Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AdjacencyList")
             .field("edges", &self.edges)
             .finish()
@@ -149,4 +150,6 @@ pub struct Edges {
         AdjacencyList<PropertyTypeVertexId, OntologyEdgeKind, HashSet<PropertyTypeVertexId>>,
     pub property_type_to_data_type:
         AdjacencyList<PropertyTypeVertexId, OntologyEdgeKind, HashSet<DataTypeVertexId>>,
+    pub data_type_to_data_type:
+        AdjacencyList<DataTypeVertexId, OntologyEdgeKind, HashSet<DataTypeVertexId>>,
 }

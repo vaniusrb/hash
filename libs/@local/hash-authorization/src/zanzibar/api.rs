@@ -1,25 +1,34 @@
 use std::collections::HashMap;
 
 use error_stack::{Report, Result, ResultExt};
+use futures::{Stream, TryStreamExt};
 use graph_types::{
     account::{AccountGroupId, AccountId},
     knowledge::entity::{EntityId, EntityUuid},
+    ontology::{DataTypeId, EntityTypeId, PropertyTypeId},
     owned_by_id::OwnedById,
 };
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
     backend::{
-        CheckError, CheckResponse, ModifyRelationError, ModifyRelationshipOperation, ReadError,
-        RpcError, ZanzibarBackend,
+        BulkCheckItem, BulkCheckResponse, CheckError, CheckResponse, DeleteRelationshipError,
+        DeleteRelationshipResponse, ExportSchemaError, ExportSchemaResponse, ImportSchemaError,
+        ImportSchemaResponse, ModifyRelationError, ModifyRelationshipError,
+        ModifyRelationshipOperation, ModifyRelationshipResponse, ReadError, RpcError,
+        ZanzibarBackend,
     },
     schema::{
-        AccountGroupPermission, AccountGroupRelationAndSubject, DataTypeId, DataTypePermission,
+        AccountGroupPermission, AccountGroupRelationAndSubject, DataTypePermission,
         DataTypeRelationAndSubject, EntityPermission, EntityRelationAndSubject, EntitySetting,
-        EntityTypeId, EntityTypePermission, EntityTypeRelationAndSubject, PropertyTypeId,
-        PropertyTypePermission, PropertyTypeRelationAndSubject, SettingName,
-        SettingRelationAndSubject, SettingSubject, WebPermission, WebRelationAndSubject,
+        EntityTypePermission, EntityTypeRelationAndSubject, PropertyTypePermission,
+        PropertyTypeRelationAndSubject, SettingName, SettingRelationAndSubject, SettingSubject,
+        WebPermission, WebRelationAndSubject,
     },
-    zanzibar::{types::RelationshipFilter, Consistency, Zookie},
+    zanzibar::{
+        types::{Relationship, RelationshipFilter, Resource, Subject},
+        Consistency, Permission, Zookie,
+    },
     AuthorizationApi,
 };
 
@@ -31,10 +40,6 @@ pub struct ZanzibarClient<B> {
 impl<B> ZanzibarClient<B> {
     pub const fn new(backend: B) -> Self {
         Self { backend }
-    }
-
-    pub fn into_backend(self) -> B {
-        self.backend
     }
 }
 
@@ -85,6 +90,7 @@ where
     ////////////////////////////////////////////////////////////////////////////
     // Account group authorization
     ////////////////////////////////////////////////////////////////////////////
+    #[tracing::instrument(level = "info", skip(self))]
     async fn check_account_group_permission(
         &self,
         actor: AccountId,
@@ -97,6 +103,7 @@ where
             .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, relationships))]
     async fn modify_account_group_relations(
         &mut self,
         relationships: impl IntoIterator<
@@ -121,6 +128,7 @@ where
     ////////////////////////////////////////////////////////////////////////////
     // Web authorization
     ////////////////////////////////////////////////////////////////////////////
+    #[tracing::instrument(level = "info", skip(self))]
     async fn check_web_permission(
         &self,
         actor: AccountId,
@@ -133,6 +141,7 @@ where
             .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, relationships))]
     async fn modify_web_relations(
         &mut self,
         relationships: impl IntoIterator<
@@ -156,24 +165,25 @@ where
             .written_at)
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn get_web_relations(
         &self,
         web: OwnedById,
         consistency: Consistency<'static>,
     ) -> Result<Vec<WebRelationAndSubject>, ReadError> {
-        Ok(self
-            .backend
+        self.backend
             .read_relations::<(OwnedById, WebRelationAndSubject)>(
                 RelationshipFilter::from_resource(web),
                 consistency,
             )
             .await
             .change_context(ReadError)?
-            .into_iter()
-            .map(|(_, relation)| relation)
-            .collect())
+            .map_ok(|(_, relation)| relation)
+            .try_collect()
+            .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, relationships))]
     async fn modify_entity_relations(
         &mut self,
         relationships: impl IntoIterator<
@@ -195,6 +205,7 @@ where
             .written_at)
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn check_entity_permission(
         &self,
         actor: AccountId,
@@ -207,6 +218,7 @@ where
             .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, entities))]
     async fn check_entities_permission(
         &self,
         actor: AccountId,
@@ -248,24 +260,25 @@ where
             .map(|()| (permissions, response.checked_at))
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn get_entity_relations(
         &self,
         entity: EntityId,
         consistency: Consistency<'static>,
     ) -> Result<Vec<EntityRelationAndSubject>, ReadError> {
-        Ok(self
-            .backend
+        self.backend
             .read_relations::<(EntityUuid, EntityRelationAndSubject)>(
                 RelationshipFilter::from_resource(entity.entity_uuid),
                 consistency,
             )
             .await
             .change_context(ReadError)?
-            .into_iter()
-            .map(|(_, relation)| relation)
-            .collect())
+            .map_ok(|(_, relation)| relation)
+            .try_collect()
+            .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, relationships))]
     async fn modify_entity_type_relations(
         &mut self,
         relationships: impl IntoIterator<
@@ -289,6 +302,7 @@ where
             .written_at)
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn check_entity_type_permission(
         &self,
         actor: AccountId,
@@ -301,6 +315,7 @@ where
             .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, entity_types))]
     async fn check_entity_types_permission(
         &self,
         actor: AccountId,
@@ -342,24 +357,25 @@ where
             .map(|()| (permissions, response.checked_at))
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn get_entity_type_relations(
         &self,
         entity_type: EntityTypeId,
         consistency: Consistency<'static>,
     ) -> Result<Vec<EntityTypeRelationAndSubject>, ReadError> {
-        Ok(self
-            .backend
+        self.backend
             .read_relations::<(EntityTypeId, EntityTypeRelationAndSubject)>(
                 RelationshipFilter::from_resource(entity_type),
                 consistency,
             )
             .await
             .change_context(ReadError)?
-            .into_iter()
-            .map(|(_, relation)| relation)
-            .collect())
+            .map_ok(|(_, relation)| relation)
+            .try_collect()
+            .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, relationships))]
     async fn modify_property_type_relations(
         &mut self,
         relationships: impl IntoIterator<
@@ -385,6 +401,7 @@ where
             .written_at)
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn check_property_type_permission(
         &self,
         actor: AccountId,
@@ -397,6 +414,7 @@ where
             .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, property_types))]
     async fn check_property_types_permission(
         &self,
         actor: AccountId,
@@ -438,24 +456,25 @@ where
             .map(|()| (permissions, response.checked_at))
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn get_property_type_relations(
         &self,
         property_type: PropertyTypeId,
         consistency: Consistency<'static>,
     ) -> Result<Vec<PropertyTypeRelationAndSubject>, ReadError> {
-        Ok(self
-            .backend
+        self.backend
             .read_relations::<(PropertyTypeId, PropertyTypeRelationAndSubject)>(
                 RelationshipFilter::from_resource(property_type),
                 consistency,
             )
             .await
             .change_context(ReadError)?
-            .into_iter()
-            .map(|(_, relation)| relation)
-            .collect())
+            .map_ok(|(_, relation)| relation)
+            .try_collect()
+            .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, relationships))]
     async fn modify_data_type_relations(
         &mut self,
         relationships: impl IntoIterator<
@@ -479,6 +498,7 @@ where
             .written_at)
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn check_data_type_permission(
         &self,
         actor: AccountId,
@@ -491,6 +511,7 @@ where
             .await
     }
 
+    #[tracing::instrument(level = "info", skip(self, data_types))]
     async fn check_data_types_permission(
         &self,
         actor: AccountId,
@@ -532,21 +553,131 @@ where
             .map(|()| (permissions, response.checked_at))
     }
 
+    #[tracing::instrument(level = "info", skip(self))]
     async fn get_data_type_relations(
         &self,
         data_type: DataTypeId,
         consistency: Consistency<'static>,
     ) -> Result<Vec<DataTypeRelationAndSubject>, ReadError> {
-        Ok(self
-            .backend
+        self.backend
             .read_relations::<(DataTypeId, DataTypeRelationAndSubject)>(
                 RelationshipFilter::from_resource(data_type),
                 consistency,
             )
             .await
             .change_context(ReadError)?
-            .into_iter()
-            .map(|(_, relation)| relation)
-            .collect())
+            .map_ok(|(_, relation)| relation)
+            .try_collect()
+            .await
+    }
+}
+
+impl<B> ZanzibarBackend for ZanzibarClient<B>
+where
+    B: ZanzibarBackend + Send + Sync,
+{
+    async fn import_schema(
+        &mut self,
+        schema: &str,
+    ) -> Result<ImportSchemaResponse, ImportSchemaError> {
+        self.backend.import_schema(schema).await
+    }
+
+    async fn export_schema(&self) -> Result<ExportSchemaResponse, ExportSchemaError> {
+        self.backend.export_schema().await
+    }
+
+    async fn modify_relationships<R>(
+        &mut self,
+        relationships: impl IntoIterator<Item = (ModifyRelationshipOperation, R), IntoIter: Send> + Send,
+    ) -> Result<ModifyRelationshipResponse, ModifyRelationshipError>
+    where
+        R: Relationship<
+                Resource: Resource<Kind: Serialize, Id: Serialize>,
+                Relation: Serialize,
+                Subject: Resource<Kind: Serialize, Id: Serialize>,
+                SubjectSet: Serialize,
+            > + Send
+            + Sync,
+    {
+        self.backend.modify_relationships(relationships).await
+    }
+
+    async fn check_permission<O, R, S>(
+        &self,
+        resource: &O,
+        permission: &R,
+        subject: &S,
+        consistency: Consistency<'_>,
+    ) -> Result<CheckResponse, CheckError>
+    where
+        O: Resource<Kind: Serialize, Id: Serialize> + Sync,
+        R: Serialize + Permission<O> + Sync,
+        S: Subject<Resource: Resource<Kind: Serialize, Id: Serialize>, Relation: Serialize> + Sync,
+    {
+        self.backend
+            .check_permission(resource, permission, subject, consistency)
+            .await
+    }
+
+    async fn check_permissions<O, R, S>(
+        &self,
+        relationships: impl IntoIterator<Item = (O, R, S)> + Send,
+        consistency: Consistency<'_>,
+    ) -> Result<BulkCheckResponse<impl IntoIterator<Item = BulkCheckItem<O, R, S>>>, CheckError>
+    where
+        O: Resource<Kind: Serialize + DeserializeOwned, Id: Serialize + DeserializeOwned>
+            + Send
+            + Sync,
+        R: Serialize + DeserializeOwned + Permission<O> + Send + Sync,
+        S: Subject<
+                Resource: Resource<
+                    Kind: Serialize + DeserializeOwned,
+                    Id: Serialize + DeserializeOwned,
+                >,
+                Relation: Serialize + DeserializeOwned,
+            > + Send
+            + Sync,
+    {
+        self.backend
+            .check_permissions(relationships, consistency)
+            .await
+    }
+
+    async fn read_relations<R>(
+        &self,
+        filter: RelationshipFilter<
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+        >,
+        consistency: Consistency<'_>,
+    ) -> Result<impl Stream<Item = Result<R, ReadError>> + Send, ReadError>
+    where
+        for<'de> R: Relationship<
+                Resource: Resource<Kind: Deserialize<'de>, Id: Deserialize<'de>>,
+                Relation: Deserialize<'de>,
+                Subject: Resource<Kind: Deserialize<'de>, Id: Deserialize<'de>>,
+                SubjectSet: Deserialize<'de>,
+            > + Send,
+    {
+        self.backend.read_relations(filter, consistency).await
+    }
+
+    async fn delete_relations(
+        &mut self,
+        filter: RelationshipFilter<
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+            impl Serialize + Send + Sync,
+        >,
+    ) -> Result<DeleteRelationshipResponse, DeleteRelationshipError> {
+        self.backend.delete_relations(filter).await
     }
 }

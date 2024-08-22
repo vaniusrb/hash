@@ -1,7 +1,8 @@
-import { DataTypeRootType, DataTypeWithMetadata } from "@local/hash-subgraph";
+import type { DataTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { DataTypeRootType } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
 import { Box, Container, Typography } from "@mui/material";
-import { GetServerSideProps } from "next";
+import type { GetServerSideProps } from "next";
 import { NextSeo } from "next-seo";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -9,7 +10,8 @@ import { useBlockProtocolQueryDataTypes } from "../../components/hooks/block-pro
 import { useLatestEntityTypesOptional } from "../../shared/entity-types-context/hooks";
 import { useEntityTypesContextRequired } from "../../shared/entity-types-context/hooks/use-entity-types-context-required";
 import { FilesLightIcon } from "../../shared/icons/files-light-icon";
-import { getLayoutWithSidebar, NextPageWithLayout } from "../../shared/layout";
+import type { NextPageWithLayout } from "../../shared/layout";
+import { getLayoutWithSidebar } from "../../shared/layout";
 import { usePropertyTypes } from "../../shared/property-types-context";
 import { TopContextBar } from "../shared/top-context-bar";
 import {

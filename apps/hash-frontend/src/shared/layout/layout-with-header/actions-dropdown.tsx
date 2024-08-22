@@ -10,8 +10,10 @@ import {
   Box,
   Divider,
   ListItemIcon,
+  listItemIconClasses,
   listItemSecondaryActionClasses,
   ListItemText,
+  listItemTextClasses,
   Menu,
   Typography,
   useTheme,
@@ -21,11 +23,14 @@ import {
   bindTrigger,
   usePopupState,
 } from "material-ui-popup-state/hooks";
-import { FunctionComponent, useContext } from "react";
+import type { FunctionComponent } from "react";
+import { useContext } from "react";
 
 import { useHashInstance } from "../../../components/hooks/use-hash-instance";
+import { useEnabledFeatureFlags } from "../../../pages/shared/use-enabled-feature-flags";
 import { WorkspaceContext } from "../../../pages/shared/workspace-context";
 import { HashtagRegularIcon } from "../../icons/hashtag-regular-icon";
+import { InfinitySolidIcon } from "../../icons/infinity-solid-icon";
 import { UploadRegularIcon } from "../../icons/upload-regular-icon";
 import { MenuItem } from "../../ui";
 import { CreatePageMenuItems } from "./actions-dropdown/create-page-menu-items";
@@ -40,6 +45,8 @@ const ActionsDropdownInner: FunctionComponent = () => {
     variant: "popover",
     popupId: "actions-dropdown-menu",
   });
+
+  const enabledFeatureFlags = useEnabledFeatureFlags();
 
   return (
     <Box>
@@ -92,7 +99,8 @@ const ActionsDropdownInner: FunctionComponent = () => {
         >
           Create New
         </Typography>
-        {hashInstance?.properties.pagesAreEnabled ? (
+        {hashInstance?.properties.pagesAreEnabled &&
+        enabledFeatureFlags.pages ? (
           <CreatePageMenuItems onClick={popupState.close} />
         ) : null}
         <MenuItem href="/new/entity" onClick={popupState.close}>
@@ -125,6 +133,29 @@ const ActionsDropdownInner: FunctionComponent = () => {
             <UploadRegularIcon />
           </ListItemIcon>
           <ListItemText primary="Upload a file" />
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          href="/settings/integrations"
+          onClick={popupState.close}
+          sx={{
+            [`& .${listItemTextClasses.primary}, .${listItemIconClasses.root} svg`]:
+              {
+                color: ({ palette }) => palette.blue[70],
+                fontWeight: 600,
+              },
+            "&:hover": {
+              [`& .${listItemTextClasses.primary}, .${listItemIconClasses.root} svg`]:
+                {
+                  color: ({ palette }) => palette.blue[70],
+                },
+            },
+          }}
+        >
+          <ListItemIcon>
+            <InfinitySolidIcon />
+          </ListItemIcon>
+          <ListItemText primary="Sync external data" />
         </MenuItem>
       </Menu>
     </Box>

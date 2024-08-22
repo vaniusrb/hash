@@ -1,15 +1,34 @@
-use std::fmt;
+use core::fmt;
 
-use crate::store::postgres::query::{Condition, Transpile};
+use crate::store::{
+    postgres::query::{expression::conditional::Transpiler, Condition, Expression, Transpile},
+    NullOrdering, Ordering,
+};
 
-#[derive(Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct WhereExpression {
     conditions: Vec<Condition>,
+    cursor: Vec<(
+        Expression,
+        Option<Expression>,
+        Ordering,
+        Option<NullOrdering>,
+    )>,
 }
 
 impl WhereExpression {
     pub fn add_condition(&mut self, condition: Condition) {
         self.conditions.push(condition);
+    }
+
+    pub fn add_cursor(
+        &mut self,
+        lhs: Expression,
+        rhs: Option<Expression>,
+        ordering: Ordering,
+        null_location: Option<NullOrdering>,
+    ) {
+        self.cursor.push((lhs, rhs, ordering, null_location));
     }
 
     pub fn len(&self) -> usize {
@@ -23,11 +42,11 @@ impl WhereExpression {
 
 impl Transpile for WhereExpression {
     fn transpile(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        if self.conditions.is_empty() {
+        if self.conditions.is_empty() && self.cursor.is_empty() {
             return Ok(());
         }
-
         fmt.write_str("WHERE ")?;
+
         for (idx, condition) in self.conditions.iter().enumerate() {
             if idx > 0 {
                 fmt.write_str(" AND ")?;
@@ -35,13 +54,73 @@ impl Transpile for WhereExpression {
             condition.transpile(fmt)?;
         }
 
+        let mut outer_statements = Vec::new();
+        for current in (0..self.cursor.len()).rev() {
+            let mut inner_statements = Vec::new();
+            for (idx, (lhs, rhs, ordering, null)) in self.cursor.iter().enumerate() {
+                if idx == current {
+                    if let Some(rhs) = rhs {
+                        let statement = format!(
+                            "{} {} {}",
+                            Transpiler(lhs),
+                            match ordering {
+                                Ordering::Ascending => '>',
+                                Ordering::Descending => '<',
+                            },
+                            Transpiler(rhs),
+                        );
+
+                        match null {
+                            None | Some(NullOrdering::First) => {
+                                inner_statements.push(statement);
+                            }
+                            Some(NullOrdering::Last) => {
+                                // If the ordering is ascending, we need to check if the lhs is null
+                                // as nulls are sorted last.
+                                inner_statements.push(format!(
+                                    "({} OR {} IS NULL)",
+                                    statement,
+                                    Transpiler(lhs)
+                                ));
+                            }
+                        }
+                    } else {
+                        match null {
+                            None | Some(NullOrdering::First) => {
+                                inner_statements.push(format!("{} IS NOT NULL", Transpiler(lhs)));
+                            }
+                            Some(NullOrdering::Last) => {
+                                // If the cursor is `null` and the ordering is ascending, we need to
+                                // skip this condition
+                                inner_statements.clear();
+                                break;
+                            }
+                        }
+                    }
+
+                    break;
+                }
+
+                if let Some(rhs) = rhs {
+                    inner_statements.push(format!("{} = {}", Transpiler(lhs), Transpiler(rhs)));
+                } else {
+                    inner_statements.push(format!("{} IS NULL", Transpiler(lhs)));
+                }
+            }
+            if !inner_statements.is_empty() {
+                outer_statements.push(inner_statements.join(" AND "));
+            }
+        }
+        if !outer_statements.is_empty() {
+            write!(fmt, " AND (\n    {}\n)", outer_statements.join("\n OR "))?;
+        }
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use alloc::borrow::Cow;
 
     use graph_types::ontology::DataTypeWithMetadata;
 

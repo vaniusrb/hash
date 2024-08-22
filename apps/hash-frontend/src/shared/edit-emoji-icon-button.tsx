@@ -4,23 +4,17 @@ import {
   fontAwesomeIconClasses,
   IconButton,
 } from "@hashintel/design-system";
-import { Box, iconButtonClasses, SxProps, Theme, Tooltip } from "@mui/material";
-import { SystemStyleObject } from "@mui/system";
-import { BaseEmoji } from "emoji-mart";
+import type { SxProps, Theme } from "@mui/material";
+import { Box, iconButtonClasses, Tooltip } from "@mui/material";
+import type { SystemStyleObject } from "@mui/system";
+import type { BaseEmoji } from "emoji-mart";
 import { bindTrigger, usePopupState } from "material-ui-popup-state/hooks";
-import {
-  FunctionComponent,
-  MouseEventHandler,
-  ReactNode,
-  useCallback,
-  useState,
-} from "react";
+import type { FunctionComponent, MouseEventHandler, ReactNode } from "react";
+import { useCallback, useState } from "react";
 
 import { useDefaultState } from "../components/hooks/use-default-state";
-import {
-  EmojiPicker,
-  EmojiPickerPopoverProps,
-} from "./edit-emoji-icon-button/emoji-picker/emoji-picker";
+import type { EmojiPickerPopoverProps } from "./edit-emoji-icon-button/emoji-picker/emoji-picker";
+import { EmojiPicker } from "./edit-emoji-icon-button/emoji-picker/emoji-picker";
 
 export type SizeVariant = "small" | "medium";
 
@@ -85,67 +79,75 @@ export const EditEmojiIconButton: FunctionComponent<
 
   const sizes = iconVariantSizes[size];
 
+  const buttonIsDisabled = disabled || loading;
+
+  const buttonContent = (
+    <IconButton
+      {...trigger}
+      onClick={(event) => {
+        onClick?.(event);
+        trigger.onClick(event);
+      }}
+      sx={[
+        ({ palette }) => {
+          const background = hasDarkBg ? palette.gray[40] : palette.gray[30];
+
+          const hoverState: SystemStyleObject = {
+            background,
+            ...(hasDarkBg && {
+              [`.${fontAwesomeIconClasses.icon}`]: {
+                color: palette.gray[50],
+              },
+            }),
+          };
+          return {
+            p: 0,
+            ...(popupState.isOpen && hoverState),
+            "&:focus-visible, &:hover": hoverState,
+            [`&.${iconButtonClasses.disabled}`]: { color: "unset" },
+          };
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
+      disabled={buttonIsDisabled}
+    >
+      <Box
+        sx={[
+          {
+            width: sizes.container,
+            height: sizes.container,
+            fontSize: sizes.font,
+            fontFamily: "auto",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            svg: {
+              fontSize: `${sizes.font}px !important`,
+            },
+          },
+        ]}
+      >
+        {icon ?? defaultIcon ?? (
+          <FontAwesomeIcon
+            icon={faAsterisk}
+            sx={(theme) => ({
+              color: theme.palette.gray[40],
+            })}
+          />
+        )}
+      </Box>
+    </IconButton>
+  );
+
   return (
     <>
-      <Tooltip title="Change icon" placement="bottom">
-        <IconButton
-          {...trigger}
-          onClick={(event) => {
-            onClick?.(event);
-            trigger.onClick(event);
-          }}
-          sx={[
-            ({ palette }) => {
-              const background = hasDarkBg
-                ? palette.gray[40]
-                : palette.gray[30];
-
-              const hoverState: SystemStyleObject = {
-                background,
-                ...(hasDarkBg && {
-                  [`.${fontAwesomeIconClasses.icon}`]: {
-                    color: palette.gray[50],
-                  },
-                }),
-              };
-              return {
-                p: 0,
-                ...(popupState.isOpen && hoverState),
-                "&:focus-visible, &:hover": hoverState,
-                [`&.${iconButtonClasses.disabled}`]: { color: "unset" },
-              };
-            },
-            ...(Array.isArray(sx) ? sx : [sx]),
-          ]}
-          disabled={disabled || loading}
-        >
-          <Box
-            sx={[
-              {
-                width: sizes.container,
-                height: sizes.container,
-                fontSize: sizes.font,
-                fontFamily: "auto",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                svg: {
-                  fontSize: `${sizes.font}px !important`,
-                },
-              },
-            ]}
-          >
-            {icon ?? defaultIcon ?? (
-              <FontAwesomeIcon
-                icon={faAsterisk}
-                sx={(theme) => ({
-                  color: theme.palette.gray[40],
-                })}
-              />
-            )}
-          </Box>
-        </IconButton>
-      </Tooltip>
+      {buttonIsDisabled ? (
+        buttonContent
+      ) : (
+        <Tooltip title="Change icon" placement="bottom">
+          {buttonContent}
+        </Tooltip>
+      )}
       <EmojiPicker
         popoverProps={popoverProps}
         popupState={popupState}

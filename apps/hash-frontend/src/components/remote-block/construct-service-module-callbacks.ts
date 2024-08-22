@@ -1,4 +1,4 @@
-import { ServiceEmbedderMessageCallbacks } from "@blockprotocol/service";
+import type { ServiceEmbedderMessageCallbacks } from "@blockprotocol/service";
 import { apiOrigin } from "@local/hash-isomorphic-utils/environment";
 
 type ServiceFunction =
@@ -9,6 +9,7 @@ const callExternalApiMethod = async (params: {
   methodName: string;
   payload: Parameters<ServiceFunction>[0]["data"];
 }): Promise<{
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any;
   errors?: Awaited<ReturnType<ServiceFunction>>["errors"];
 }> => {
@@ -55,13 +56,6 @@ export const serviceModuleCallbacks: ServiceEmbedderMessageCallbacks = {
     callExternalApiMethod({
       providerName: "openai",
       methodName: "createImage",
-      payload,
-    }),
-
-  openaiCompleteText: async ({ data: payload }) =>
-    callExternalApiMethod({
-      providerName: "openai",
-      methodName: "completeText",
       payload,
     }),
 

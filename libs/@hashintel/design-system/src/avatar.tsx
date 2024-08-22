@@ -1,5 +1,6 @@
-import { Box, BoxProps, styled } from "@mui/material";
-import { FunctionComponent } from "react";
+import type { BoxProps } from "@mui/material";
+import { Box, styled } from "@mui/material";
+import type { FunctionComponent } from "react";
 
 import { IconButton } from "./icon-button";
 import { PenRegularIcon } from "./pen-regular-icon";
@@ -44,7 +45,7 @@ export const Avatar: FunctionComponent<AvatarProps> = ({
             justifyContent: "center",
           }),
           background:
-            bgcolor ?? src ? undefined : ({ palette }) => palette.blue[70],
+            (bgcolor ?? src) ? undefined : ({ palette }) => palette.blue[70],
           borderRadius,
           border: ({ palette }) => `1px solid ${palette.gray[20]}`,
         },
@@ -71,6 +72,7 @@ export const Avatar: FunctionComponent<AvatarProps> = ({
             fontSize: size / 2,
             fontWeight: 700,
             lineHeight: 1,
+            overflow: "hidden",
           }}
         >
           {title ? title.charAt(0).toUpperCase() : undefined}

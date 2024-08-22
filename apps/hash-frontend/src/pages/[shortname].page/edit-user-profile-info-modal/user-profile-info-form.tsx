@@ -1,23 +1,27 @@
+import { useMutation } from "@apollo/client";
 import { Select, TextField } from "@hashintel/design-system";
+import type { Entity, LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
   systemPropertyTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { BaseUrl, Entity, OwnedById } from "@local/hash-subgraph";
-import {
-  extractBaseUrl,
-  LinkEntity,
-} from "@local/hash-subgraph/type-system-patch";
+import type { ProfileURLPropertyValueWithMetadata } from "@local/hash-isomorphic-utils/system-types/shared";
 import { Box } from "@mui/material";
-import { FunctionComponent, useCallback, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useState } from "react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 
 import { useBlockProtocolArchiveEntity } from "../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-archive-entity";
 import { useBlockProtocolCreateEntity } from "../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-create-entity";
-import { useBlockProtocolUpdateEntity } from "../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-update-entity";
 import { useUpdateAuthenticatedUser } from "../../../components/hooks/use-update-authenticated-user";
-import {
+import type {
+  UpdateEntityMutation,
+  UpdateEntityMutationVariables,
+} from "../../../graphql/api-types.gen";
+import { updateEntityMutation } from "../../../graphql/queries/knowledge/entity.queries";
+import type {
   ServiceAccountKind,
   User,
   UserServiceAccount,
@@ -34,7 +38,7 @@ export type UserProfileFormServiceAccount = {
 };
 
 export type UserProfileFormData = {
-  preferredName: string;
+  displayName: string;
   location?: string;
   websiteUrl?: string;
   preferredPronouns?: string;
@@ -53,14 +57,18 @@ export const UserProfileInfoForm: FunctionComponent<{
   const { createEntity } = useBlockProtocolCreateEntity(
     userProfile.accountId as OwnedById,
   );
-  const { updateEntity } = useBlockProtocolUpdateEntity();
+
+  const [updateEntity] = useMutation<
+    UpdateEntityMutation,
+    UpdateEntityMutationVariables
+  >(updateEntityMutation);
 
   const formMethods =
     // @ts-expect-error -- type instantiation is excessively deep and possibly infinite, will be fixed when we switch to V8 of react-hook-form (see https://github.com/react-hook-form/react-hook-form/issues/6679)
     useForm<UserProfileFormData>({
       mode: "all",
       defaultValues: {
-        preferredName: userProfile.preferredName,
+        displayName: userProfile.displayName,
         location: userProfile.location,
         websiteUrl: userProfile.websiteUrl,
         preferredPronouns: userProfile.preferredPronouns,
@@ -102,8 +110,7 @@ export const UserProfileInfoForm: FunctionComponent<{
         data: {
           entityTypeId: systemEntityTypes[kind].entityTypeId,
           properties: {
-            [extractBaseUrl(systemPropertyTypes.profileUrl.propertyTypeId)]:
-              profileUrl,
+            [systemPropertyTypes.profileUrl.propertyTypeBaseUrl]: profileUrl,
           },
         },
       });
@@ -135,13 +142,22 @@ export const UserProfileInfoForm: FunctionComponent<{
         serviceAccount: { existingServiceAccountEntity, profileUrl },
       } = params;
       await updateEntity({
-        data: {
-          entityId: existingServiceAccountEntity.metadata.recordId.entityId,
-          entityTypeId: existingServiceAccountEntity.metadata.entityTypeId,
-          properties: {
-            ...existingServiceAccountEntity.properties,
-            [systemPropertyTypes.profileUrl.propertyTypeBaseUrl as BaseUrl]:
-              profileUrl,
+        variables: {
+          entityUpdate: {
+            entityId: existingServiceAccountEntity.metadata.recordId.entityId,
+            propertyPatches: [
+              {
+                op: "add",
+                path: [systemPropertyTypes.profileUrl.propertyTypeBaseUrl],
+                property: {
+                  value: profileUrl,
+                  metadata: {
+                    dataTypeId:
+                      "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                  },
+                } satisfies ProfileURLPropertyValueWithMetadata,
+              },
+            ],
           },
         },
       });
@@ -298,8 +314,8 @@ export const UserProfileInfoForm: FunctionComponent<{
           label="Preferred name"
           placeholder="Enter your preferred name"
           required
-          error={touchedFields.preferredName && !!errors.preferredName}
-          {...register("preferredName", { required: true })}
+          error={touchedFields.displayName && !!errors.displayName}
+          {...register("displayName", { required: true })}
         />
         <TextField
           fullWidth

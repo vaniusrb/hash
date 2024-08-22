@@ -1,16 +1,16 @@
 import { faCircleExclamation } from "@fortawesome/free-solid-svg-icons";
+import type { BoxProps, SelectProps as MuiSelectProps } from "@mui/material";
 import {
   Box,
-  BoxProps,
   Collapse,
   FormHelperText,
   InputLabel,
   outlinedInputClasses,
   Select as MuiSelect,
-  SelectProps as MuiSelectProps,
   Typography,
 } from "@mui/material";
-import { forwardRef, ReactElement, ReactNode, Ref } from "react";
+import type { ReactElement, ReactNode, Ref } from "react";
+import { forwardRef } from "react";
 
 import { FontAwesomeIcon } from "./fontawesome-icon";
 
@@ -76,7 +76,7 @@ const Select = <T,>(
 };
 
 // used the type assertion approach in https://stackoverflow.com/a/58473012
-const SelectForwardRef = forwardRef(Select) as <T extends {}>(
+const SelectForwardRef = forwardRef(Select) as <T extends object | string>(
   p: SelectProps<T> & { ref?: Ref<HTMLSelectElement> },
 ) => ReactElement;
 

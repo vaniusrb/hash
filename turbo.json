@@ -1,48 +1,115 @@
 {
   "$schema": "https://turborepo.org/schema.json",
-  "pipeline": {
-    "codegen": {},
-    "build": {
-      "dependsOn": ["^build", "codegen"]
+  "tasks": {
+    // Install commands
+    "postinstall": {
+      "cache": false
     },
+
+    // Development commands
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["codegen"]
+    },
+
+    // Build commands
+    "codegen": {
+      "dependsOn": ["^build"]
+    },
+    "build": {
+      "dependsOn": ["codegen"]
+    },
+    "build:docker": {
+      "cache": false
+    },
+    "compile": {
+      "cache": false
+    },
+    "compile:release": {
+      "cache": false
+    },
+
+    // Run commands
+    "start:migrate": {
+      "cache": false,
+      "dependsOn": ["build", "^start:healthcheck"]
+    },
+    "start": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["start:migrate"]
+    },
+    "start:healthcheck": {
+      "cache": false,
+      "dependsOn": ["compile:release", "^start:healthcheck"]
+    },
+
+    "start:test:migrate": {
+      "cache": false,
+      "dependsOn": ["build", "^start:test:healthcheck"]
+    },
+    "start:test": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["start:test:migrate"]
+    },
+    "start:test:healthcheck": {
+      "cache": false,
+      "dependsOn": ["compile", "^start:test:healthcheck"]
+    },
+
+    // Test commands
     "test:unit": {
-      "dependsOn": ["^build", "codegen"],
+      "dependsOn": ["codegen"],
       "env": ["TEST_COVERAGE"]
     },
     "test:integration": {
-      "dependsOn": ["^build", "codegen"],
+      "dependsOn": ["codegen", "^start:test:healthcheck"],
       "env": ["TEST_COVERAGE"]
     },
-    "test:system": {},
     "test:miri": {},
-    "dev": {
-      "persistent": true
+
+    // Benchmarks
+    "bench:unit": {
+      "dependsOn": ["codegen"],
+      "cache": false
     },
+    "bench:integration": {
+      "dependsOn": ["codegen", "^start:healthcheck"],
+      "cache": false
+    },
+
+    // Linting and formatting
     "lint": {
-      "dependsOn": ["^build", "codegen"]
+      "dependsOn": ["codegen"]
     },
     "lint:clippy": {},
     "lint:eslint": {
       "env": ["CHECK_TEMPORARILY_DISABLED_RULES"],
-      "dependsOn": ["^build", "codegen"]
+      "dependsOn": ["codegen"]
     },
     "lint:tsc": {
-      "dependsOn": ["^build", "codegen"]
+      "dependsOn": ["codegen"]
     },
     "fix:eslint": {
-      "dependsOn": ["^build", "codegen"]
+      "dependsOn": ["codegen"]
     },
-    "fix:clippy": {}
+    "fix:clippy": {},
+    "sentry:sourcemaps": {
+      "dependsOn": ["build"]
+    }
   },
   "globalDependencies": [
     "**/turbo.json",
-    ".github/actions/**/**/*.yml",
+    ".github/actions/**/*.yml",
     ".github/scripts/**/*.rs",
     ".github/workflows/**/*",
     ".env*",
     ".justfile",
     ".yarnrc",
     "Cargo.toml",
-    "package.json"
+    "package.json",
+    "apps/hash-external-services/**"
   ]
 }

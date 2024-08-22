@@ -3,12 +3,15 @@ import { gql } from "apollo-server-express";
 export const entityTypedef = gql`
   scalar EntityId
   scalar EntityRecordId
-  scalar Entity
-  scalar EntityPropertiesObject
+  scalar SerializedEntity
+  scalar PropertyObject
+  scalar PropertyObjectWithMetadata
   scalar EntityMetadata
-  scalar EntityStructuralQuery
+  scalar EntityRelationAndSubject
+  scalar GetEntitySubgraphRequest
   scalar LinkData
   scalar QueryOperationInput
+  scalar PropertyPatchOperation
   scalar UserPermissions
   scalar UserPermissionsOnEntities
 
@@ -40,7 +43,7 @@ export const entityTypedef = gql`
     """
     The properties of the new entity.
     """
-    entityProperties: EntityPropertiesObject
+    entityProperties: PropertyObjectWithMetadata
     """
     Associated Entities to either create/get and link to this entity.
     """
@@ -71,7 +74,7 @@ export const entityTypedef = gql`
   }
 
   union EntityAuthorizationSubject =
-      AccountGroupAuthorizationSubject
+    | AccountGroupAuthorizationSubject
     | AccountAuthorizationSubject
     | PublicAuthorizationSubject
 
@@ -79,6 +82,14 @@ export const entityTypedef = gql`
     objectEntityId: EntityId!
     relation: EntityAuthorizationRelation!
     subject: EntityAuthorizationSubject!
+  }
+
+  scalar DiffEntityInput
+  scalar DiffEntityResult
+
+  type EntityDiff {
+    input: DiffEntityInput!
+    diff: DiffEntityResult!
   }
 
   extend type Query {
@@ -101,8 +112,8 @@ export const entityTypedef = gql`
       includeDrafts: Boolean
     ): SubgraphAndPermissions!
 
-    structuralQueryEntities(
-      query: EntityStructuralQuery!
+    getEntitySubgraph(
+      request: GetEntitySubgraphRequest!
     ): SubgraphAndPermissions!
 
     """
@@ -135,6 +146,8 @@ export const entityTypedef = gql`
     ): [EntityAuthorizationRelationship!]!
 
     checkUserPermissionsOnEntity(metadata: EntityMetadata!): UserPermissions!
+
+    getEntityDiffs(inputs: [DiffEntityInput!]!): [EntityDiff!]!
   }
 
   enum AuthorizationSubjectKind {
@@ -146,6 +159,25 @@ export const entityTypedef = gql`
   input AuthorizationViewerInput {
     viewer: AuthorizationSubjectId
     kind: AuthorizationSubjectKind!
+  }
+
+  input EntityUpdateDefinition {
+    """
+    The id of the entity.
+    """
+    entityId: EntityId!
+    """
+    The patch operations to apply to the entity's properties
+    """
+    propertyPatches: [PropertyPatchOperation!]!
+    """
+    The new type of the updated entity
+    """
+    entityTypeId: VersionedUrl
+    """
+    Whether the updated entity should be a draft
+    """
+    draft: Boolean
   }
 
   extend type Mutation {
@@ -164,7 +196,7 @@ export const entityTypedef = gql`
       """
       The properties of the new entity.
       """
-      properties: EntityPropertiesObject!
+      properties: PropertyObjectWithMetadata!
       """
       Associated Entities to either create or get, and then link to this entity.
       """
@@ -177,46 +209,41 @@ export const entityTypedef = gql`
       Whether the created entity should be a draft
       """
       draft: Boolean
-    ): Entity!
+      """
+      Set the permission relations on the entity
+      """
+      relationships: [EntityRelationAndSubject!]
+    ): SerializedEntity!
 
     """
     Update an entity.
     """
-    updateEntity(
-      """
-      The id of the entity.
-      """
-      entityId: EntityId!
-      """
-      The updated properties of the entity.
-      """
-      updatedProperties: EntityPropertiesObject!
-      """
-      The updated left to right order of the link entity (if updating a link entity).
-      """
-      leftToRightOrder: Int
-      """
-      The updated right to left order of the link entity (if updating a link entity).
-      """
-      rightToLeftOrder: Int
-      """
-      The new type of the updated entity
-      """
-      entityTypeId: VersionedUrl
-      """
-      Whether the updated entity should be a draft
-      """
-      draft: Boolean
-    ): Entity!
+    updateEntity(entityUpdate: EntityUpdateDefinition!): SerializedEntity!
+
+    """
+    Update multiple entities.
+    """
+    updateEntities(entityUpdates: [EntityUpdateDefinition!]!): SerializedEntity!
 
     """
     Archive an entity.
     """
     archiveEntity(
       """
-      The id of the entity that will be archived.
+      The ID of the entity that will be archived.
       """
       entityId: EntityId!
+    ): Boolean!
+
+    """
+    Archive multiple entities. If archiving any entity fails, any successfully archived
+    entities will be un-archived.
+    """
+    archiveEntities(
+      """
+      The IDs of the entities that will be archived.
+      """
+      entityIds: [EntityId!]!
     ): Boolean!
 
     addEntityOwner(

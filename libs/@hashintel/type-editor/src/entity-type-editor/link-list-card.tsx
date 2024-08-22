@@ -1,4 +1,4 @@
-import { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
 import {
   GraphIcon,
   LinkTypeIcon,
@@ -17,7 +17,7 @@ import {
 import { useFieldArray, useFormContext, useWatch } from "react-hook-form";
 
 import { useEntityTypesOptions } from "../shared/entity-types-options-context";
-import { EntityTypeEditorFormData } from "../shared/form-types";
+import type { EntityTypeEditorFormData } from "../shared/form-types";
 import { useOntologyFunctions } from "../shared/ontology-functions-context";
 import { useIsReadonly } from "../shared/read-only-context";
 import { linkEntityTypeUrl } from "../shared/urls";
@@ -35,20 +35,14 @@ import {
   sortRows,
   useFlashRow,
 } from "./shared/entity-type-table";
-import { TypeSelectorType } from "./shared/insert-property-field/type-selector";
-import {
-  InsertTypeField,
-  InsertTypeFieldProps,
-} from "./shared/insert-type-field";
+import type { TypeSelectorType } from "./shared/insert-property-field/type-selector";
+import type { InsertTypeFieldProps } from "./shared/insert-type-field";
+import { InsertTypeField } from "./shared/insert-type-field";
 import { Link } from "./shared/link";
 import { MultipleValuesCell } from "./shared/multiple-values-cell";
 import { QuestionIcon } from "./shared/question-icon";
-import {
-  TypeForm,
-  TypeFormDefaults,
-  TypeFormModal,
-  TypeFormProps,
-} from "./shared/type-form";
+import type { TypeFormDefaults, TypeFormProps } from "./shared/type-form";
+import { TypeForm, TypeFormModal } from "./shared/type-form";
 import { TYPE_MENU_CELL_WIDTH, TypeMenuCell } from "./shared/type-menu-cell";
 import { useFilterTypeOptions } from "./shared/use-filter-type-options";
 import { useInheritedValuesForCurrentDraft } from "./shared/use-inherited-values";
@@ -65,7 +59,7 @@ const formDataToEntityType = (data: TypeFormDefaults) => ({
     {
       $ref: linkEntityTypeUrl,
     },
-  ],
+  ] satisfies EntityType["allOf"],
   properties: {},
 });
 
@@ -114,14 +108,14 @@ const LinkTypeRow = ({
     name: `links.${linkIndex}.$id`,
   });
 
-  const link = linkTypes[linkId];
+  const linkSchema = linkTypes[linkId]?.schema;
 
   const [currentVersion, latestVersion, baseUrl] = useTypeVersions(
     linkId,
     linkTypes,
   );
 
-  if (!link) {
+  if (!linkSchema) {
     throw new Error(`Link entity type with ${linkId} not found in options`);
   }
 
@@ -137,7 +131,7 @@ const LinkTypeRow = ({
 
     const res = await ontologyFunctions.updateEntityType({
       data: {
-        entityTypeId: link.$id,
+        entityTypeId: linkSchema.$id,
         entityType: formDataToEntityType(data),
       },
     });
@@ -154,7 +148,7 @@ const LinkTypeRow = ({
   const editDisabledReason = useMemo(() => {
     const canEdit = ontologyFunctions?.canEditResource({
       kind: "link-type",
-      resource: link,
+      resource: linkSchema,
     });
 
     return !canEdit?.allowed
@@ -162,7 +156,7 @@ const LinkTypeRow = ({
       : currentVersion !== latestVersion
         ? "Update the link type to the latest version to edit"
         : undefined;
-  }, [ontologyFunctions, link, currentVersion, latestVersion]);
+  }, [ontologyFunctions, linkSchema, currentVersion, latestVersion]);
 
   return (
     <>
@@ -170,14 +164,14 @@ const LinkTypeRow = ({
         <TableCell>
           <EntityTypeTableTitleCellText>
             <Link
-              href={link.$id}
+              href={linkSchema.$id}
               style={{
                 color: "inherit",
                 fontWeight: 500,
                 whiteSpace: "nowrap",
               }}
             >
-              {link.title}
+              {linkSchema.title}
             </Link>
             {currentVersion !== latestVersion && !isReadonly ? (
               <Box ml={1}>
@@ -199,7 +193,7 @@ const LinkTypeRow = ({
         </TableCell>
         <MultipleValuesCell index={linkIndex} variant="link" />
         <TypeMenuCell
-          typeId={link.$id}
+          typeId={linkSchema.$id}
           editButtonProps={bindTrigger(editModalPopupState)}
           editButtonDisabled={editDisabledReason}
           variant="link"
@@ -216,8 +210,8 @@ const LinkTypeRow = ({
           submitButtonProps={{ children: <>Edit link</> }}
           disabledFields={["name"]}
           getDefaultValues={() => ({
-            name: link.title,
-            description: link.description,
+            name: linkSchema.title,
+            description: linkSchema.description,
           })}
         />
       ) : null}
@@ -239,7 +233,7 @@ const InsertLinkField = (
   const linkTypes = useMemo(
     () =>
       Object.values(linkTypeOptions).map((type) => ({
-        ...type,
+        ...type.schema,
         Icon: LinkTypeIcon,
       })),
     [linkTypeOptions],
@@ -281,7 +275,7 @@ export const LinkListCard = () => {
       sortRows(
         [...unsortedFields, ...inheritedLinks],
         (linkId) => linkTypes[linkId],
-        (row) => row.title,
+        (row) => row.schema.title,
       ),
     [inheritedLinks, linkTypes, unsortedFields],
   );
@@ -330,7 +324,7 @@ export const LinkListCard = () => {
       },
     });
 
-    if (res.errors?.length || !res.data) {
+    if (!!res.errors?.length || !res.data) {
       // @todo handle this
       throw new Error("Could not create");
     }
@@ -406,7 +400,7 @@ export const LinkListCard = () => {
                   shouldDirty: true,
                 });
               }}
-              flash={row ? flashingRows.includes(row.$id) : false}
+              flash={row ? flashingRows.includes(row.schema.$id) : false}
             />
           ),
         )}

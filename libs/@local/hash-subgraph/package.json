@@ -2,45 +2,47 @@
   "name": "@local/hash-subgraph",
   "version": "0.0.0-private",
   "private": true,
+  "type": "module",
   "exports": {
-    ".": "./src/main.ts",
-    "./stdlib": "./src/stdlib.ts",
-    "./type-system-patch": "./src/shared/type-system-patch.ts",
-    "./temp": "./src/temp.ts"
+    ".": "./dist/main.js",
+    "./stdlib": "./dist/stdlib.js",
+    "./type-system-patch": "./dist/type-system-patch.js"
   },
-  "types": "./src/main.ts",
+  "types": "./dist/main.d.ts",
   "typesVersions": {
     "*": {
       ".": [
-        "./src/main.ts"
+        "./dist/main.d.ts"
       ],
       "stdlib": [
-        "./src/stdlib.ts"
+        "./dist/stdlib.d.ts"
       ],
       "type-system-patch": [
-        "./src/shared/type-system-patch.ts"
+        "./dist/type-system-patch.d.ts"
       ]
     }
   },
   "scripts": {
+    "build": "rimraf dist && tsc --build tsconfig.build.json",
     "fix:eslint": "eslint --fix .",
     "lint:eslint": "eslint --report-unused-disable-directives .",
     "lint:tsc": "tsc --noEmit",
-    "test:unit": "jest"
+    "test:unit": "vitest --run"
   },
   "dependencies": {
-    "@blockprotocol/graph": "0.3.1-canary-20231207113055",
-    "@blockprotocol/type-system": "0.1.1",
+    "@blockprotocol/graph": "0.4.0-canary.0",
+    "@blockprotocol/type-system": "0.1.2-canary.0",
     "@local/advanced-types": "0.0.0-private",
     "@local/hash-graph-client": "0.0.0-private",
+    "@local/hash-graph-sdk": "0.0.0-private",
+    "@local/hash-graph-types": "0.0.0-private",
     "uuid": "9.0.1"
   },
   "devDependencies": {
     "@local/eslint-config": "0.0.0-private",
-    "@types/jest": "29.5.11",
-    "@types/uuid": "8.3.0",
-    "jest": "29.7.0",
-    "ts-jest": "29.1.1",
-    "typescript": "5.1.6"
+    "@types/uuid": "8.3.4",
+    "@vitest/coverage-istanbul": "2.0.5",
+    "typescript": "5.5.4",
+    "vitest": "2.0.5"
   }
 }

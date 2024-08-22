@@ -1,15 +1,11 @@
 services:
-  type-fetcher:
-    image: hash-graph:prod
-
-  graph-migrate:
-    image: hash-graph:prod
-
-  graph:
-    image: hash-graph:prod
+  postgres:
     environment:
-      RUST_LOG: "${HASH_GRAPH_LOG_LEVEL:-info}"
-      RUST_BACKTRACE: 0
+      HASH_SPICEDB_PG_USER: "${HASH_SPICEDB_PG_USER}"
+      HASH_SPICEDB_PG_PASSWORD: "${HASH_SPICEDB_PG_PASSWORD}"
+      HASH_SPICEDB_PG_DATABASE: "${HASH_SPICEDB_PG_DATABASE}"
+    ports:
+      - "${POSTGRES_PORT}:5432"
 
   kratos-migrate:
     build:
@@ -25,14 +21,15 @@ services:
       COOKIES_PATH: "/"
       COOKIES_DOMAIN: "${KRATOS_COOKIE_DOMAIN}"
       COOKIES_SAME_SITE: "Lax"
+      OAUTH2_PROVIDER_URL: "http://hydra:4445"
       SERVE_PUBLIC_BASE_URL: "${FRONTEND_URL}/api/ory"
       SERVE_PUBLIC_CORS_ALLOWED_HEADERS: "Authorization,Content-Type,X-Session-Token,X-CSRF-Token"
       SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: "${FRONTEND_URL}"
       SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: "${FRONTEND_URL}/"
       SELFSERVICE_ALLOWED_RETURN_URLS: "${FRONTEND_URL}"
       SELFSERVICE_FLOWS_ERROR_UI_URL: "${FRONTEND_URL}/error"
-      SELFSERVICE_FLOWS_LOGOUT_AFTER_DEFAULT_BROWSER_RETURN_URL: "${FRONTEND_URL}/login"
-      SELFSERVICE_FLOWS_LOGIN_UI_URL: "${FRONTEND_URL}/login"
+      SELFSERVICE_FLOWS_LOGOUT_AFTER_DEFAULT_BROWSER_RETURN_URL: "${FRONTEND_URL}/signin"
+      SELFSERVICE_FLOWS_LOGIN_UI_URL: "${FRONTEND_URL}/signin"
       SELFSERVICE_FLOWS_REGISTRATION_UI_URL: "${FRONTEND_URL}/signup"
       SELFSERVICE_METHODS_LINK_CONFIG_BASE_URL: "${FRONTEND_URL}/api/ory"
       SELFSERVICE_FLOWS_VERIFICATION_UI_URL: "${FRONTEND_URL}/verification"
@@ -42,6 +39,145 @@ services:
       COURIER_SMTP_FROM_ADDRESS: "noreply@hash.ai"
       COURIER_SMTP_FROM_NAME: "HASH"
     command: serve --watch-courier
+
+  hydra:
+    environment:
+      SERVE_COOKIES_DOMAIN: "${KRATOS_COOKIE_DOMAIN}"
+      SERVE_COOKIES_SAME_SITE_MODE: "Lax"
+
+  spicedb-migrate:
+    image: authzed/spicedb:v${HASH_SPICEDB_VERSION}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPICEDB_DATASTORE_ENGINE: postgres
+      SPICEDB_DATASTORE_CONN_URI: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${HASH_SPICEDB_PG_DATABASE}"
+      SPICEDB_LOG_FORMAT: "console"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    command: migrate head
+
+  spicedb:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      spicedb-migrate:
+        condition: service_completed_successfully
+    environment:
+      SPICEDB_DATASTORE_ENGINE: postgres
+      SPICEDB_DATASTORE_CONN_URI: "postgres://${HASH_SPICEDB_PG_USER}:${HASH_SPICEDB_PG_PASSWORD}@postgres:${POSTGRES_PORT}/${HASH_SPICEDB_PG_DATABASE}?plan_cache_mode=force_custom_plan"
+      SPICEDB_GRPC_PRESHARED_KEY: "${HASH_SPICEDB_GRPC_PRESHARED_KEY}"
+
+  # TODO: Services below this line are developed by HASH and should not be part of this file
+
+  type-fetcher:
+    init: true
+    image: hash-graph
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - logs:/logs
+    command: type-fetcher
+    ports:
+      - "${HASH_GRAPH_TYPE_FETCHER_PORT}:4455"
+    environment:
+      HASH_GRAPH_LOG_CONSOLE_FORMAT: "${HASH_GRAPH_LOG_CONSOLE_FORMAT:-full}"
+      HASH_GRAPH_LOG_FOLDER: "/logs/graph-type-fetcher"
+      HASH_GRAPH_TYPE_FETCHER_HOST: "0.0.0.0"
+      HASH_GRAPH_TYPE_FETCHER_PORT: "${HASH_GRAPH_TYPE_FETCHER_PORT}"
+      HASH_GRAPH_SENTRY_DSN: "${HASH_TYPE_FETCHER_SENTRY_DSN-}"
+      HASH_GRAPH_LOG_LEVEL: "${HASH_GRAPH_LOG_LEVEL}"
+      RUST_BACKTRACE: 1
+    healthcheck:
+      test: ["CMD", "/hash-graph", "type-fetcher", "--healthcheck"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  graph-migrate:
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    image: hash-graph
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - logs:/logs
+    command: migrate
+    environment:
+      # Intentionally use the POSTGRES user as it's the "superadmin" which has access to schema
+      HASH_GRAPH_PG_USER: "${POSTGRES_USER}"
+      HASH_GRAPH_PG_PASSWORD: "${POSTGRES_PASSWORD}"
+      HASH_GRAPH_PG_HOST: "postgres"
+      HASH_GRAPH_PG_PORT: "5432"
+      HASH_GRAPH_PG_DATABASE: "${HASH_GRAPH_PG_DATABASE}"
+      HASH_GRAPH_LOG_CONSOLE_FORMAT: "${HASH_GRAPH_LOG_CONSOLE_FORMAT:-full}"
+      HASH_GRAPH_LOG_FOLDER: "/logs/graph-migrations"
+      HASH_GRAPH_SENTRY_DSN: "${HASH_GRAPH_SENTRY_DSN-}"
+      HASH_GRAPH_LOG_LEVEL: "${HASH_GRAPH_LOG_LEVEL}"
+      RUST_BACKTRACE: 1
+
+  graph:
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      spicedb:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      temporal-setup:
+        condition: service_completed_successfully
+      graph-migrate:
+        condition: service_completed_successfully
+      type-fetcher:
+        condition: service_healthy
+    image: hash-graph
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - logs:/logs
+    command: server
+    environment:
+      HASH_GRAPH_PG_USER: "${HASH_GRAPH_PG_USER}"
+      HASH_GRAPH_PG_PASSWORD: "${HASH_GRAPH_PG_PASSWORD}"
+      HASH_GRAPH_PG_HOST: "postgres"
+      HASH_GRAPH_PG_PORT: "5432"
+      HASH_GRAPH_PG_DATABASE: "${HASH_GRAPH_PG_DATABASE}"
+      HASH_GRAPH_ALLOWED_URL_DOMAIN_PATTERN: "${HASH_GRAPH_ALLOWED_URL_DOMAIN_PATTERN}"
+      HASH_GRAPH_TYPE_FETCHER_HOST: "type-fetcher"
+      HASH_GRAPH_TYPE_FETCHER_PORT: "${HASH_GRAPH_TYPE_FETCHER_PORT}"
+      HASH_GRAPH_API_HOST: "0.0.0.0"
+      HASH_GRAPH_API_PORT: "${HASH_GRAPH_API_PORT}"
+      HASH_GRAPH_LOG_LEVEL: "${HASH_GRAPH_LOG_LEVEL}"
+      HASH_GRAPH_LOG_CONSOLE_FORMAT: "${HASH_GRAPH_LOG_CONSOLE_FORMAT:-full}"
+      HASH_GRAPH_LOG_FOLDER: "/logs/graph-service"
+      HASH_GRAPH_SENTRY_DSN: "${HASH_GRAPH_SENTRY_DSN-}"
+      HASH_SPICEDB_HOST: http://spicedb
+      HASH_SPICEDB_HTTP_PORT: "${HASH_SPICEDB_HTTP_PORT}"
+      HASH_SPICEDB_GRPC_PRESHARED_KEY: "${HASH_SPICEDB_GRPC_PRESHARED_KEY}"
+      HASH_TEMPORAL_SERVER_HOST: "http://temporal"
+      HASH_TEMPORAL_SERVER_PORT: "${HASH_TEMPORAL_SERVER_PORT}"
+      RUST_BACKTRACE: 0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/hash-graph",
+          "server",
+          "--healthcheck",
+          "--api-port",
+          "${HASH_GRAPH_API_PORT}",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 10
 
   hash-api:
     build:
@@ -68,12 +204,33 @@ services:
       HASH_REDIS_HOST: "redis"
       HASH_REDIS_PORT: "6379"
 
+      HASH_VAULT_HOST: "http://vault"
+      HASH_VAULT_PORT: "${HASH_VAULT_PORT}"
+      HASH_VAULT_ROOT_TOKEN: "${HASH_VAULT_ROOT_TOKEN}"
+
       HASH_OPENSEARCH_ENABLED: "false"
       HASH_INTEGRATION_QUEUE_NAME: "${HASH_INTEGRATION_QUEUE_NAME}"
 
-      ORY_KRATOS_PUBLIC_URL: "http://kratos:4433"
-      ORY_KRATOS_ADMIN_URL: "http://kratos:4434"
+      HASH_KRATOS_PUBLIC_URL: "http://kratos:4433"
+      HASH_KRATOS_ADMIN_URL: "http://kratos:4434"
       KRATOS_API_KEY: "${KRATOS_API_KEY}"
+
+      HASH_HYDRA_PUBLIC_URL: "http://hydra:4444"
+      HASH_HYDRA_ADMIN_URL: "http://hydra:4445"
+
+      HASH_TEMPORAL_SERVER_HOST: "http://temporal"
+      HASH_TEMPORAL_SERVER_PORT: "${HASH_TEMPORAL_SERVER_PORT}"
+
+      GOOGLE_OAUTH_CLIENT_ID: "${GOOGLE_OAUTH_CLIENT_ID}"
+      GOOGLE_OAUTH_CLIENT_SECRET: "${GOOGLE_OAUTH_CLIENT_SECRET}"
+
+      FILE_UPLOAD_PROVIDER: "${FILE_UPLOAD_PROVIDER}"
+      AWS_REGION: "${AWS_S3_REGION}"
+      AWS_S3_UPLOADS_BUCKET: "${AWS_S3_UPLOADS_BUCKET}"
+      AWS_S3_UPLOADS_ACCESS_KEY_ID: "${AWS_S3_UPLOADS_ACCESS_KEY_ID}"
+      AWS_S3_UPLOADS_SECRET_ACCESS_KEY: "${AWS_S3_UPLOADS_SECRET_ACCESS_KEY}"
+      AWS_S3_UPLOADS_ENDPOINT: "${AWS_S3_UPLOADS_ENDPOINT}"
+      AWS_S3_UPLOADS_FORCE_PATH_STYLE: "${AWS_S3_UPLOADS_FORCE_PATH_STYLE}"
     ports:
       - "5001:5001"
 
@@ -83,6 +240,7 @@ services:
       dockerfile: infra/docker/frontend/prod/Dockerfile
       args:
         FRONTEND_URL: "${FRONTEND_URL}"
+        GOOGLE_OAUTH_CLIENT_ID: "${GOOGLE_OAUTH_CLIENT_ID}"
         # At build-time (client-side) we use the public API origin that is
         # outside the docker network.
         API_ORIGIN: "${API_ORIGIN}"
@@ -99,7 +257,6 @@ services:
       # appropriately. The backend is not on "localhost" from the perspective of
       # this container.
       API_ORIGIN: "http://hash-api:5001"
-      ORY_KRATOS_PUBLIC_URL: "http://kratos:4433"
 
     ports:
       - "3000:3000"

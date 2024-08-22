@@ -1,5 +1,9 @@
 import { BlockErrorMessage } from "@hashintel/block-design-system";
-import { Button, ImageIconRegular } from "@hashintel/design-system";
+import {
+  ArrowUpRegularIcon,
+  Button,
+  ImageIconRegular,
+} from "@hashintel/design-system";
 import {
   Box,
   CircularProgress,
@@ -12,12 +16,11 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ArrowUpIcon } from "../../icons/arrow-up";
 import { Grid2PlusIcon } from "../../icons/grid-2-plus";
 import { RectangleHistoryCirclePlusIcon } from "../../icons/rectangle-history-circle-plus";
 import { SquarePlusIcon } from "../../icons/square-plus";
 import { ImageTile } from "../../shared/image-tile";
-import { ImageObject } from "../generate-image";
+import type { ImageObject } from "../generate-image";
 import { CTAButton } from "./image-preview/cta-button";
 import { ImageDetails } from "./image-preview/image-details";
 import { ReturnButton } from "./image-preview/return-button";
@@ -485,7 +488,7 @@ export const ImagePreview = ({
                   }}
                 />
               ) : (
-                <ArrowUpIcon
+                <ArrowUpRegularIcon
                   sx={{
                     fontSize: 16,
                     color: ({ palette }) => palette.gray[40],

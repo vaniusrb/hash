@@ -1,16 +1,20 @@
-import { Logger } from "@local/hash-backend-utils/logger";
-import { AxiosError } from "axios";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import type { FeatureFlag } from "@local/hash-isomorphic-utils/feature-flags";
+import { featureFlags } from "@local/hash-isomorphic-utils/feature-flags";
+import type { AxiosError } from "axios";
 
 import { createKratosIdentity } from "../auth/ory-kratos";
-import { ImpureGraphContext } from "../graph/context-types";
-import { createUser, User } from "../graph/knowledge/system-types/user";
+import type { ImpureGraphContext } from "../graph/context-types";
+import type { User } from "../graph/knowledge/system-types/user";
+import { createUser } from "../graph/knowledge/system-types/user";
 import { systemAccountId } from "../graph/system-account";
 import { isDevEnv, isTestEnv } from "../lib/env-config";
 
 type SeededUser = {
   email: string;
   shortname: string;
-  preferredName: string;
+  displayName: string;
+  enabledFeatureFlags?: FeatureFlag[];
   isInstanceAdmin?: boolean;
   // If not set, default to "password"
   password?: string;
@@ -20,18 +24,20 @@ const devUsers: readonly SeededUser[] = [
   {
     email: "admin@example.com",
     shortname: "instance-admin",
-    preferredName: "Instance Admin",
+    displayName: "Instance Admin",
     isInstanceAdmin: true,
   },
   {
     email: "alice@example.com",
     shortname: "alice",
-    preferredName: "Alice",
+    // Alice has all feature flags enabled
+    enabledFeatureFlags: Array.from(featureFlags),
+    displayName: "Alice",
   },
   {
     email: "bob@example.com",
     shortname: "bob01",
-    preferredName: "Bob",
+    displayName: "Bob",
   },
 ] as const;
 
@@ -64,14 +70,15 @@ export const ensureUsersAreSeeded = async ({
     const {
       email,
       shortname,
-      preferredName,
+      displayName,
+      enabledFeatureFlags,
       password = "password",
       isInstanceAdmin,
     } = usersToSeed[index]!;
 
-    if (!(email && shortname && preferredName)) {
+    if (!(email && shortname && displayName)) {
       logger.error(
-        `User entry at index ${index} is missing email, shortname or preferredName!`,
+        `User entry at index ${index} is missing email, shortname or displayName!`,
       );
       continue;
     }
@@ -104,8 +111,9 @@ export const ensureUsersAreSeeded = async ({
         emails,
         kratosIdentityId,
         isInstanceAdmin,
+        enabledFeatureFlags,
         shortname,
-        preferredName,
+        displayName,
       });
 
       createdUsers.push(user);

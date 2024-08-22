@@ -6,25 +6,24 @@
  * package and be removed from here.
  */
 
-import { MessageCallback, MessageReturn } from "@blockprotocol/core";
-import {
+import type { MessageCallback, MessageReturn } from "@blockprotocol/core";
+import type {
   CreateResourceError,
   QueryOperationInput,
   ReadOrModifyResourceError,
   UploadFileData as BpUploadFileData,
 } from "@blockprotocol/graph";
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { File as FileEntityType } from "@local/hash-isomorphic-utils/system-types/file";
-import {
-  Entity,
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type {
   EntityId,
-  EntityPropertiesObject,
-  EntityRootType,
   LinkData,
-  Subgraph,
-} from "@local/hash-subgraph";
+  PropertyObject,
+} from "@local/hash-graph-types/entity";
+import type { File as FileEntity } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
 
-import {
+import type {
   FileEntityCreationInput,
   FileEntityUpdateInput,
 } from "../../../../graphql/api-types.gen";
@@ -56,8 +55,8 @@ export type GetEntityMessageCallback = MessageCallback<
 export type UpdateEntityData = {
   entityId: EntityId;
   entityTypeId: VersionedUrl;
-  properties: EntityPropertiesObject;
-} & Pick<LinkData, "leftToRightOrder" | "rightToLeftOrder">;
+  properties: PropertyObject;
+};
 
 export type UpdateEntityMessageCallback = MessageCallback<
   UpdateEntityData,
@@ -77,7 +76,7 @@ export type UploadFileRequestData = BpUploadFileData &
 export type UploadFileRequestCallback = MessageCallback<
   UploadFileRequestData,
   null,
-  MessageReturn<FileEntityType>,
+  MessageReturn<Entity<FileEntity>>,
   CreateResourceError
 >;
 
@@ -98,7 +97,7 @@ export type QueryEntitiesMessageCallback = MessageCallback<
 
 export type CreateEntityRequest = {
   entityTypeId: VersionedUrl;
-  properties: EntityPropertiesObject;
+  properties: PropertyObject;
   linkData?: LinkData;
 };
 

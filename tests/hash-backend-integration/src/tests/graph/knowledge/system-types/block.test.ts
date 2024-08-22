@@ -1,39 +1,34 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import { generateSystemEntityTypeSchema } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized/migrate-ontology-types/util";
 import { createEntity } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
+import type { Block } from "@apps/hash-api/src/graph/knowledge/system-types/block";
 import {
-  Block,
   createBlock,
   getBlockById,
   getBlockData,
   updateBlockDataEntity,
 } from "@apps/hash-api/src/graph/knowledge/system-types/block";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { createEntityType } from "@apps/hash-api/src/graph/ontology/primitive/entity-type";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { createDefaultAuthorizationRelationships } from "@local/hash-isomorphic-utils/graph-queries";
 import { generateTypeId } from "@local/hash-isomorphic-utils/ontology-types";
-import {
-  Entity,
-  EntityTypeWithMetadata,
-  OwnedById,
-} from "@local/hash-subgraph";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import { createTestImpureGraphContext, createTestUser } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("Block", () => {
   let testUser: User;
@@ -47,7 +42,6 @@ describe("Block", () => {
   let dummyEntityType: EntityTypeWithMetadata;
 
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "blockTest", logger);
@@ -87,18 +81,18 @@ describe("Block", () => {
 
     testBlockDataEntity = await createEntity(graphContext, authentication, {
       ownedById: testUser.accountId as OwnedById,
-      properties: {},
+      properties: { value: {} },
       entityTypeId: dummyEntityType.schema.$id,
       relationships: createDefaultAuthorizationRelationships(authentication),
     });
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   it("can create a Block", async () => {
@@ -141,13 +135,15 @@ describe("Block", () => {
       authentication,
       {
         ownedById: testUser.accountId as OwnedById,
-        properties: {},
+        properties: { value: {} },
         entityTypeId: dummyEntityType.schema.$id,
         relationships: createDefaultAuthorizationRelationships(authentication),
       },
     );
 
-    expect(testBlockDataEntity).not.toEqual(newBlockDataEntity);
+    expect(newBlockDataEntity.toJSON()).not.toEqual(
+      testBlockDataEntity.toJSON(),
+    );
     expect(
       await getBlockData(graphContext, authentication, { block: testBlock }),
     ).toEqual(testBlockDataEntity);

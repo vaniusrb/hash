@@ -1,19 +1,25 @@
-require("dotenv-flow").config();
-const webpack = require("webpack");
-const path = require("node:path");
-const fileSystem = require("fs-extra");
-const CopyWebpackPlugin = require("copy-webpack-plugin");
-const HtmlWebpackPlugin = require("html-webpack-plugin");
-const TerserPlugin = require("terser-webpack-plugin");
-const { CleanWebpackPlugin } = require("clean-webpack-plugin");
-const ReactRefreshWebpackPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
-const ReactRefreshTypeScript = require("react-refresh-typescript");
-const { sentryWebpackPlugin } = require("@sentry/webpack-plugin");
+import path, { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import ReactRefreshWebpackPlugin from "@pmmmwh/react-refresh-webpack-plugin";
+import { sentryWebpackPlugin } from "@sentry/webpack-plugin";
+import { CleanWebpackPlugin } from "clean-webpack-plugin";
+import CopyWebpackPlugin from "copy-webpack-plugin";
+import dotenv from "dotenv-flow";
+import fileSystem from "fs-extra";
+import HtmlWebpackPlugin from "html-webpack-plugin";
+import ReactRefreshTypeScript from "react-refresh-typescript";
+import TerserPlugin from "terser-webpack-plugin";
+import { TsconfigPathsPlugin } from "tsconfig-paths-webpack-plugin";
+import webpack from "webpack";
+
+dotenv.config();
 
 const env = {
   API_ORIGIN: process.env.API_ORIGIN || "https://app-api.hash.ai",
   BROWSER: process.env.BROWSER || "chrome",
   FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || "https://app.hash.ai",
+  ITERO_TEST_BED: process.env.ITERO_TEST_BED || "",
   NODE_ENV: process.env.NODE_ENV || "development",
   SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
   SENTRY_DSN: process.env.SENTRY_DSN,
@@ -22,6 +28,9 @@ const env = {
 const ASSET_PATH = process.env.ASSET_PATH || "/";
 
 const alias = {};
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const secretsPath = path.join(__dirname, `secrets.${env.NODE_ENV}.js`);
 
@@ -42,9 +51,16 @@ if (fileSystem.existsSync(secretsPath)) {
   alias.secrets = secretsPath;
 }
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isProduction = process.env.NODE_ENV === "production";
+const isDevelopment = process.env.NODE_ENV === "development";
+const isTestBedBuild = !!process.env.ITERO_TEST_BED;
 
-if (!isDevelopment && (!env.SENTRY_DSN || !env.SENTRY_AUTH_TOKEN)) {
+if (isDevelopment) {
+  process.env.BABEL_ENV = "development";
+  process.env.ASSET_PATH = "/";
+}
+
+if (isProduction && (!env.SENTRY_DSN || !env.SENTRY_AUTH_TOKEN)) {
   throw new Error(
     "Both SENTRY_DSN and SENTRY_AUTH_TOKEN must be set in environment for a production build. SENTRY_DSN is relied on at runtime, and they are both needed to build and upload source maps to Sentry.",
   );
@@ -58,6 +74,7 @@ const options = {
     content: path.join(__dirname, "src", "scripts", "content.ts"),
     options: path.join(__dirname, "src", "pages", "options.tsx"),
     popup: path.join(__dirname, "src", "pages", "popup.tsx"),
+    working: path.join(__dirname, "src", "pages", "working.tsx"),
   },
   output: {
     filename: "[name].bundle.js",
@@ -107,7 +124,7 @@ const options = {
         exclude: /node_modules/,
         use: [
           {
-            loader: require.resolve("ts-loader"),
+            loader: "ts-loader",
             options: {
               getCustomTransformers: () => ({
                 before: [isDevelopment && ReactRefreshTypeScript()].filter(
@@ -126,15 +143,19 @@ const options = {
             loader: "source-map-loader",
           },
           {
-            loader: require.resolve("babel-loader"),
+            loader: "babel-loader",
             options: {
-              plugins: [
-                isDevelopment && require.resolve("react-refresh/babel"),
-              ].filter(Boolean),
+              plugins: [isDevelopment && "react-refresh/babel"].filter(Boolean),
             },
           },
         ],
         exclude: /node_modules/,
+      },
+      {
+        test: /\.m?js/,
+        resolve: {
+          fullySpecified: false,
+        },
       },
     ],
   },
@@ -143,9 +164,25 @@ const options = {
     extensions: fileExtensions
       .map((extension) => `.${extension}`)
       .concat([".js", ".jsx", ".ts", ".tsx", ".css"]),
-    fallback: {
-      "process/browser": require.resolve("process/browser"),
-    },
+    extensionAlias: isDevelopment
+      ? {
+          ".js": [".ts", ".tsx", ".jsx", ".js"],
+          ".mjs": [".mts", ".mjs"],
+          ".cjs": [".cts", ".cjs"],
+        }
+      : {},
+    /**
+     * Because we are bundling the TypeScript directly via webpack, we need to use the 'paths' in the base tsconfig.json
+     * This tells TypeScript where to resolve the imports from, overwriting the 'exports' in local dependencies' package.jsons.
+     */
+    plugins: isDevelopment
+      ? [
+          new TsconfigPathsPlugin({
+            configFile:
+              "../../libs/@local/tsconfig/legacy-base-tsconfig-to-refactor.json",
+          }),
+        ]
+      : [],
   },
   plugins: [
     isDevelopment && new ReactRefreshWebpackPlugin(),
@@ -160,6 +197,7 @@ const options = {
       API_ORIGIN: `"${env.API_ORIGIN}"`,
       ENVIRONMENT: `"${env.NODE_ENV}"`,
       FRONTEND_ORIGIN: `"${env.FRONTEND_ORIGIN}"`,
+      ITERO_TEST_BED: `"${env.ITERO_TEST_BED}"`,
       SENTRY_DSN: `"${env.SENTRY_DSN}"`,
     }),
     new CopyWebpackPlugin({
@@ -175,6 +213,20 @@ const options = {
               // @see https://bugzilla.mozilla.org/show_bug.cgi?id=1573659
               json.background.scripts = [json.background.service_worker];
               delete json.background.service_worker;
+            }
+
+            if (isTestBedBuild) {
+              for (const [size, iconPath] of Object.entries(json.icons)) {
+                json.icons[size] = iconPath.replace(".png", "-dev.png");
+              }
+              json.action.default_icon = json.action.default_icon.replace(
+                ".png",
+                "-dev.png",
+              );
+            }
+
+            if (isDevelopment) {
+              json.name = "HASH AI (local)";
             }
 
             // generates the manifest file using the package.json informations
@@ -204,7 +256,7 @@ const options = {
     new CopyWebpackPlugin({
       patterns: [
         {
-          from: "src/assets/img",
+          from: "src/assets/icons",
           to: path.join(__dirname, "build", "[name][ext]"),
           force: true,
         },
@@ -222,7 +274,13 @@ const options = {
       chunks: ["popup"],
       cache: false,
     }),
-    env.SENTRY_AUTH_TOKEN && env.SENTRY_DSN && !isDevelopment
+    new HtmlWebpackPlugin({
+      template: path.join(__dirname, "src", "pages", "working.html"),
+      filename: "working.html",
+      chunks: ["working"],
+      cache: false,
+    }),
+    env.SENTRY_AUTH_TOKEN && env.SENTRY_DSN && isProduction
       ? sentryWebpackPlugin({
           authToken: env.SENTRY_AUTH_TOKEN,
           org: "hashintel",
@@ -235,7 +293,7 @@ const options = {
   },
 };
 
-if (env.NODE_ENV !== "development") {
+if (!isDevelopment) {
   options.optimization = {
     minimize: true,
     minimizer: [
@@ -246,4 +304,4 @@ if (env.NODE_ENV !== "development") {
   };
 }
 
-module.exports = options;
+export default options;

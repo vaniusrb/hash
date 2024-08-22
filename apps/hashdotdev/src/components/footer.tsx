@@ -1,3 +1,4 @@
+import { faArrowUpRightFromSquare } from "@fortawesome/free-solid-svg-icons";
 import {
   Box,
   Container,
@@ -6,32 +7,62 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { ComponentProps, FunctionComponent, ReactNode } from "react";
+import type { ComponentProps, FunctionComponent, ReactNode } from "react";
 
 import { SITE_DESCRIPTION } from "../config";
-import { DiscordIcon } from "./icons/discord-icon";
+import { FontAwesomeIcon } from "./icons/font-awesome-icon";
 import { GithubIcon } from "./icons/github-icon";
-import { TwitterIcon } from "./icons/twitter-icon";
+import { XTwitterIcon } from "./icons/x-twitter-icon";
 import { Link } from "./link";
 import { Logo } from "./logo";
 import { Spacer } from "./spacer";
 
 const FooterLink: FunctionComponent<
-  { href: string; openInNew?: boolean } & Omit<
+  { href: string; openInNew?: boolean; externalIcon?: boolean } & Omit<
     ComponentProps<typeof Typography>,
     "variant"
   >
-> = ({ href, openInNew, sx = [], children, ...props }) => (
+> = ({
+  href,
+  openInNew,
+  externalIcon = false,
+  sx = [],
+  children,
+  ...props
+}) => (
   <Link href={href} openInNew={openInNew}>
     <Typography
       {...props}
       sx={[
         ...(Array.isArray(sx) ? sx : [sx]),
-        { display: "flex", whiteSpace: "nowrap" },
+        {
+          display: "flex",
+          whiteSpace: "nowrap",
+          transition: ({ transitions }) => transitions.create("color"),
+          "&:hover": {
+            color: ({ palette }) => palette.gray[50],
+            svg: {
+              color: ({ palette }) => palette.gray[40],
+            },
+          },
+        },
       ]}
       variant="hashSmallTextMedium"
     >
       {children}
+      {externalIcon ? (
+        <FontAwesomeIcon
+          icon={faArrowUpRightFromSquare}
+          sx={{
+            transition: ({ transitions }) => transitions.create("color"),
+            color: ({ palette }) => palette.gray[50],
+            fontSize: 12,
+            marginLeft: 1.5,
+            position: "relative",
+            top: 4,
+          }}
+        />
+      ) : null}
     </Typography>
   </Link>
 );
@@ -122,11 +153,8 @@ export const Footer: FunctionComponent = () => (
               <Link href="https://github.com/hashintel/hash">
                 <GithubIcon fontSize="inherit" />
               </Link>
-              <Link href="https://twitter.com/hashintel">
-                <TwitterIcon fontSize="inherit" />
-              </Link>
-              <Link href="https://hash.ai/discord">
-                <DiscordIcon fontSize="inherit" />
+              <Link href="https://x.com/hashintel">
+                <XTwitterIcon fontSize="inherit" />
               </Link>
             </Stack>
           </Typography>
@@ -140,17 +168,16 @@ export const Footer: FunctionComponent = () => (
         >
           <Grid item lg={4} md={6}>
             <FooterSection label="Resources">
-              <FooterLink href="/blog">Blog</FooterLink>
-              <FooterLink href="/roadmap">Roadmap</FooterLink>
-              {/* @todo: add docs pages */}
-              {/* <FooterLink href="/docs">Docs</FooterLink> */}
+              <FooterLink href="/blog">Dev Blog</FooterLink>
+              <FooterLink href="/docs">Dev Docs</FooterLink>
+              <FooterLink href="/roadmap">Dev Roadmap</FooterLink>
               {/* @todo: add tutorials pages */}
               {/* <FooterLink href="/tutorials">Tutorials</FooterLink> */}
             </FooterSection>
           </Grid>
           <Grid item lg={4} md={6}>
             <FooterSection label="Projects">
-              <FooterLink href="https://blockprotocol.org">
+              <FooterLink href="https://blockprotocol.org" externalIcon>
                 <Box
                   component="span"
                   sx={{
@@ -163,7 +190,7 @@ export const Footer: FunctionComponent = () => (
                 </Box>
                 Block Protocol
               </FooterLink>
-              <FooterLink href="https://hash.ai">
+              <FooterLink href="https://hash.ai" externalIcon>
                 <Box
                   component="span"
                   sx={{
@@ -176,8 +203,7 @@ export const Footer: FunctionComponent = () => (
                 </Box>
                 HASH
               </FooterLink>
-              {/* @todo: add docs page */}
-              {/* <FooterLink href="/docs/getting-started">
+              {/* <FooterLink href="/docs/utils">
                 <Box component="span" sx={{ marginRight: 1 }}>
                   <FaIcon
                     name="chevron-right"
@@ -194,10 +220,23 @@ export const Footer: FunctionComponent = () => (
           </Grid>
           <Grid item lg={4} md={6}>
             <FooterSection label="Get Involved">
-              {/* @todo: add docs page */}
-              {/* <FooterLink href="/docs/getting-started">Getting started</FooterLink> */}
-              {/* @todo: fix href */}
-              {/* <FooterLink href="/">Contribute</FooterLink> */}
+              <FooterLink href="/docs/get-started">
+                Start using HASH
+                <Box
+                  component="span"
+                  sx={{
+                    marginLeft: 1,
+                    color: "transparent",
+                    fontWeight: 700,
+                    background:
+                      "linear-gradient(45deg, #D61723 0%, #DA522A 20.31%, #CF9615 39.06%, #0AA84D 58.85%, #1467D6 79.69%, #5743DA 100%)",
+                    backgroundClip: "text",
+                  }}
+                >
+                  {"<5 minutes"}
+                </Box>
+              </FooterLink>
+              <FooterLink href="/docs/contributing">Contribute</FooterLink>
               <FooterLink href="https://hash.ai/contact">Contact Us</FooterLink>
             </FooterSection>
           </Grid>

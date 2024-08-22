@@ -4,31 +4,31 @@ import {
   type ConstrainsPropertiesOnEdge as ConstrainsPropertiesOnEdgeBp,
   type ConstrainsValuesOnEdge as ConstrainsValuesOnEdgeBp,
   type InheritsFromEdge as InheritsFromEdgeBp,
-  type IsInheritedByEdge as IsInheritedByEdgeBp,
-  type IsTypeOfEdge as IsTypeOfEdgeBp,
-  type LinkDestinationsConstrainedByEdge as LinkDestinationsConstrainedByEdgeBp,
-  type LinksConstrainedByEdge as LinksConstrainedByEdgeBp,
-  type OntologyOutwardEdge as OntologyOutwardEdgeBp,
-  type PropertiesConstrainedByEdge as PropertiesConstrainedByEdgeBp,
-  type ValuesConstrainedByEdge as ValuesConstrainedByEdgeBp,
   isConstrainsLinkDestinationsOnEdge as isConstrainsLinkDestinationsOnEdgeBp,
   isConstrainsLinksOnEdge as isConstrainsLinksOnEdgeBp,
   isConstrainsPropertiesOnEdge as isConstrainsPropertiesOnEdgeBp,
   isConstrainsValuesOnEdge as isConstrainsValuesOnEdgeBp,
+  type IsInheritedByEdge as IsInheritedByEdgeBp,
   isInheritsFromEdge as isInheritsFromEdgeBp,
   isIsInheritedByEdge as isIsInheritedByEdgeBp,
   isIsTypeOfEdge as isIsTypeOfEdgeBp,
   isLinkDestinationsConstrainedByEdge as isLinkDestinationsConstrainedByEdgeBp,
   isLinksConstrainedByEdge as isLinksConstrainedByEdgeBp,
   isPropertiesConstrainedByEdge as isPropertiesConstrainedByEdgeBp,
+  type IsTypeOfEdge as IsTypeOfEdgeBp,
   isValuesConstrainedByEdge as isValuesConstrainedByEdgeBp,
-} from "@blockprotocol/graph/temporal";
-import { Subtype } from "@local/advanced-types/subtype";
+  type LinkDestinationsConstrainedByEdge as LinkDestinationsConstrainedByEdgeBp,
+  type LinksConstrainedByEdge as LinksConstrainedByEdgeBp,
+  type OntologyOutwardEdge as OntologyOutwardEdgeBp,
+  type PropertiesConstrainedByEdge as PropertiesConstrainedByEdgeBp,
+  type ValuesConstrainedByEdge as ValuesConstrainedByEdgeBp,
+} from "@blockprotocol/graph";
+import type { Subtype } from "@local/advanced-types/subtype";
 
-import { OntologyTypeVertexId } from "../../vertices";
-import { GenericOutwardEdge } from "../generic-outward-edge";
-import { OntologyEdgeKind, SharedEdgeKind } from "../kind";
-import { EntityIdWithInterval, OutwardEdge } from "../outward-edge";
+import type { OntologyTypeVertexId } from "../../vertices.js";
+import type { GenericOutwardEdge } from "../generic-outward-edge.js";
+import type { OntologyEdgeKind, SharedEdgeKind } from "../kind.js";
+import type { EntityIdWithInterval, OutwardEdge } from "../outward-edge.js";
 
 export type InheritsFromEdge = Subtype<
   InheritsFromEdgeBp,

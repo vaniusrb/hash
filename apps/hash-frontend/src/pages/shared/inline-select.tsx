@@ -1,7 +1,8 @@
 import { faCaretDown } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon, Select, SelectProps } from "@hashintel/design-system";
+import type { SelectProps } from "@hashintel/design-system";
+import { FontAwesomeIcon, Select } from "@hashintel/design-system";
 import { inputBaseClasses, selectClasses, styled } from "@mui/material";
-import { Ref } from "react";
+import type { Ref } from "react";
 
 const InlineSelectChevronDown = () => (
   <FontAwesomeIcon
@@ -11,7 +12,9 @@ const InlineSelectChevronDown = () => (
 );
 
 export const InlineSelect = styled(
-  <T extends {}>(props: SelectProps<T> & { ref?: Ref<HTMLSelectElement> }) => (
+  <T extends object | string>(
+    props: SelectProps<T> & { ref?: Ref<HTMLSelectElement> },
+  ) => (
     <Select
       variant="standard"
       disableUnderline
@@ -31,7 +34,7 @@ export const InlineSelect = styled(
   [`.${selectClasses.select}.${inputBaseClasses.input}`]: {
     fontSize: 12,
     height: 12,
-    fontWeight: 600,
+    fontWeight: 500,
     color: theme.palette.gray[90],
     minHeight: "unset",
     paddingRight: 18,

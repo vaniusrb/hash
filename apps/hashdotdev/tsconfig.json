@@ -1,20 +1,15 @@
 {
   "extends": "@local/tsconfig/legacy-base-tsconfig-to-refactor.json",
   "compilerOptions": {
-    "target": "es5",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "incremental": true,
     "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "paths": {},
+    "sourceMap": true,
+    "target": "ES2021",
+    "noEmit": true,
+    "jsx": "preserve"
   },
   "include": [
     "@types/gtag.js",

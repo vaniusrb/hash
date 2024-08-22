@@ -1,25 +1,29 @@
 import { Autocomplete, Avatar } from "@hashintel/design-system";
-import { AccountGroupId, AccountId } from "@local/hash-subgraph";
+import type {
+  AccountGroupId,
+  AccountId,
+} from "@local/hash-graph-types/account";
 import {
   autocompleteClasses,
   Box,
   outlinedInputClasses,
   Typography,
 } from "@mui/material";
-import { FunctionComponent, useCallback, useMemo, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useOrgs } from "../../../../components/hooks/use-orgs";
 import { useOrgsWithLinks } from "../../../../components/hooks/use-orgs-with-links";
 import { useUsers } from "../../../../components/hooks/use-users";
 import { useUsersWithLinks } from "../../../../components/hooks/use-users-with-links";
-import {
+import type {
   MinimalOrg,
   MinimalUser,
   Org,
   User,
 } from "../../../../lib/user-and-org";
 import { Button } from "../../../../shared/ui";
-import { getImageUrlFromEntityProperties } from "../../get-image-url-from-properties";
+import { getImageUrlFromEntityProperties } from "../../get-file-properties";
 
 export const InviteAccountForm: FunctionComponent<{
   excludeAccountIds?: (AccountId | AccountGroupId)[];
@@ -97,8 +101,8 @@ export const InviteAccountForm: FunctionComponent<{
         onChange={(_, account) => setSelectedAccount(account)}
         getOptionLabel={(option) =>
           option?.kind === "user"
-            ? option.preferredName ?? ""
-            : option?.name ?? ""
+            ? (option.displayName ?? "")
+            : (option?.name ?? "")
         }
         renderOption={(props, option) => {
           if (!option) {
@@ -117,14 +121,14 @@ export const InviteAccountForm: FunctionComponent<{
               <Avatar
                 src={avatarSrc}
                 title={
-                  option.kind === "user" ? option.preferredName : option.name
+                  option.kind === "user" ? option.displayName : option.name
                 }
                 size={28}
                 sx={{ marginRight: 1 }}
                 borderRadius={option.kind === "org" ? "4px" : undefined}
               />
               <Typography>
-                {option.kind === "user" ? option.preferredName : option.name}
+                {option.kind === "user" ? option.displayName : option.name}
               </Typography>
             </Box>
           );

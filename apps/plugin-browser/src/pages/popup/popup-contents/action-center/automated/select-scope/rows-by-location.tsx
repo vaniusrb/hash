@@ -1,12 +1,12 @@
-import { VersionedUrl } from "@blockprotocol/graph";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
 import { CloseIcon, IconButton } from "@hashintel/design-system";
 import { TableCell, TableRow } from "@mui/material";
 import { useCallback, useMemo } from "react";
 
-import { LocalStorage } from "../../../../../../shared/storage";
+import type { LocalStorage } from "../../../../../../shared/storage";
 import { EntityTypeSelector } from "../../shared/entity-type-selector";
 import { SelectDomains } from "./select-domains";
-import { CommonRowsProps } from "./shared/common-rows-props";
+import type { CommonRowsProps } from "./shared/common-rows-props";
 
 type RuleByLocation = {
   entityTypeIds: VersionedUrl[];
@@ -174,7 +174,6 @@ const RowByLocation = (
       }
 
       for (const newTypeId of newEntityTypeIds) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (rulesByType[newTypeId]) {
           continue;
         }
@@ -243,7 +242,7 @@ const RowByLocation = (
           options={domainOptions}
           selectedDomains={restrictToDomain ? [restrictToDomain] : []}
           setSelectedDomains={(newDomains) => {
-            updateDomain(newDomains[0]);
+            updateDomain(newDomains[0]!);
           }}
         />
       </TableCell>
@@ -251,8 +250,14 @@ const RowByLocation = (
         <EntityTypeSelector
           inputHeight="auto"
           multiple
-          setTargetEntityTypeIds={(newTargetIds) => {
-            updateEntityTypeIds(newTargetIds);
+          setTargetEntityTypeIds={({
+            selectedEntityTypeIds,
+            linkedEntityTypeIds,
+          }) => {
+            updateEntityTypeIds([
+              ...selectedEntityTypeIds,
+              ...linkedEntityTypeIds,
+            ]);
           }}
           targetEntityTypeIds={entityTypeIds}
         />

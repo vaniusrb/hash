@@ -1,4 +1,4 @@
-import { FunctionComponent } from "react";
+import type { FunctionComponent } from "react";
 import { tw } from "twind";
 
 import Cross from "../svgs/cross";
@@ -19,6 +19,7 @@ export const ErrorAlert: FunctionComponent<ImageErrorAlertProps> = ({
     </div>
 
     <button
+      aria-label="Close"
       type="button"
       onClick={onClearError}
       className={tw`absolute top-0 bottom-0 right-0 px-4 py-3 border-0 focus:outline-none bg-transparent box-border cursor-pointer`}

@@ -135,6 +135,7 @@ blocks/**/.env
 **/.mypy_cache
 **/.pytest_cache
 **/.hypothesis
+**/wheels
 
 # generated files
 *.gen.*
@@ -175,3 +176,6 @@ LICENSE-*.md
 # Turborepo
 .turbo/
 out/
+
+# hash.dev sitemap
+apps/hashdotdev/sitemap.json

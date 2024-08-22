@@ -1,19 +1,10 @@
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { getBlockCollectionResolveDepth } from "@local/hash-isomorphic-utils/block-collection";
-import {
-  Entity,
-  EntityRootType,
-  OwnedById,
-  Subgraph,
-} from "@local/hash-subgraph";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
 import { Box, Skeleton } from "@mui/material";
-import {
-  FunctionComponent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useBlockProtocolGetEntity } from "../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-get-entity";
 import { ArrowTurnDownLeftRegularIcon } from "../../shared/icons/arrow-turn-down-left-regular-icon";
@@ -146,27 +137,14 @@ export const CreateQuickNote: FunctionComponent<{
     return () => unsetKeyboardShortcuts(shortcuts);
   }, [handleCommandEnter, setKeyboardShortcuts, unsetKeyboardShortcuts]);
 
-  const quickNoteEntityWithCreatedAt = useMemo(
-    () =>
-      quickNoteEntity
-        ? {
-            quickNoteEntity,
-            createdAt: new Date(
-              quickNoteEntity.metadata.temporalVersioning.decisionTime.start.limit,
-            ),
-          }
-        : undefined,
-    [quickNoteEntity],
-  );
-
   return (
     <Box sx={{ width: "100%" }} onClick={handleClick} ref={wrapperRef}>
-      {quickNoteEntityWithCreatedAt && quickNoteSubgraph ? (
+      {quickNoteEntity && quickNoteSubgraph ? (
         <>
           <EditableQuickNote
             autoFocus
             displayActionButtons={false}
-            quickNoteEntityWithCreatedAt={quickNoteEntityWithCreatedAt}
+            quickNoteEntity={quickNoteEntity}
             quickNoteSubgraph={quickNoteSubgraph}
           />
           <Box

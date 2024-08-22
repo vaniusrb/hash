@@ -1,21 +1,22 @@
 import { gql } from "apollo-server-express";
 
-import { blockprotocolTypedef } from "./blockprotocol.typedef";
-import { embedTypeDef } from "./embed.typedef";
-import { linearTypedef } from "./integration/linear.typedef";
-import { blockTypedef } from "./knowledge/block.typedef";
-import { blockCollectionTypedef } from "./knowledge/block-collection.typedef";
-import { commentTypedef } from "./knowledge/comment.typedef";
-import { entityTypedef } from "./knowledge/entity.typedef";
-import { fileTypedef } from "./knowledge/file.typedef";
-import { hashInstanceTypedef } from "./knowledge/hash-instance.typedef";
-import { orgTypedef } from "./knowledge/org.typedef";
-import { pageTypedef } from "./knowledge/page.typedef";
-import { userTypedef } from "./knowledge/user.typedef";
-import { dataTypeTypedef } from "./ontology/data-type.typedef";
-import { entityTypeTypedef } from "./ontology/entity-type.typedef";
-import { propertyTypeTypedef } from "./ontology/property-type.typedef";
-import { subgraphTypedef } from "./subgraph.typedef";
+import { blockprotocolTypedef } from "./blockprotocol.typedef.js";
+import { embedTypeDef } from "./embed.typedef.js";
+import { linearTypedef } from "./integration/linear.typedef.js";
+import { blockTypedef } from "./knowledge/block.typedef.js";
+import { blockCollectionTypedef } from "./knowledge/block-collection.typedef.js";
+import { commentTypedef } from "./knowledge/comment.typedef.js";
+import { entityTypedef } from "./knowledge/entity.typedef.js";
+import { fileTypedef } from "./knowledge/file.typedef.js";
+import { flowTypedef } from "./knowledge/flow.typedef.js";
+import { hashInstanceTypedef } from "./knowledge/hash-instance.typedef.js";
+import { orgTypedef } from "./knowledge/org.typedef.js";
+import { pageTypedef } from "./knowledge/page.typedef.js";
+import { userTypedef } from "./knowledge/user.typedef.js";
+import { dataTypeTypedef } from "./ontology/data-type.typedef.js";
+import { entityTypeTypedef } from "./ontology/entity-type.typedef.js";
+import { propertyTypeTypedef } from "./ontology/property-type.typedef.js";
+import { subgraphTypedef } from "./subgraph.typedef.js";
 
 const baseSchema = gql`
   scalar Date
@@ -38,15 +39,16 @@ const baseSchema = gql`
 const ontology = [dataTypeTypedef, propertyTypeTypedef, entityTypeTypedef];
 
 const knowledge = [
-  entityTypedef,
-  blockTypedef,
-  pageTypedef,
   blockCollectionTypedef,
+  blockTypedef,
   commentTypedef,
-  userTypedef,
-  orgTypedef,
-  hashInstanceTypedef,
+  entityTypedef,
   fileTypedef,
+  flowTypedef,
+  hashInstanceTypedef,
+  orgTypedef,
+  pageTypedef,
+  userTypedef,
 ];
 
 // This needs to be called 'schema' to be picked up by codegen -

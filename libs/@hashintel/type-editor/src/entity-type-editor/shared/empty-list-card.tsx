@@ -4,14 +4,9 @@ import {
   fontAwesomeIconClasses,
   WhiteCard,
 } from "@hashintel/design-system";
-import {
-  Box,
-  CardActionAreaProps,
-  Stack,
-  Typography,
-  typographyClasses,
-} from "@mui/material";
-import { ReactNode } from "react";
+import type { CardActionAreaProps } from "@mui/material";
+import { Box, Stack, Typography, typographyClasses } from "@mui/material";
+import type { ReactNode } from "react";
 
 type EmptyListCardProps = Pick<CardActionAreaProps, "onClick"> & {
   icon: ReactNode;
@@ -50,7 +45,7 @@ export const EmptyListCard = ({
       <Box
         sx={{
           fontSize: 20,
-          [`.${fontAwesomeIconClasses.toString()}`]: { fontSize: "inherit" },
+          [`.${fontAwesomeIconClasses.icon}`]: { fontSize: "inherit" },
         }}
         className="EmptyListCard-icon"
       >

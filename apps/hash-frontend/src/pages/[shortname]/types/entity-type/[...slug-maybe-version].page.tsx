@@ -1,16 +1,11 @@
-import { validateEntityType } from "@blockprotocol/type-system";
-import { EntityType } from "@blockprotocol/type-system/slim";
-import { OwnedById } from "@local/hash-subgraph";
-// eslint-disable-next-line unicorn/prefer-node-protocol -- https://github.com/sindresorhus/eslint-plugin-unicorn/issues/1931#issuecomment-1359324528
+import type { EntityTypeWithMetadata } from "@blockprotocol/graph";
+import { componentsFromVersionedUrl } from "@local/hash-subgraph/type-system-patch";
 import { Buffer } from "buffer/";
 import { useRouter } from "next/router";
 import { useMemo } from "react";
 
-import {
-  getLayoutWithSidebar,
-  NextPageWithLayout,
-} from "../../../../shared/layout";
-import { useIsReadonlyModeForType } from "../../../../shared/readonly-mode";
+import type { NextPageWithLayout } from "../../../../shared/layout";
+import { getLayoutWithSidebar } from "../../../../shared/layout";
 import { EntityTypePage } from "../../../shared/entity-type-page";
 import { useRouteNamespace } from "../../shared/use-route-namespace";
 import { getEntityTypeBaseUrl } from "./[...slug-maybe-version].page/get-entity-type-base-url";
@@ -31,21 +26,25 @@ const Page: NextPageWithLayout = () => {
 
   const draftEntityType = useMemo(() => {
     if (router.query.draft) {
-      const entityType = JSON.parse(
+      const entityTypeSchema = JSON.parse(
         Buffer.from(
           decodeURIComponent(router.query.draft.toString()),
           "base64",
         ).toString("utf8"),
       );
 
-      const validationResult = validateEntityType(entityType);
-      if (validationResult.type === "Ok") {
-        return entityType as EntityType;
-      } else {
-        throw Error(
-          `Invalid draft entity type: ${JSON.stringify(validationResult)}`,
-        );
-      }
+      const { baseUrl, version } = componentsFromVersionedUrl(
+        entityTypeSchema.$id,
+      );
+      return {
+        metadata: {
+          recordId: {
+            baseUrl,
+            version,
+          },
+        },
+        schema: entityTypeSchema,
+      } satisfies EntityTypeWithMetadata;
     } else {
       return null;
     }
@@ -54,10 +53,6 @@ const Page: NextPageWithLayout = () => {
   const requestedVersion = requestedVersionString
     ? parseInt(requestedVersionString, 10)
     : null;
-
-  const userUnauthorized = useIsReadonlyModeForType(
-    routeNamespace?.accountId as OwnedById,
-  );
 
   if (!routeNamespace) {
     if (loadingNamespace) {
@@ -73,7 +68,6 @@ const Page: NextPageWithLayout = () => {
       draftEntityType={draftEntityType}
       entityTypeBaseUrl={entityTypeBaseUrl}
       requestedVersion={requestedVersion}
-      readonly={userUnauthorized}
     />
   );
 };

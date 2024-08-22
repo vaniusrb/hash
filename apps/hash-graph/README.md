@@ -33,7 +33,7 @@ just run server
 ### Logging configuration
 
 Some of the libraries used are very talkative in `trace` logging configurations, especially `mio`, `hyper`, and `tokio_util`.
-If you're interested in just increasing the logs for the Graph, we recommend specifically targeting the crates with `RUST_LOG=graph=trace,hash-graph=trace`.
+If you're interested in just increasing the logs for the Graph, we recommend specifically targeting the crates with `HASH_GRAPH_LOG_LEVEL=graph=trace,hash-graph=trace`.
 
 ## Development
 
@@ -70,7 +70,7 @@ The Graph's API is current exposed over REST with an accompanying OpenAPI spec.
 The HASH Graph produces an OpenAPI Spec while running, which can be used to generate the `@local/hash-graph-client` typescript client. In the `/apps/hash-graph` directory run:
 
 ```shell
-just generate-openapi-client
+just generate-openapi-specs
 ```
 
 Make sure to run this command whenever changes are made to the specification. CI will not pass otherwise.

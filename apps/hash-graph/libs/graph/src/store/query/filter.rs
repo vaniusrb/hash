@@ -1,38 +1,40 @@
-use std::{borrow::Cow, fmt, mem, str::FromStr};
+use alloc::borrow::Cow;
+use core::{fmt, mem, str::FromStr};
 
-use derivative::Derivative;
+use derive_where::derive_where;
 use error_stack::{bail, Context, Report, ResultExt};
 use graph_types::{
-    knowledge::entity::{Entity, EntityId},
-    ontology::OntologyTypeVersion,
+    knowledge::entity::{Entity, EntityEditionId, EntityId},
+    ontology::{DataTypeId, DataTypeWithMetadata, EntityTypeId, PropertyTypeId},
     Embedding,
 };
 use serde::Deserialize;
 use serde_json::{Number, Value};
 use temporal_versioning::Timestamp;
-use type_system::url::{BaseUrl, VersionedUrl};
+use type_system::url::{BaseUrl, OntologyTypeVersion, VersionedUrl};
 use uuid::Uuid;
 
 use crate::{
     knowledge::EntityQueryPath,
+    ontology::{DataTypeQueryPath, EntityTypeQueryPath},
     store::{
         query::{OntologyQueryPath, ParameterType, QueryPath},
-        Record,
+        QueryRecord, SubgraphRecord,
     },
-    subgraph::identifier::VertexId,
+    subgraph::{
+        edges::{EdgeDirection, OntologyEdgeKind, SharedEdgeKind},
+        identifier::VertexId,
+    },
 };
 
 /// A set of conditions used for queries.
-#[derive(Derivative, Deserialize)]
-#[derivative(
-    Debug(bound = "R::QueryPath<'p>: fmt::Debug"),
-    PartialEq(bound = "R::QueryPath<'p>: PartialEq")
-)]
+#[derive(Deserialize)]
+#[derive_where(Debug, Clone, PartialEq; R::QueryPath<'p>)]
 #[serde(
     rename_all = "camelCase",
     bound = "'de: 'p, R::QueryPath<'p>: Deserialize<'de>"
 )]
-pub enum Filter<'p, R: Record + ?Sized> {
+pub enum Filter<'p, R: QueryRecord> {
     All(Vec<Self>),
     Any(Vec<Self>),
     Not(Box<Self>),
@@ -44,6 +46,10 @@ pub enum Filter<'p, R: Record + ?Sized> {
         Option<FilterExpression<'p, R>>,
         Option<FilterExpression<'p, R>>,
     ),
+    Greater(FilterExpression<'p, R>, FilterExpression<'p, R>),
+    GreaterOrEqual(FilterExpression<'p, R>, FilterExpression<'p, R>),
+    Less(FilterExpression<'p, R>, FilterExpression<'p, R>),
+    LessOrEqual(FilterExpression<'p, R>, FilterExpression<'p, R>),
     CosineDistance(
         FilterExpression<'p, R>,
         FilterExpression<'p, R>,
@@ -58,7 +64,7 @@ pub enum Filter<'p, R: Record + ?Sized> {
 
 impl<'p, R> Filter<'p, R>
 where
-    R: Record<QueryPath<'p>: OntologyQueryPath>,
+    R: SubgraphRecord<QueryPath<'p>: OntologyQueryPath>,
     R::VertexId: VertexId<BaseId = BaseUrl, RevisionId = OntologyTypeVersion>,
 {
     /// Creates a `Filter` to search for a specific ontology type of kind `R`, identified by its
@@ -75,10 +81,47 @@ where
             Self::Equal(
                 Some(FilterExpression::Path(<R::QueryPath<'p>>::version())),
                 Some(FilterExpression::Parameter(Parameter::OntologyTypeVersion(
-                    OntologyTypeVersion::new(versioned_url.version),
+                    versioned_url.version,
                 ))),
             ),
         ])
+    }
+}
+
+impl<'p> Filter<'p, DataTypeWithMetadata> {
+    #[must_use]
+    pub fn for_data_type_parents(
+        data_type_ids: &'p [DataTypeId],
+        inheritance_depth: Option<u32>,
+    ) -> Self {
+        Filter::In(
+            FilterExpression::Path(DataTypeQueryPath::DataTypeEdge {
+                edge_kind: OntologyEdgeKind::InheritsFrom,
+                direction: EdgeDirection::Incoming,
+                inheritance_depth,
+                path: Box::new(DataTypeQueryPath::OntologyId),
+            }),
+            ParameterList::DataTypeIds(data_type_ids),
+        )
+    }
+
+    #[must_use]
+    pub fn for_data_type_children(
+        versioned_url: &VersionedUrl,
+        inheritance_depth: Option<u32>,
+    ) -> Self {
+        let data_type_id = DataTypeId::from_url(versioned_url);
+        Filter::Equal(
+            Some(FilterExpression::Path(DataTypeQueryPath::DataTypeEdge {
+                edge_kind: OntologyEdgeKind::InheritsFrom,
+                direction: EdgeDirection::Outgoing,
+                inheritance_depth,
+                path: Box::new(DataTypeQueryPath::OntologyId),
+            })),
+            Some(FilterExpression::Parameter(Parameter::Uuid(
+                data_type_id.into_uuid(),
+            ))),
+        )
     }
 }
 
@@ -86,24 +129,63 @@ impl<'p> Filter<'p, Entity> {
     /// Creates a `Filter` to search for a specific entities, identified by its [`EntityId`].
     #[must_use]
     pub fn for_entity_by_entity_id(entity_id: EntityId) -> Self {
-        Self::All(vec![
-            Self::Equal(
-                Some(FilterExpression::Path(EntityQueryPath::OwnedById)),
-                Some(FilterExpression::Parameter(Parameter::Uuid(
-                    entity_id.owned_by_id.into_uuid(),
-                ))),
+        let owned_by_id_filter = Self::Equal(
+            Some(FilterExpression::Path(EntityQueryPath::OwnedById)),
+            Some(FilterExpression::Parameter(Parameter::Uuid(
+                entity_id.owned_by_id.into_uuid(),
+            ))),
+        );
+        let entity_uuid_filter = Self::Equal(
+            Some(FilterExpression::Path(EntityQueryPath::Uuid)),
+            Some(FilterExpression::Parameter(Parameter::Uuid(
+                entity_id.entity_uuid.into_uuid(),
+            ))),
+        );
+
+        if let Some(draft_id) = entity_id.draft_id {
+            Self::All(vec![
+                owned_by_id_filter,
+                entity_uuid_filter,
+                Self::Equal(
+                    Some(FilterExpression::Path(EntityQueryPath::DraftId)),
+                    Some(FilterExpression::Parameter(Parameter::Uuid(
+                        draft_id.into_uuid(),
+                    ))),
+                ),
+            ])
+        } else {
+            Self::All(vec![owned_by_id_filter, entity_uuid_filter])
+        }
+    }
+
+    #[must_use]
+    pub fn for_entity_by_type_id(entity_type_id: &'p VersionedUrl) -> Self {
+        Filter::All(vec![
+            Filter::Equal(
+                Some(FilterExpression::Path(EntityQueryPath::EntityTypeEdge {
+                    edge_kind: SharedEdgeKind::IsOfType,
+                    path: EntityTypeQueryPath::BaseUrl,
+                    inheritance_depth: Some(0),
+                })),
+                Some(FilterExpression::Parameter(Parameter::Text(Cow::Borrowed(
+                    entity_type_id.base_url.as_str(),
+                )))),
             ),
-            Self::Equal(
-                Some(FilterExpression::Path(EntityQueryPath::Uuid)),
-                Some(FilterExpression::Parameter(Parameter::Uuid(
-                    entity_id.entity_uuid.into_uuid(),
+            Filter::Equal(
+                Some(FilterExpression::Path(EntityQueryPath::EntityTypeEdge {
+                    edge_kind: SharedEdgeKind::IsOfType,
+                    path: EntityTypeQueryPath::Version,
+                    inheritance_depth: Some(0),
+                })),
+                Some(FilterExpression::Parameter(Parameter::OntologyTypeVersion(
+                    entity_type_id.version,
                 ))),
             ),
         ])
     }
 }
 
-impl<'p, R: Record> Filter<'p, R>
+impl<'p, R: QueryRecord> Filter<'p, R>
 where
     R::QueryPath<'p>: fmt::Display,
 {
@@ -129,6 +211,16 @@ where
                 ) => parameter.convert_to_parameter_type(path.expected_type())?,
                 (..) => {}
             },
+            Self::Greater(lhs, rhs)
+            | Self::GreaterOrEqual(lhs, rhs)
+            | Self::Less(lhs, rhs)
+            | Self::LessOrEqual(lhs, rhs) => match (lhs, rhs) {
+                (FilterExpression::Parameter(parameter), FilterExpression::Path(path))
+                | (FilterExpression::Path(path), FilterExpression::Parameter(parameter)) => {
+                    parameter.convert_to_parameter_type(path.expected_type())?;
+                }
+                (..) => {}
+            },
             Self::CosineDistance(lhs, rhs, max) => {
                 if let FilterExpression::Parameter(parameter) = max {
                     parameter.convert_to_parameter_type(ParameterType::F64)?;
@@ -144,7 +236,10 @@ where
             Self::In(lhs, rhs) => {
                 if let FilterExpression::Parameter(parameter) = lhs {
                     match rhs {
-                        ParameterList::Uuid(_) => {
+                        ParameterList::DataTypeIds(_)
+                        | ParameterList::PropertyTypeIds(_)
+                        | ParameterList::EntityTypeIds(_)
+                        | ParameterList::EntityEditionIds(_) => {
                             parameter.convert_to_parameter_type(ParameterType::Uuid)?;
                         }
                     }
@@ -168,21 +263,18 @@ where
 }
 
 /// A leaf value in a [`Filter`].
-#[derive(Derivative, Deserialize)]
-#[derivative(
-    Debug(bound = "R::QueryPath<'p>: fmt::Debug"),
-    PartialEq(bound = "R::QueryPath<'p>: PartialEq")
-)]
+#[derive(Deserialize)]
+#[derive_where(Debug, Clone, PartialEq; R::QueryPath<'p>)]
 #[serde(
     rename_all = "camelCase",
     bound = "'de: 'p, R::QueryPath<'p>: Deserialize<'de>"
 )]
-pub enum FilterExpression<'p, R: Record + ?Sized> {
+pub enum FilterExpression<'p, R: QueryRecord> {
     Path(R::QueryPath<'p>),
     Parameter(Parameter<'p>),
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum Parameter<'p> {
     Boolean(bool),
@@ -201,11 +293,15 @@ pub enum Parameter<'p> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ParameterList<'p> {
-    Uuid(&'p [Uuid]),
+    DataTypeIds(&'p [DataTypeId]),
+    PropertyTypeIds(&'p [PropertyTypeId]),
+    EntityTypeIds(&'p [EntityTypeId]),
+    EntityEditionIds(&'p [EntityEditionId]),
 }
 
-impl Parameter<'_> {
-    fn to_owned(&self) -> Parameter<'static> {
+impl<'p> Parameter<'p> {
+    #[must_use]
+    pub fn to_owned(&self) -> Parameter<'static> {
         match self {
             Parameter::Boolean(bool) => Parameter::Boolean(*bool),
             Parameter::I32(number) => Parameter::I32(*number),
@@ -221,30 +317,58 @@ impl Parameter<'_> {
 }
 
 #[derive(Debug)]
+enum ActualParameterType {
+    Parameter(Parameter<'static>),
+    Value(serde_json::Value),
+}
+
+impl From<Parameter<'static>> for ActualParameterType {
+    fn from(value: Parameter<'static>) -> Self {
+        Self::Parameter(value)
+    }
+}
+
+impl From<serde_json::Value> for ActualParameterType {
+    fn from(value: serde_json::Value) -> Self {
+        Self::Value(value)
+    }
+}
+
+#[derive(Debug)]
 #[must_use]
 pub struct ParameterConversionError {
-    actual: Parameter<'static>,
+    actual: ActualParameterType,
     expected: ParameterType,
 }
 
 impl fmt::Display for ParameterConversionError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let actual = match &self.actual {
-            Parameter::Any(Value::Null) => "null".to_owned(),
-            Parameter::Boolean(boolean) | Parameter::Any(Value::Bool(boolean)) => {
-                boolean.to_string()
-            }
-            Parameter::I32(number) => number.to_string(),
-            Parameter::F64(number) => number.to_string(),
-            Parameter::Any(Value::Number(number)) => number.to_string(),
-            Parameter::Text(text) => text.to_string(),
-            Parameter::Vector(_) => "vector".to_owned(),
-            Parameter::Any(Value::String(string)) => string.clone(),
-            Parameter::Uuid(uuid) => uuid.to_string(),
-            Parameter::OntologyTypeVersion(version) => version.inner().to_string(),
-            Parameter::Timestamp(timestamp) => timestamp.to_string(),
-            Parameter::Any(Value::Object(_)) => "object".to_owned(),
-            Parameter::Any(Value::Array(_)) => "array".to_owned(),
+            ActualParameterType::Parameter(parameter) => match parameter {
+                Parameter::Any(Value::Null) => "null".to_owned(),
+                Parameter::Boolean(boolean) | Parameter::Any(Value::Bool(boolean)) => {
+                    boolean.to_string()
+                }
+                Parameter::I32(number) => number.to_string(),
+                Parameter::F64(number) => number.to_string(),
+                Parameter::Any(Value::Number(number)) => number.to_string(),
+                Parameter::Text(text) => text.to_string(),
+                Parameter::Vector(_) => "vector".to_owned(),
+                Parameter::Any(Value::String(string)) => string.clone(),
+                Parameter::Uuid(uuid) => uuid.to_string(),
+                Parameter::OntologyTypeVersion(version) => version.inner().to_string(),
+                Parameter::Timestamp(timestamp) => timestamp.to_string(),
+                Parameter::Any(Value::Object(_)) => "object".to_owned(),
+                Parameter::Any(Value::Array(_)) => "array".to_owned(),
+            },
+            ActualParameterType::Value(value) => match value {
+                Value::Null => "null".to_owned(),
+                Value::Bool(boolean) => boolean.to_string(),
+                Value::Number(number) => number.to_string(),
+                Value::String(string) => string.clone(),
+                Value::Array(_) => "array".to_owned(),
+                Value::Object(_) => "object".to_owned(),
+            },
         };
 
         write!(fmt, "could not convert {actual} to {}", self.expected)
@@ -263,14 +387,14 @@ impl Parameter<'_> {
         &mut self,
         expected: ParameterType,
     ) -> Result<(), Report<ParameterConversionError>> {
-        match (&mut *self, expected) {
+        match (&mut *self, &expected) {
             // identity
             (Parameter::Boolean(_), ParameterType::Boolean)
             | (Parameter::I32(_), ParameterType::I32)
             | (Parameter::F64(_), ParameterType::F64)
             | (Parameter::Text(_), ParameterType::Text)
-            | (Parameter::Any(_), ParameterType::Any)
-            | (Parameter::Vector(_), ParameterType::Vector) => {}
+            | (Parameter::Any(_), ParameterType::Any) => {}
+            (Parameter::Vector(_), ParameterType::Vector(rhs)) if **rhs == ParameterType::F64 => {}
 
             // Boolean conversions
             (Parameter::Boolean(bool), ParameterType::Any) => {
@@ -287,13 +411,13 @@ impl Parameter<'_> {
             (Parameter::Any(Value::Number(number)), ParameterType::I32) => {
                 let number = number.as_i64().ok_or_else(|| {
                     Report::new(ParameterConversionError {
-                        actual: self.to_owned(),
+                        actual: self.to_owned().into(),
                         expected,
                     })
                 })?;
                 *self = Parameter::I32(i32::try_from(number).change_context_lazy(|| {
                     ParameterConversionError {
-                        actual: self.to_owned(),
+                        actual: self.to_owned().into(),
                         expected: ParameterType::OntologyTypeVersion,
                     }
                 })?);
@@ -301,7 +425,7 @@ impl Parameter<'_> {
             (Parameter::I32(number), ParameterType::OntologyTypeVersion) => {
                 *self = Parameter::OntologyTypeVersion(OntologyTypeVersion::new(
                     u32::try_from(*number).change_context_lazy(|| ParameterConversionError {
-                        actual: self.to_owned(),
+                        actual: self.to_owned().into(),
                         expected: ParameterType::OntologyTypeVersion,
                     })?,
                 ));
@@ -315,7 +439,7 @@ impl Parameter<'_> {
                 *self = Parameter::Any(Value::Number(Number::from_f64(*number).ok_or_else(
                     || {
                         Report::new(ParameterConversionError {
-                            actual: self.to_owned(),
+                            actual: self.to_owned().into(),
                             expected,
                         })
                     },
@@ -324,7 +448,7 @@ impl Parameter<'_> {
             (Parameter::Any(Value::Number(number)), ParameterType::F64) => {
                 *self = Parameter::F64(number.as_f64().ok_or_else(|| {
                     Report::new(ParameterConversionError {
-                        actual: self.to_owned(),
+                        actual: self.to_owned().into(),
                         expected,
                     })
                 })?);
@@ -339,16 +463,16 @@ impl Parameter<'_> {
             }
             (Parameter::Text(_base_url), ParameterType::BaseUrl) => {
                 // TODO: validate base url
-                //   see https://app.asana.com/0/1202805690238892/1203225514907875/f
+                //   see https://linear.app/hash/issue/H-3016
             }
             (Parameter::Text(_versioned_url), ParameterType::VersionedUrl) => {
                 // TODO: validate versioned url
-                //   see https://app.asana.com/0/1202805690238892/1203225514907875/f
+                //   see https://linear.app/hash/issue/H-3016
             }
             (Parameter::Text(text), ParameterType::Uuid) => {
                 *self = Parameter::Uuid(Uuid::from_str(&*text).change_context_lazy(|| {
                     ParameterConversionError {
-                        actual: self.to_owned(),
+                        actual: self.to_owned().into(),
                         expected: ParameterType::Uuid,
                     }
                 })?);
@@ -363,8 +487,8 @@ impl Parameter<'_> {
                             Number::from_f64(f64::from(value))
                                 .ok_or_else(|| {
                                     Report::new(ParameterConversionError {
-                                        actual: Parameter::Vector(vector.to_owned()),
-                                        expected,
+                                        actual: Parameter::Vector(vector.to_owned()).into(),
+                                        expected: expected.clone(),
                                     })
                                 })
                                 .map(Value::Number)
@@ -372,7 +496,9 @@ impl Parameter<'_> {
                         .collect::<Result<_, _>>()?,
                 ));
             }
-            (Parameter::Any(Value::Array(array)), ParameterType::Vector) => {
+            (Parameter::Any(Value::Array(array)), ParameterType::Vector(rhs))
+                if **rhs == ParameterType::F64 =>
+            {
                 *self = Parameter::Vector(
                     mem::take(array)
                         .into_iter()
@@ -385,8 +511,8 @@ impl Parameter<'_> {
                                 .as_f64()
                                 .ok_or_else(|| {
                                     Report::new(ParameterConversionError {
-                                        actual: self.to_owned(),
-                                        expected,
+                                        actual: self.to_owned().into(),
+                                        expected: expected.clone(),
                                     })
                                 })
                                 .map(|value| value as f32)
@@ -398,8 +524,8 @@ impl Parameter<'_> {
             // Fallback
             (actual, expected) => {
                 bail!(ParameterConversionError {
-                    actual: actual.to_owned(),
-                    expected
+                    actual: actual.to_owned().into(),
+                    expected: expected.clone(),
                 });
             }
         }
@@ -411,19 +537,18 @@ impl Parameter<'_> {
 #[cfg(test)]
 mod tests {
     use graph_types::{
-        knowledge::entity::{EntityId, EntityUuid},
+        knowledge::entity::{DraftId, EntityUuid},
         ontology::DataTypeWithMetadata,
         owned_by_id::OwnedById,
     };
     use serde_json::json;
-    use type_system::url::BaseUrl;
 
     use super::*;
     use crate::ontology::DataTypeQueryPath;
 
     fn test_filter_representation<'de, R>(actual: &Filter<'de, R>, expected: &'de serde_json::Value)
     where
-        R: Record<QueryPath<'de>: fmt::Debug + fmt::Display + PartialEq + Deserialize<'de>>,
+        R: QueryRecord<QueryPath<'de>: fmt::Debug + fmt::Display + PartialEq + Deserialize<'de>>,
     {
         let mut expected =
             Filter::<R>::deserialize(expected).expect("Could not deserialize filter");
@@ -438,7 +563,7 @@ mod tests {
                 "https://blockprotocol.org/@blockprotocol/types/data-type/text/".to_owned(),
             )
             .expect("invalid base url"),
-            version: 1,
+            version: OntologyTypeVersion::new(1),
         };
 
         let expected = json!({
@@ -465,6 +590,7 @@ mod tests {
         let entity_id = EntityId {
             owned_by_id: OwnedById::new(Uuid::new_v4()),
             entity_uuid: EntityUuid::new(Uuid::new_v4()),
+            draft_id: None,
         };
 
         let expected = json!({
@@ -476,6 +602,34 @@ mod tests {
             { "equal": [
               { "path": ["uuid"] },
               { "parameter": entity_id.entity_uuid }
+            ]}
+          ]
+        });
+
+        test_filter_representation(&Filter::for_entity_by_entity_id(entity_id), &expected);
+    }
+
+    #[test]
+    fn for_entity_by_entity_draft_id() {
+        let entity_id = EntityId {
+            owned_by_id: OwnedById::new(Uuid::new_v4()),
+            entity_uuid: EntityUuid::new(Uuid::new_v4()),
+            draft_id: Some(DraftId::new(Uuid::new_v4())),
+        };
+
+        let expected = json!({
+          "all": [
+            { "equal": [
+              { "path": ["ownedById"] },
+              { "parameter": entity_id.owned_by_id }
+            ]},
+            { "equal": [
+              { "path": ["uuid"] },
+              { "parameter": entity_id.entity_uuid }
+            ]},
+            { "equal": [
+              { "path": ["draftId"] },
+              { "parameter": entity_id.draft_id }
             ]}
           ]
         });

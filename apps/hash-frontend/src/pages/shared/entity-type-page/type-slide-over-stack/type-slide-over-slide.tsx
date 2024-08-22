@@ -1,32 +1,104 @@
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
 import {
   ArrowLeftIcon,
+  ArrowRightIconRegular,
+  ArrowUpRightFromSquareRegularIcon,
   CloseIcon,
   IconButton,
   LoadingSpinner,
   OntologyChip,
   parseUrlForOntologyChip,
 } from "@hashintel/design-system";
+import type { EntityTypeEditorFormData } from "@hashintel/type-editor";
 import {
   EntityTypeEditor,
-  EntityTypeEditorFormData,
   EntityTypeFormProvider,
-  getFormDataFromSchema,
+  getFormDataFromEntityType,
   useEntityTypeForm,
 } from "@hashintel/type-editor";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
 import { componentsFromVersionedUrl } from "@local/hash-subgraph/type-system-patch";
-import { Box, Slide, Tooltip } from "@mui/material";
-import { FunctionComponent, useCallback, useMemo, useState } from "react";
+import { Box, ButtonBase, Slide, Tooltip } from "@mui/material";
+import type { FunctionComponent } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useEntityTypesContextRequired } from "../../../../shared/entity-types-context/hooks/use-entity-types-context-required";
-import { ArrowRightIcon } from "../../../../shared/icons/arrow-right";
 import { Link } from "../../../../shared/ui";
 import { useRouteNamespace } from "../../../[shortname]/shared/use-route-namespace";
 import { useDataTypesContext } from "../../data-types-context";
 import { EntityTypeContext } from "../shared/entity-type-context";
 import { EntityTypeHeader } from "../shared/entity-type-header";
-import { getTypesWithoutMetadata } from "../shared/get-types-without-metadata";
 import { useEntityTypeValue } from "../use-entity-type-value";
+
+const CopyableOntologyChip: FunctionComponent<{
+  entityType: EntityTypeWithMetadata;
+}> = ({ entityType }) => {
+  const [tooltipTitle, setTooltipTitle] = useState("Copy type URL");
+
+  const [copyTooltipIsOpen, setCopyTooltipIsOpen] = useState(false);
+
+  const ontology = parseUrlForOntologyChip(entityType.schema.$id);
+
+  const handleCopyEntityTypeUrl = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(entityType.schema.$id);
+      setTooltipTitle("Copied type URL!");
+    } catch {
+      setTooltipTitle("Not allowed to copy to clipboard");
+    } finally {
+      setTimeout(() => {
+        setCopyTooltipIsOpen(false);
+
+        setTimeout(() => {
+          setTooltipTitle("Copy type URL");
+        }, 300);
+      }, 500);
+    }
+  }, [entityType]);
+
+  return (
+    <Box display="flex" alignItems="center" columnGap={1}>
+      <Tooltip
+        open={copyTooltipIsOpen}
+        title={tooltipTitle}
+        placement="top"
+        slotProps={{
+          tooltip: {
+            sx: {
+              maxWidth: "unset",
+              textWrap: "no-wrap",
+            },
+          },
+        }}
+      >
+        <ButtonBase
+          onClick={handleCopyEntityTypeUrl}
+          onMouseEnter={() => setCopyTooltipIsOpen(true)}
+          onMouseLeave={() => setCopyTooltipIsOpen(false)}
+        >
+          <OntologyChip {...ontology} />
+        </ButtonBase>
+      </Tooltip>
+      <Link href={entityType.schema.$id} target="_blank">
+        <IconButton
+          sx={{
+            padding: 0,
+            transition: ({ transitions }) => transitions.create("color"),
+            "&:hover": {
+              background: "transparent",
+              color: ({ palette }) => palette.blue[70],
+            },
+            svg: {
+              fontSize: 14,
+            },
+          }}
+        >
+          <ArrowUpRightFromSquareRegularIcon />
+        </IconButton>
+      </Link>
+    </Box>
+  );
+};
 
 const SLIDE_WIDTH = 1000;
 
@@ -70,7 +142,7 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
     version,
     routeNamespace?.accountId ?? null,
     (fetchedEntityType) => {
-      reset(getFormDataFromSchema(fetchedEntityType.schema));
+      reset(getFormDataFromEntityType(fetchedEntityType));
     },
   );
 
@@ -78,16 +150,12 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
 
   const entityTypesContext = useEntityTypesContextRequired();
 
-  const ontology = remoteEntityType
-    ? parseUrlForOntologyChip(remoteEntityType.schema.$id)
-    : undefined;
-
   const entityTypeOptions = useMemo(
     () =>
       Object.fromEntries(
         (entityTypesContext.entityTypes ?? []).map((entityType) => [
           entityType.schema.$id,
-          entityType.schema,
+          entityType,
         ]),
       ),
     [entityTypesContext.entityTypes],
@@ -115,8 +183,6 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
     return null;
   }
 
-  const propertyTypeOptions = getTypesWithoutMetadata(remotePropertyTypes);
-
   return (
     <Slide
       in={open && !animateOut}
@@ -142,7 +208,7 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
           justifyContent="space-between"
         >
           <Box display="flex" justifyContent="space-between" gap={1}>
-            {onBack || onForward ? (
+            {(onBack ?? onForward) ? (
               <Tooltip title="Back" placement="bottom">
                 <IconButton disabled={!onBack} onClick={handleBackClick}>
                   <ArrowLeftIcon />
@@ -152,7 +218,7 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
             {onForward ? (
               <Tooltip title="Forward" placement="bottom">
                 <IconButton onClick={onForward}>
-                  <ArrowRightIcon />
+                  <ArrowRightIconRegular />
                 </IconButton>
               </Tooltip>
             ) : null}
@@ -163,10 +229,7 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
             </IconButton>
           </Tooltip>
         </Box>
-        {loadingNamespace ||
-        loadingRemoteEntityType ||
-        !remoteEntityType ||
-        !ontology ? (
+        {loadingNamespace || loadingRemoteEntityType || !remoteEntityType ? (
           <Box
             sx={{
               display: "flex",
@@ -192,24 +255,18 @@ export const TypeSlideOverSlide: FunctionComponent<TypeSlideOverSlideProps> = ({
                     ]?.isFile
                   }
                   ontologyChip={
-                    <Link
-                      href={remoteEntityType.schema.$id}
-                      target="_blank"
-                      style={{ textDecoration: "none" }}
-                    >
-                      <OntologyChip {...ontology} />
-                    </Link>
+                    <CopyableOntologyChip entityType={remoteEntityType} />
                   }
-                  entityType={remoteEntityType.schema}
+                  entityTypeSchema={remoteEntityType.schema}
                   isReadonly
                 />
                 <EntityTypeEditor
                   customization={{ onNavigateToType }}
                   dataTypeOptions={dataTypeOptions}
-                  entityType={remoteEntityType.schema}
+                  entityType={remoteEntityType}
                   entityTypeOptions={entityTypeOptions}
                   ontologyFunctions={null}
-                  propertyTypeOptions={propertyTypeOptions}
+                  propertyTypeOptions={remotePropertyTypes}
                   readonly
                 />
               </EntityTypeContext.Provider>

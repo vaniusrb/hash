@@ -1,14 +1,23 @@
+cargo-features = ["edition2024"]
+
 [package]
 name = "hash-status"
 description = "The HASH Status and Error Model."
-authors.workspace = true
+version.workspace = true
 edition.workspace = true
-version = "0.0.0"
-publish = false
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+authors.workspace = true
+
+[package.metadata.sync.turborepo]
+extra-dependencies = [{ name = "@local/status", version = "0.0.0-private" }]
 
 [dependencies]
 error-stack.workspace = true
 
 serde = { workspace = true, features = ["derive"] }
 
-serde_json = "1.0.111"
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,16 +1,16 @@
 import { useMutation } from "@apollo/client";
+import type { EntityId } from "@local/hash-graph-types/entity";
 import {
-  EntityId,
   extractEntityUuidFromEntityId,
   extractOwnedByIdFromEntityId,
 } from "@local/hash-subgraph";
 import { useCallback, useContext } from "react";
 
-import {
+import type {
   UpdatePageMutation,
   UpdatePageMutationVariables,
 } from "../../graphql/api-types.gen";
-import { structuralQueryEntitiesQuery } from "../../graphql/queries/knowledge/entity.queries";
+import { getEntitySubgraphQuery } from "../../graphql/queries/knowledge/entity.queries";
 import { updatePage } from "../../graphql/queries/page.queries";
 import { getBlockCollectionContentsStructuralQueryVariables } from "../../pages/shared/block-collection-contents";
 import { getAccountPagesVariables } from "../../shared/account-pages-variables";
@@ -35,12 +35,12 @@ export const useArchivePage = () => {
     const ownedById = extractOwnedByIdFromEntityId(pageEntityId);
     return [
       {
-        query: structuralQueryEntitiesQuery,
+        query: getEntitySubgraphQuery,
         variables: getAccountPagesVariables({ ownedById }),
       },
 
       {
-        query: structuralQueryEntitiesQuery,
+        query: getEntitySubgraphQuery,
         variables: getBlockCollectionContentsStructuralQueryVariables(
           extractEntityUuidFromEntityId(pageEntityId),
         ),

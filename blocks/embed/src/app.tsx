@@ -1,7 +1,7 @@
-import { BlockProtocolUpdateEntitiesAction } from "blockprotocol";
-import { BlockComponent } from "blockprotocol/react";
+import type { BlockProtocolUpdateEntitiesAction } from "blockprotocol";
+import type { BlockComponent } from "blockprotocol/react";
+import type { Reducer } from "react";
 import {
-  Reducer,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -21,7 +21,7 @@ import {
 } from "./constants";
 import { HtmlBlock } from "./html-block";
 import Pencil from "./svgs/pencil";
-import { Actions, AppState, ProviderName } from "./types";
+import type { Actions, AppState, ProviderName } from "./types";
 import { getFormCopy } from "./utils";
 
 type BlockEntityProperties = {
@@ -336,6 +336,7 @@ export const App: BlockComponent<BlockEntityProperties> = ({
           )}
         </div>
         <button
+          aria-label="Reset"
           onClick={resetData}
           type="button"
           className={tw`border-solid bg-gray-100 w-10 h-10 flex items-center justify-center ml-1 border-1 border-gray-300 rounded-sm self-start`}

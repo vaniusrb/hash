@@ -1,16 +1,14 @@
 import { Box } from "@mui/material";
-import {
+import type {
   ClipboardEventHandler,
   FormEvent,
   FunctionComponent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
 } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { HashIcon, KeyboardReturnIcon, LogoIcon } from "../../shared/icons";
-import { InvitationInfo, SYNTHETIC_LOADING_TIME_MS } from "./auth-utils";
+import { KeyboardReturnIcon } from "../../shared/icons";
+import type { InvitationInfo } from "./auth-utils";
+import { SYNTHETIC_LOADING_TIME_MS } from "./auth-utils";
 import { InviteHeader } from "./invite-header";
 
 type VerifyCodeProps = {
@@ -114,13 +112,15 @@ export const VerifyCode: FunctionComponent<VerifyCodeProps> = ({
 
   return (
     <div style={{ width: "66.666667%", maxWidth: "56rem" }}>
-      <LogoIcon style={{ marginBottom: "1.5rem" }} />
       <div
         style={{
           alignItems: "center",
           backgroundColor: "#ffffff",
           borderRadius: "1rem",
-          // @todo use shadows from MUI theme https://app.asana.com/0/1203179076056209/1203480105875518/f
+          /**
+           * @todo use shadows from MUI theme
+           * @see https://linear.app/hash/issue/H-2999
+           */
           boxShadow:
             "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
           display: "flex",
@@ -214,16 +214,7 @@ export const VerifyCode: FunctionComponent<VerifyCodeProps> = ({
               disabled={!isInputValid() || loading}
             >
               {loading ? (
-                <>
-                  <span style={{ marginRight: "0.25rem" }}>Loading</span>
-                  <HashIcon
-                    style={{
-                      animation: "spin 1s linear infinite",
-                      height: "1rem",
-                      width: "1rem",
-                    }}
-                  />
-                </>
+                <span style={{ marginRight: "0.25rem" }}>Loading</span>
               ) : (
                 <>
                   <span style={{ marginRight: "0.25rem" }}>Submit</span>
@@ -302,16 +293,6 @@ export const VerifyCode: FunctionComponent<VerifyCodeProps> = ({
               disabled={requestCodeLoading || syntheticLoading}
             >
               <span>Resend email</span>
-              {(requestCodeLoading || syntheticLoading) && (
-                <HashIcon
-                  style={{
-                    animation: "spin 1s linear infinite",
-                    height: "0.75rem",
-                    marginLeft: "0.25rem",
-                    width: "0.75rem",
-                  }}
-                />
-              )}
             </Box>
           </div>
         )}

@@ -1,6 +1,14 @@
-import type { VersionedUrl } from "@blockprotocol/graph";
+import type {
+  EntityTypeReference,
+  VersionedUrl,
+} from "@blockprotocol/type-system/slim";
 import { Autocomplete, Chip, MenuItem } from "@hashintel/design-system";
-import { BaseUrl, EntityTypeWithMetadata } from "@local/hash-subgraph";
+import { typedEntries } from "@local/advanced-types/typed-entries";
+import type {
+  BaseUrl,
+  EntityTypeWithMetadata,
+} from "@local/hash-graph-types/ontology";
+import type { PopperProps } from "@mui/material";
 import { outlinedInputClasses, Typography } from "@mui/material";
 import { useMemo } from "react";
 
@@ -27,7 +35,11 @@ const getChipLabelFromId = (id: VersionedUrl) => {
 type SelectTypesAndInferProps = {
   inputHeight: number | string;
   multiple: boolean;
-  setTargetEntityTypeIds: (typeIds: VersionedUrl[]) => void;
+  popperPlacement?: PopperProps["placement"];
+  setTargetEntityTypeIds: (params: {
+    selectedEntityTypeIds: VersionedUrl[];
+    linkedEntityTypeIds: VersionedUrl[];
+  }) => void;
   targetEntityTypeIds: VersionedUrl[] | null;
 };
 
@@ -36,6 +48,7 @@ const menuWidth = 400;
 export const EntityTypeSelector = ({
   inputHeight,
   multiple,
+  popperPlacement,
   setTargetEntityTypeIds,
   targetEntityTypeIds,
 }: SelectTypesAndInferProps) => {
@@ -43,11 +56,10 @@ export const EntityTypeSelector = ({
 
   const selectedEntityTypes = useMemo(
     () =>
-      allEntityTypes.filter(
-        (type) =>
-          targetEntityTypeIds?.some(
-            (targetTypeId) => targetTypeId === type.schema.$id,
-          ),
+      allEntityTypes.filter((type) =>
+        targetEntityTypeIds?.some(
+          (targetTypeId) => targetTypeId === type.schema.$id,
+        ),
       ),
     [allEntityTypes, targetEntityTypeIds],
   );
@@ -66,7 +78,6 @@ export const EntityTypeSelector = ({
         !selectedEntityTypes.some(
           (selectedType) => selectedType.schema.$id === type.schema.$id,
         ) &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- false positive
         (!latestEntityTypesByBaseUrl[baseUrl] ||
           latestEntityTypesByBaseUrl[baseUrl].metadata.recordId.version <
             type.metadata.recordId.version)
@@ -80,6 +91,42 @@ export const EntityTypeSelector = ({
       ...selectedEntityTypes,
     ].sort((a, b) => a.schema.title.localeCompare(b.schema.title));
   }, [allEntityTypes, selectedEntityTypes]);
+
+  const getLinkedEntityTypeIds = (entityTypes: EntityTypeWithMetadata[]) => {
+    const linkedEntityTypeIds: Set<VersionedUrl> = new Set();
+
+    /**
+     * We only want to add linked types for newly added entity types,
+     * because otherwise users may remove a linked type, make another unrelated change
+     * and have the linked type added back in (because another selected type links to it).
+     *
+     * This also means that if a user explicitly removes a linked type, this function does nothing.
+     */
+    const addedEntityTypes = entityTypes.filter(
+      (type) =>
+        !selectedEntityTypes.some(
+          (selectedType) => selectedType.schema.$id === type.schema.$id,
+        ),
+    );
+
+    for (const type of addedEntityTypes) {
+      for (const [linkEntityTypeId, linkConstraints] of typedEntries(
+        type.schema.links ?? {},
+      )) {
+        linkedEntityTypeIds.add(linkEntityTypeId);
+
+        const destinationEntityTypeRefs: EntityTypeReference[] =
+          "oneOf" in linkConstraints.items ? linkConstraints.items.oneOf : [];
+
+        // Add the target entity types
+        for (const destinationEntityTypeRef of destinationEntityTypeRefs) {
+          linkedEntityTypeIds.add(destinationEntityTypeRef.$ref);
+        }
+      }
+    }
+
+    return [...linkedEntityTypeIds];
+  };
 
   return (
     <Autocomplete
@@ -96,7 +143,7 @@ export const EntityTypeSelector = ({
           },
         },
         popper: {
-          placement: "top",
+          placement: popperPlacement ?? "top",
           sx: { "& div": { boxShadow: "none" } },
         },
       }}
@@ -146,11 +193,17 @@ export const EntityTypeSelector = ({
       ]}
       multiple={multiple}
       onChange={(_event, value) => {
-        setTargetEntityTypeIds(
-          Array.isArray(value)
-            ? value.map((type) => type.schema.$id)
-            : [value.schema.$id],
-        );
+        const newTargetEntityTypes = Array.isArray(value) ? value : [value];
+
+        const linkedEntityTypeIds =
+          getLinkedEntityTypeIds(newTargetEntityTypes);
+
+        setTargetEntityTypeIds({
+          selectedEntityTypeIds: newTargetEntityTypes.map(
+            (type) => type.schema.$id,
+          ),
+          linkedEntityTypeIds,
+        });
       }}
       options={optionsInDropdown}
       renderOption={(props, type) => (
@@ -188,7 +241,11 @@ export const EntityTypeSelector = ({
           />
         ))
       }
-      value={multiple ? selectedEntityTypes : selectedEntityTypes[0] ?? null}
+      value={
+        multiple
+          ? selectedEntityTypes
+          : (selectedEntityTypes[0] ?? (null as unknown as undefined))
+      }
     />
   );
 };

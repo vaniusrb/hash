@@ -1,45 +1,45 @@
-import { BlockVariant, JsonObject } from "@blockprotocol/core";
-import { TextualContentPropertyValue } from "@local/hash-isomorphic-utils/system-types/shared";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import { EntityId, OwnedById } from "@local/hash-subgraph";
-import { Node, Schema } from "prosemirror-model";
-import { EditorState, Transaction } from "prosemirror-state";
-import { EditorProps, EditorView } from "prosemirror-view";
+import type { BlockVariant, JsonObject } from "@blockprotocol/core";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import type { Node, Schema } from "prosemirror-model";
+import type { EditorState, Transaction } from "prosemirror-state";
+import type { EditorProps, EditorView } from "prosemirror-view";
 
+import type { HashBlock } from "./blocks.js";
 import {
   areComponentsCompatible,
   fetchBlock,
-  HashBlock,
   isBlockWithTextualContentProperty,
   prepareBlockCache,
-} from "./blocks";
-import {
-  BlockEntity,
-  getBlockChildEntity,
-  isRichTextContainingEntity,
-} from "./entity";
-import {
-  createEntityStore,
+} from "./blocks.js";
+import type { BlockEntity } from "./entity.js";
+import { getBlockChildEntity, isRichTextProperties } from "./entity.js";
+import type {
   DraftEntity,
   EntityStore,
   EntityStoreType,
+} from "./entity-store.js";
+import {
+  createEntityStore,
   isBlockEntity,
   isDraftBlockEntity,
   textualContentPropertyTypeBaseUrl,
-} from "./entity-store";
+} from "./entity-store.js";
 import {
   addEntityStoreAction,
   entityStorePluginState,
   entityStorePluginStateFromTransaction,
   generateDraftIdForEntity,
   mustGetDraftEntityByEntityId,
-} from "./entity-store-plugin";
+} from "./entity-store-plugin.js";
 import {
   componentNodeGroupName,
   findComponentNode,
   mutateSchema,
-} from "./prosemirror";
-import { childrenForTextEntity } from "./text";
+} from "./prosemirror.js";
+import type { TextualContentPropertyValue } from "./system-types/shared.js";
+import { childrenForTextEntity } from "./text.js";
+import type { TextToken } from "./types.js";
 
 type NodeViewFactory = NonNullable<EditorProps<Schema>["nodeViews"]>[string];
 
@@ -97,6 +97,7 @@ export class ProsemirrorManager {
       this.view.setProps({
         nodeViews: {
           // Private API
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(this.view as any).nodeViews,
           [componentId]: this.componentNodeViewFactory(block),
         },
@@ -150,17 +151,24 @@ export class ProsemirrorManager {
     if (draftBlockId && entityStore?.draft[draftBlockId]) {
       const entityInStore = entityStore.draft[draftBlockId];
       if (!isDraftBlockEntity(entityInStore)) {
-        /** @todo Make these errors instead of logs https://app.asana.com/0/0/1203099452204542/f */
+        /**
+         * @todo Make these errors instead of logs
+         * @see https://linear.app/hash/issue/H-3000
+         */
         // eslint-disable-next-line no-console
         console.error("Block entity missing from store");
       }
 
-      if (entityInStore?.componentId !== targetComponentId) {
+      if (entityInStore.componentId !== targetComponentId) {
         // eslint-disable-next-line no-console
         console.error("Cannot render this block entity with this component");
       }
 
-      /** @todo this any type coercion is incorrect, we need to adjust typings https://app.asana.com/0/0/1203099452204542/f */
+      /**
+       * @todo this any type coercion is incorrect, we need to adjust typings
+       * @see https://linear.app/hash/issue/H-3000
+       */
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       blockEntity = entityInStore as any;
     }
 
@@ -172,8 +180,11 @@ export class ProsemirrorManager {
         : null;
 
     const content =
-      blockData && isRichTextContainingEntity(blockData)
-        ? childrenForTextEntity(blockData, this.schema)
+      blockData && isRichTextProperties(blockData.properties)
+        ? childrenForTextEntity(
+            { properties: blockData.properties },
+            this.schema,
+          )
         : [];
 
     /**
@@ -334,6 +345,7 @@ export class ProsemirrorManager {
         addEntityStoreAction(this.view.state, tr, {
           type: "updateEntityProperties",
           payload: {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain -- TODO check blockChildEntity or type this better
             draftId: blockEntity.blockChildEntity?.draftId!,
             properties: entityProperties,
             merge: true,
@@ -532,7 +544,7 @@ export class ProsemirrorManager {
   private createBlockEntity(
     tr: Transaction,
     targetComponentId: string,
-    blockDataProperties: {},
+    blockDataProperties: Record<string, unknown>,
   ) {
     if (!this.view) {
       throw new Error("Cannot trigger createBlockEntity without view");

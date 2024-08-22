@@ -1,20 +1,16 @@
-import {
-  CustomCell,
-  getMiddleCenterBias,
-  GridCellKind,
-} from "@glideapps/glide-data-grid";
-import type { DrawArgs } from "@glideapps/glide-data-grid/dist/ts/data-grid/cells/cell-types";
+import type { CustomCell, DrawArgs, Theme } from "@glideapps/glide-data-grid";
+import { getMiddleCenterBias, GridCellKind } from "@glideapps/glide-data-grid";
 
 /**
  * @returns vertical center of a grid cell
  */
 export const getYCenter = (
-  args: Pick<DrawArgs<CustomCell>, "rect" | "ctx" | "theme">,
+  args: Pick<DrawArgs<CustomCell>, "rect" | "ctx"> & { theme: Theme },
 ) => {
   const { rect, ctx, theme } = args;
   const { y, height } = rect;
 
-  return y + height / 2 + getMiddleCenterBias(ctx, theme);
+  return y + height / 2 + getMiddleCenterBias(ctx, theme.fontFamily);
 };
 
 /**

@@ -1,21 +1,18 @@
-import {
-  ENTITY_TYPE_META_SCHEMA,
-  EntityType,
-  VersionedUrl,
-} from "@blockprotocol/type-system/slim";
+import type { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
+import { ENTITY_TYPE_META_SCHEMA } from "@blockprotocol/type-system/slim";
 import { Callout, TextField } from "@hashintel/design-system";
+import { linkEntityTypeUrl } from "@local/hash-subgraph";
+import type { SxProps, Theme } from "@mui/material";
 import {
   Box,
   formHelperTextClasses,
   outlinedInputClasses,
   Stack,
-  SxProps,
-  Theme,
 } from "@mui/material";
-// eslint-disable-next-line unicorn/prefer-node-protocol -- https://github.com/sindresorhus/eslint-plugin-unicorn/issues/1931#issuecomment-1359324528
 import { Buffer } from "buffer/";
 import { useRouter } from "next/router";
-import { ReactNode, useContext } from "react";
+import type { ReactNode } from "react";
+import { useContext } from "react";
 import { useForm } from "react-hook-form";
 
 import { useBlockProtocolGetEntityType } from "../../components/hooks/block-protocol-functions/ontology/use-block-protocol-get-entity-type";
@@ -198,7 +195,7 @@ export const CreateEntityTypeForm = ({
         })}
         spacing={3}
       >
-        {parentType && (
+        {parentType && parentType.schema.$id !== linkEntityTypeUrl && (
           <Callout
             type={potentiallyUndesiredCrossWebAction ? "warning" : "info"}
             sx={{ width: { md: inModal ? "100%" : formItemWidth } }}

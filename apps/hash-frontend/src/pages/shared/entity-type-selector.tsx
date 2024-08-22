@@ -1,30 +1,47 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import {
+  Chip,
   EntityTypeIcon,
   LinkTypeIcon,
   SelectorAutocomplete,
 } from "@hashintel/design-system";
-import { EntityTypeWithMetadata } from "@local/hash-subgraph";
-import { BoxProps } from "@mui/material";
-import { FunctionComponent, useMemo, useRef, useState } from "react";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { BoxProps } from "@mui/material";
+import { useMemo, useRef, useState } from "react";
 
 import { useLatestEntityTypesOptional } from "../../shared/entity-types-context/hooks";
 import { useEntityTypesContextRequired } from "../../shared/entity-types-context/hooks/use-entity-types-context-required";
 
-export const EntityTypeSelector: FunctionComponent<{
-  excludeEntityTypeIds?: VersionedUrl[];
-  onSelect: (entityType: EntityTypeWithMetadata) => void;
-  onCancel: () => void;
-  onCreateNew: (searchValue: string) => void;
-  disableCreateNewEmpty?: boolean;
-  sx?: BoxProps["sx"];
-}> = ({
+export const EntityTypeSelector = <Multiple extends boolean = false>({
+  disableCreate,
   disableCreateNewEmpty,
   excludeEntityTypeIds,
+  inputHeight,
+  autoFocus,
+  multiple,
   onCancel,
   onSelect,
   onCreateNew,
   sx,
+  value,
+}: {
+  excludeEntityTypeIds?: VersionedUrl[];
+  inputHeight?: number;
+  multiple?: Multiple;
+  onSelect: (
+    value: Multiple extends true
+      ? EntityTypeWithMetadata[]
+      : EntityTypeWithMetadata,
+  ) => void;
+  onCancel?: () => void;
+  onCreateNew?: (searchValue: string) => void;
+  autoFocus?: boolean;
+  disableCreate?: boolean;
+  disableCreateNewEmpty?: boolean;
+  sx?: BoxProps["sx"];
+  value?: Multiple extends true
+    ? EntityTypeWithMetadata[]
+    : EntityTypeWithMetadata;
 }) => {
   const [search, setSearch] = useState("");
   const { isSpecialEntityTypeLookup } = useEntityTypesContextRequired();
@@ -43,20 +60,37 @@ export const EntityTypeSelector: FunctionComponent<{
   const highlightedRef = useRef<null | EntityTypeWithMetadata>(null);
 
   return (
-    <SelectorAutocomplete
+    <SelectorAutocomplete<EntityTypeWithMetadata, Multiple>
       dropdownProps={{
         query: search,
-        createButtonProps: {
-          onMouseDown: (evt) => {
-            evt.preventDefault();
-            evt.stopPropagation();
-            onCreateNew(search);
-          },
-          disabled: disableCreateNewEmpty && search === "",
+        creationProps: {
+          createButtonProps: disableCreate
+            ? null
+            : {
+                onMouseDown: (evt) => {
+                  evt.preventDefault();
+                  evt.stopPropagation();
+                  onCreateNew?.(search);
+                },
+                disabled: disableCreateNewEmpty && search === "",
+              },
+          variant: "entity type",
         },
-        variant: "entity type",
       }}
+      autoFocus={autoFocus}
+      inputHeight={inputHeight}
       options={filteredEntityTypes ?? []}
+      multiple={multiple}
+      filterOptions={(options, { inputValue }) => {
+        return options.filter((option) => {
+          const { title, description } = option.schema;
+          const lowercaseInput = inputValue.toLowerCase();
+          return (
+            !!description?.toLowerCase().includes(lowercaseInput) ||
+            title.toLowerCase().includes(lowercaseInput)
+          );
+        });
+      }}
       optionToRenderData={({
         schema: { $id, title, description },
         metadata: { icon },
@@ -64,7 +98,6 @@ export const EntityTypeSelector: FunctionComponent<{
         uniqueId: $id,
         icon:
           icon ??
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- @todo why this false positive?
           (isSpecialEntityTypeLookup?.[$id]?.isLink ? (
             <LinkTypeIcon />
           ) : (
@@ -74,7 +107,11 @@ export const EntityTypeSelector: FunctionComponent<{
         title,
         description,
       })}
-      inputPlaceholder="Search for an entity type"
+      inputPlaceholder={
+        !value || (Array.isArray(value) && value.length === 0)
+          ? `Search for ${multiple ? "entity types" : "an entity type"}`
+          : undefined
+      }
       open={open}
       onOpen={() => setOpen(true)}
       onClose={(_, reason) => {
@@ -83,27 +120,38 @@ export const EntityTypeSelector: FunctionComponent<{
         }
       }}
       inputValue={search}
-      onInputChange={(_, value) => setSearch(value)}
-      onHighlightChange={(_, value) => {
-        highlightedRef.current = value;
+      onInputChange={(_, searchValue) => setSearch(searchValue)}
+      onHighlightChange={(_, highlightedValue) => {
+        highlightedRef.current = highlightedValue;
       }}
       onChange={(_, option) => {
         onSelect(option);
       }}
       onKeyUp={(evt) => {
         if (evt.key === "Enter" && !highlightedRef.current) {
-          onCreateNew(search);
+          onCreateNew?.(search);
         }
       }}
       onKeyDown={(evt) => {
         if (evt.key === "Escape") {
-          onCancel();
+          onCancel?.();
         }
       }}
-      onBlur={() => {
-        onCancel();
+      onClickAway={() => {
+        onCancel?.();
       }}
+      renderTags={(tagValue, getTagProps) =>
+        tagValue.map((option, index) => (
+          <Chip
+            {...getTagProps({ index })}
+            key={option.schema.$id}
+            variant="outlined"
+            label={option.schema.title}
+          />
+        ))
+      }
       sx={[{ maxWidth: 440 }, ...(Array.isArray(sx) ? sx : [sx])]}
+      value={value}
     />
   );
 };

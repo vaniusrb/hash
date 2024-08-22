@@ -1,15 +1,19 @@
-import { EntityType, extractVersion } from "@blockprotocol/type-system/slim";
+import type { EntityType } from "@blockprotocol/type-system/slim";
+import { extractVersion } from "@blockprotocol/type-system/slim";
 import {
   ArrowUpRightIcon,
   EntityTypeIcon,
   LinkTypeIcon,
 } from "@hashintel/design-system";
+import type { EntityTypeEditorFormData } from "@hashintel/type-editor";
+import { useEntityTypeFormContext } from "@hashintel/type-editor";
 import {
-  EntityTypeEditorFormData,
-  useEntityTypeFormContext,
-} from "@hashintel/type-editor";
+  extractBaseUrl,
+  versionedUrlFromComponents,
+} from "@local/hash-subgraph/type-system-patch";
 import { Box, Stack, Typography } from "@mui/material";
-import { ReactNode, useState } from "react";
+import type { ReactNode } from "react";
+import { useState } from "react";
 import { Controller } from "react-hook-form";
 
 import { EditEmojiIconButton } from "../../../../shared/edit-emoji-icon-button";
@@ -20,7 +24,7 @@ import { EntityTypeDescription } from "../entity-type-description";
 interface EntityTypeHeaderProps {
   isPreviewSlide?: boolean;
   ontologyChip: ReactNode;
-  entityType: EntityType;
+  entityTypeSchema: EntityType;
   isDraft: boolean;
   isLink: boolean;
   isReadonly: boolean;
@@ -30,7 +34,7 @@ interface EntityTypeHeaderProps {
 export const EntityTypeHeader = ({
   isPreviewSlide,
   ontologyChip,
-  entityType,
+  entityTypeSchema,
   isDraft,
   isLink,
   isReadonly,
@@ -39,17 +43,14 @@ export const EntityTypeHeader = ({
   const [showExtendTypeModal, setShowExtendTypeModal] = useState(false);
 
   const isLatest =
-    !latestVersion || extractVersion(entityType.$id) === latestVersion;
-  const latestVersionUrl = entityType.$id.replace(/\d+$/, `${latestVersion}`);
+    !latestVersion || extractVersion(entityTypeSchema.$id) === latestVersion;
 
-  const { control } = useEntityTypeFormContext<
-    /**
-     * @todo add icon support in `@hashintel/type-editor`
-     *
-     * @see https://linear.app/hash/issue/H-1439/move-icon-and-labelproperty-to-the-metadata-types-in-bp-so-that-it-can
-     */
-    EntityTypeEditorFormData & { icon?: string | null }
-  >();
+  const latestVersionUrl = versionedUrlFromComponents(
+    extractBaseUrl(entityTypeSchema.$id),
+    latestVersion ?? 0,
+  );
+
+  const { control } = useEntityTypeFormContext<EntityTypeEditorFormData>();
 
   return (
     <>
@@ -106,7 +107,7 @@ export const EntityTypeHeader = ({
               )}
             />
             <Typography variant="h1" fontWeight="bold" marginLeft={3}>
-              {entityType.title}
+              {entityTypeSchema.title}
             </Typography>
           </Box>
           {!isDraft && !isPreviewSlide ? (
@@ -124,10 +125,7 @@ export const EntityTypeHeader = ({
           <EntityTypeDescription readonly={isReadonly} />
         </Box>
       </Box>
-      <Modal
-        open={showExtendTypeModal}
-        contentStyle={{ padding: "0px !important" }}
-      >
+      <Modal open={showExtendTypeModal} contentStyle={{ p: { xs: 0, md: 0 } }}>
         <>
           <Typography
             sx={({ palette }) => ({
@@ -144,7 +142,7 @@ export const EntityTypeHeader = ({
             <CreateEntityTypeForm
               afterSubmit={() => setShowExtendTypeModal(false)}
               inModal
-              initialData={{ extendsEntityTypeId: entityType.$id }}
+              initialData={{ extendsEntityTypeId: entityTypeSchema.$id }}
               onCancel={() => setShowExtendTypeModal(false)}
             />
           </Box>

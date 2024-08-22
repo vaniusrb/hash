@@ -1,6 +1,6 @@
-import { ParsedUrlQueryInput } from "node:querystring";
+import type { ParsedUrlQueryInput } from "node:querystring";
 
-import { GraphQLError } from "graphql";
+import type { GraphQLError } from "graphql";
 
 export const SYNTHETIC_LOADING_TIME_MS = 700;
 
@@ -53,7 +53,7 @@ export const isParsedInvitationLinkQuery = (
 type InvitationEmailInfo = {
   orgName: string;
   orgEntityId: string;
-  inviterPreferredName: string;
+  inviterDisplayName: string;
   invitationEmailToken: string;
 };
 

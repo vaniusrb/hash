@@ -1,5 +1,5 @@
+import type { BlockComponent } from "@blockprotocol/graph/react";
 import {
-  BlockComponent,
   useEntitySubgraph,
   useGraphBlockModule,
 } from "@blockprotocol/graph/react";
@@ -20,7 +20,7 @@ import { v4 as uuid } from "uuid";
 import { ItemList } from "./components/item-list";
 import { TooltipButton } from "./components/tooltip-button";
 import { propertyIds } from "./property-ids";
-import {
+import type {
   BlockEntity,
   ShuffleBlockItemPropertyValue,
   ShuffleBlockOutgoingLinkAndTarget,
@@ -101,7 +101,7 @@ export const Shuffle: BlockComponent<BlockEntity> = ({
     updateItems(
       produce(draftItems, (newItems) => {
         if (newItems[index]) {
-          newItems[index]![propertyIds.value] = value; // eslint-disable-line no-param-reassign
+          newItems[index][propertyIds.value] = value; // eslint-disable-line no-param-reassign
         }
       }),
       false,

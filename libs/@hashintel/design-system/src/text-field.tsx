@@ -6,15 +6,17 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { forwardRef, FunctionComponent, useState } from "react";
+import type { ReactNode } from "react";
+import { forwardRef, useState } from "react";
 
-import { getInputProps, inputLabelProps, TextFieldProps } from "./input-props";
+import type { TextFieldProps } from "./input-props";
+import { getInputProps, inputLabelProps } from "./input-props";
 
 /**
  * 'Freezes' a value when it's falsy, meaning the value will never update to
  * be falsy. Useful for keeping a component the same when animating out
  */
-const useFrozenValue = <T extends any>(value: T): T => {
+const useFrozenValue = <T extends ReactNode>(value: T): T => {
   const [frozenValue, setFrozenValue] = useState(value);
 
   if (value && frozenValue !== value) {
@@ -23,13 +25,13 @@ const useFrozenValue = <T extends any>(value: T): T => {
   return frozenValue;
 };
 
-export const TextField: FunctionComponent<TextFieldProps> = forwardRef(
+export const TextField = forwardRef<HTMLDivElement, TextFieldProps>(
   (
     {
       helperText,
       variant = "outlined",
       sx,
-      InputProps: inputProps = {},
+      InputProps,
       success,
       error,
       label,
@@ -82,15 +84,12 @@ export const TextField: FunctionComponent<TextFieldProps> = forwardRef(
         }
         InputLabelProps={inputLabelProps}
         InputProps={getInputProps({
-          ...inputProps,
+          ...InputProps,
           variant,
           success,
           error,
           autoResize,
           multiline: textFieldProps.multiline,
-          slotProps: {
-            input: theme.components?.MuiInputBase?.defaultProps?.inputProps,
-          },
         })}
         helperText={
           <Collapse in={!!helperText}>
@@ -108,6 +107,11 @@ export const TextField: FunctionComponent<TextFieldProps> = forwardRef(
           }),
         }}
         {...textFieldProps}
+        // eslint-disable-next-line react/jsx-no-duplicate-props
+        inputProps={{
+          ...theme.components?.MuiInputBase?.defaultProps?.inputProps,
+          ...textFieldProps.inputProps,
+        }}
       />
     );
   },

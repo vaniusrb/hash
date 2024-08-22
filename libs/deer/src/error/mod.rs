@@ -55,6 +55,7 @@
 //!
 //! [`Location`]: core::panic::Location
 
+#[cfg_attr(feature = "std", allow(unused_imports))]
 use alloc::{boxed::Box, format, string::String};
 #[cfg(nightly)]
 use core::error::Request;
@@ -95,7 +96,6 @@ mod value;
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Copy, Clone, serde::Serialize)]
 pub struct Namespace(&'static str);
 
-#[allow(dead_code)]
 const NAMESPACE: Namespace = Namespace::new("deer");
 
 impl Namespace {
@@ -265,7 +265,7 @@ pub trait Variant: Sized + Debug + Display + Send + Sync + 'static {
     ) -> fmt::Result;
 
     #[cfg(nightly)]
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn provide<'a>(&'a self, request: &mut Request<'a>) {}
 
     fn into_error(self) -> Error {
@@ -316,6 +316,7 @@ fn impl_debug<E: Variant>(error: &Box<dyn Any + Send + Sync>, fmt: &mut Formatte
 }
 
 #[cfg(nightly)]
+#[expect(clippy::incompatible_msrv, reason = "This is gated behind nightly")]
 fn impl_provide<'a, E: Variant>(error: &'a Box<dyn Any + Send + Sync>, request: &mut Request<'a>) {
     let error: &E = error
         .downcast_ref()

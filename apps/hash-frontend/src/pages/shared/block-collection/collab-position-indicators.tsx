@@ -1,6 +1,7 @@
-import { CollabPosition } from "@local/hash-isomorphic-utils/collab";
+import type { CollabPosition } from "@local/hash-isomorphic-utils/collab";
 import { AnimatePresence, motion } from "framer-motion";
-import { FunctionComponent, useMemo } from "react";
+import type { FunctionComponent } from "react";
+import { useMemo } from "react";
 
 import { useCollabPositionContext } from "../../../contexts/collab-position-context";
 import { CollabPositionIndicator } from "./collab-position-indicator";
@@ -51,11 +52,11 @@ export const CollabPositionIndicators: FunctionComponent<
           .slice(0, relevantPresenceIndicators.length === 3 ? 3 : 2)
           .map((presenceIndicator) => (
             <CollabPositionIndicator
-              backgroundColor={pickColor(presenceIndicator.userPreferredName)}
+              backgroundColor={pickColor(presenceIndicator.userDisplayName)}
               key={presenceIndicator.userId}
-              title={presenceIndicator.userPreferredName}
+              title={presenceIndicator.userDisplayName}
             >
-              {presenceIndicator.userPreferredName.charAt(0).toUpperCase()}
+              {presenceIndicator.userDisplayName.charAt(0).toUpperCase()}
             </CollabPositionIndicator>
           ))}
 
@@ -66,7 +67,7 @@ export const CollabPositionIndicators: FunctionComponent<
             )}
             title={`${relevantPresenceIndicators
               .slice(2)
-              .map((presenceIndicator) => presenceIndicator.userPreferredName)
+              .map((presenceIndicator) => presenceIndicator.userDisplayName)
               .join("\n")}`}
           >
             <span

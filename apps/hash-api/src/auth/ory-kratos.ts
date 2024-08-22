@@ -1,19 +1,16 @@
-import { Configuration, Identity } from "@ory/client";
-import {
-  CreateIdentityBody,
-  FrontendApi,
-  IdentityApi,
-} from "@ory/kratos-client";
+import { getRequiredEnv } from "@local/hash-backend-utils/environment";
+import type { Identity } from "@ory/client";
+import { Configuration } from "@ory/client";
+import type { CreateIdentityBody } from "@ory/kratos-client";
+import { FrontendApi, IdentityApi } from "@ory/kratos-client";
 
-import { getRequiredEnv } from "../util";
-
-const publicUrl = getRequiredEnv("ORY_KRATOS_PUBLIC_URL");
+export const kratosPublicUrl = getRequiredEnv("HASH_KRATOS_PUBLIC_URL");
 
 export const kratosFrontendApi = new FrontendApi(
-  new Configuration({ basePath: publicUrl }),
+  new Configuration({ basePath: kratosPublicUrl }),
 );
 
-const adminUrl = getRequiredEnv("ORY_KRATOS_ADMIN_URL");
+const adminUrl = getRequiredEnv("HASH_KRATOS_ADMIN_URL");
 
 export const kratosIdentityApi = new IdentityApi(
   new Configuration({ basePath: adminUrl }),

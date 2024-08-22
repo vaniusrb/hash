@@ -1,20 +1,23 @@
 import {
   type EntityIdWithInterval as EntityIdWithIntervalBp,
   type EntityIdWithTimestamp as EntityIdWithTimestampBp,
-  type OutwardEdge as OutwardEdgeBp,
   isKnowledgeGraphOutwardEdge as isKnowledgeGraphOutwardEdgeBp,
   isOntologyOutwardEdge as isOntologyOutwardEdgeBp,
-} from "@blockprotocol/graph/temporal";
-import { Subtype } from "@local/advanced-types/subtype";
-
-import {
-  EntityId,
+  type OutwardEdge as OutwardEdgeBp,
+} from "@blockprotocol/graph";
+import type { Subtype } from "@local/advanced-types/subtype";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type {
   LimitedTemporalBound,
   TemporalBound,
   TimeInterval,
   Timestamp,
-} from "../../shared";
-import { KnowledgeGraphOutwardEdge, OntologyOutwardEdge } from "./variants";
+} from "@local/hash-graph-types/temporal-versioning";
+
+import type {
+  KnowledgeGraphOutwardEdge,
+  OntologyOutwardEdge,
+} from "./variants.js";
 
 /**
  * A simple tuple type which identifies an {@link Entity} by its {@link EntityId}, at a given {@link Timestamp}.

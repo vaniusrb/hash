@@ -11,12 +11,12 @@ import { useRouter } from "next/router";
 import { NextSeo } from "next-seo";
 import { useEffect, useRef, useState } from "react";
 
-import { NextPageWithLayout } from "../../../../shared/layout";
+import type { NextPageWithLayout } from "../../../../shared/layout";
 import { useUserPermissionsOnEntity } from "../../../../shared/use-user-permissions-on-entity";
 import { useAuthenticatedUser } from "../../../shared/auth-info-context";
-import { getSettingsLayout } from "../../shared/settings-layout";
+import { getSettingsLayout } from "../../../shared/settings-layout";
+import { SettingsPageContainer } from "../../shared/settings-page-container";
 import { Cell } from "../shared/cell";
-import { OrgSettingsContainer } from "../shared/org-settings-container";
 import { OrgTable } from "../shared/org-table";
 import { AddMemberForm } from "./members.page/add-member-form";
 import { MemberRow } from "./members.page/member-row";
@@ -65,8 +65,8 @@ const OrgMembersPage: NextPageWithLayout = () => {
     <>
       <NextSeo title={`${org.name} | Members`} />
 
-      <OrgSettingsContainer
-        header={org.name}
+      <SettingsPageContainer
+        heading={org.name}
         sectionLabel="Members"
         ref={topRef}
       >
@@ -82,7 +82,7 @@ const OrgMembersPage: NextPageWithLayout = () => {
             {org.memberships
               .sort(
                 ({ user: a }, { user: b }) =>
-                  a.preferredName?.localeCompare(b.preferredName ?? "ZZZ") ?? 1,
+                  a.displayName?.localeCompare(b.displayName ?? "ZZZ") ?? 1,
               )
               .map((membership) => (
                 <MemberRow
@@ -125,7 +125,7 @@ const OrgMembersPage: NextPageWithLayout = () => {
             </TableRow>
           </TableFooter>
         </OrgTable>
-      </OrgSettingsContainer>
+      </SettingsPageContainer>
     </>
   );
 };

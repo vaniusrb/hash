@@ -1,4 +1,4 @@
-import { MultiFilter } from "@blockprotocol/graph";
+import type { Entity as EntityBp, MultiFilter } from "@blockprotocol/graph";
 import { OntologyChip } from "@hashintel/design-system";
 import { EntityQueryEditor } from "@hashintel/query-editor";
 import { frontendDomain } from "@local/hash-isomorphic-utils/environment";
@@ -16,7 +16,7 @@ import {
   useLatestEntityTypesOptional,
 } from "../../../../shared/entity-types-context/hooks";
 import { usePropertyTypes } from "../../../../shared/property-types-context";
-import { EntityEditorProps } from "./entity-editor";
+import type { EntityEditorProps } from "./entity-editor";
 import { EntityEditorContextProvider } from "./entity-editor/entity-editor-context";
 import { TypesSection } from "./entity-editor/types-section";
 import { EntityPageWrapper } from "./entity-page-wrapper";
@@ -56,12 +56,17 @@ export const QueryEditorPage = (props: QueryEditorPageProps) => {
     : [];
 
   const entity = getRoots(entityEditorProps.entitySubgraph)[0];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const defaultValue = (entity?.properties as any)[
     blockProtocolPropertyTypes.query.propertyTypeBaseUrl
   ];
 
   const handleQueryEntities = useCallback(
     async (multiFilter: MultiFilter) => {
+      /**
+       * When this is changed to a structural query, if drafts are included
+       * then there may be multiple roots for a single entity (a live and zero or more draft updates)
+       */
       const res = await queryEntities({
         data: {
           operation: { multiFilter },
@@ -73,7 +78,7 @@ export const QueryEditorPage = (props: QueryEditorPageProps) => {
         throw new Error(res.errors?.[0]?.message ?? "Unknown error");
       }
 
-      return getRoots(res.data.results);
+      return getRoots(res.data.results) as EntityBp[];
     },
     [queryEntities],
   );
@@ -92,6 +97,7 @@ export const QueryEditorPage = (props: QueryEditorPageProps) => {
                 path={`${owner}/entities/${entityUuid}`}
               />
             }
+            onEntityUpdated={null}
           />
         }
       >

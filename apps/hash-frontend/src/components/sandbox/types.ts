@@ -1,9 +1,9 @@
-import {
+import type {
   GraphEmbedderMessageCallbacks,
   JsonObject,
-} from "@blockprotocol/graph/temporal";
+} from "@blockprotocol/graph";
 
-import { FetchEmbedCodeFn } from "../block-loader/fetch-embed-code";
+import type { FetchEmbedCodeFn } from "../block-loader/fetch-embed-code";
 
 export type MessageFromFramedBlock = {
   requestId: string;
@@ -44,6 +44,7 @@ export type MessageFromBlockFramer = {
   | {
       type: "response";
       payload: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data?: any;
         error?: string;
       };

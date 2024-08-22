@@ -1,14 +1,15 @@
-import { EntityRootType, MultiFilter, Subgraph } from "@blockprotocol/graph";
+import type {
+  EntityRootType,
+  MultiFilter,
+  Subgraph,
+} from "@blockprotocol/graph";
 import {
   type BlockComponent,
   useEntitySubgraph,
   useGraphBlockModule,
 } from "@blockprotocol/graph/react";
-import {
-  getOutgoingLinkAndTargetEntities,
-  getRoots,
-} from "@blockprotocol/graph/stdlib";
-import { EntitiesGraphChart, GearIcon } from "@hashintel/block-design-system";
+import { getOutgoingLinkAndTargetEntities } from "@blockprotocol/graph/stdlib";
+import { GearIcon } from "@hashintel/block-design-system";
 import { theme } from "@hashintel/design-system/theme";
 import {
   Box,
@@ -26,11 +27,11 @@ import { EditChartDefinition } from "./edit-chart-definition";
 import { generateInitialChartDefinition as generateInitialCountLinkedEntitiesBarChartDefinition } from "./edit-chart-definition/bar-graph-definition-form/count-linked-entities-form";
 import { generateInitialChartDefinition as generateInitialGroupByPropertyBarChartDefinition } from "./edit-chart-definition/bar-graph-definition-form/group-by-property-form";
 import { EditableChartTitle } from "./edit-chart-title";
-import {
+import type {
   BarChartDefinitionVariant,
   ChartDefinition,
 } from "./types/chart-definition";
-import {
+import type {
   BlockEntity,
   BlockEntityOutgoingLinkAndTarget,
   Query,
@@ -63,7 +64,7 @@ export const App: BlockComponent<BlockEntity> = ({
       )
       .map(
         ({ rightEntity: rightEntityRevisions }) =>
-          rightEntityRevisions as unknown as Query,
+          rightEntityRevisions as Query,
       );
 
     return linkedQueryEntities[0];
@@ -361,18 +362,20 @@ export const App: BlockComponent<BlockEntity> = ({
               />
             ) : null
           ) : (
-            /** @todo: account for multiple query results */
-            <EntitiesGraphChart
-              subgraph={queryResult}
-              isPrimaryEntity={(entity) =>
-                !!queryResult &&
-                getRoots(queryResult).some(
-                  (rootEntity) =>
-                    entity.metadata.recordId.entityId ===
-                    rootEntity.metadata.recordId.entityId,
-                )
-              }
-            />
+            <Box>Unimplemented</Box>
+            /** @todo: fix usage of new EntitiesGraphChart */
+            // <EntitiesGraphChart
+            //   // @ts-expect-error -- The chart requires a temporal subgraph: BP-103
+            //   subgraphWithTypes={queryResult}
+            //   isPrimaryEntity={(entity) =>
+            //     !!queryResult &&
+            //     getRoots(queryResult).some(
+            //       (rootEntity) =>
+            //         entity.metadata.recordId.entityId ===
+            //         rootEntity.metadata.recordId.entityId,
+            //     )
+            //   }
+            // />
           )
         ) : null}
         <Collapse in={displayEditChartDefinition}>

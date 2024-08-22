@@ -1,13 +1,21 @@
 use std::collections::HashSet;
 
 use error_stack::Report;
-use graph_types::knowledge::entity::EntityProperties;
+use graph_types::knowledge::{PropertyWithMetadata, PropertyWithMetadataObject};
 use serde_json::Value as JsonValue;
-use type_system::{url::VersionedUrl, DataType, EntityType, PropertyType};
+use type_system::{
+    schema::{ClosedEntityType, DataType, PropertyType},
+    url::VersionedUrl,
+};
 
 pub fn install_error_stack_hooks() {
     Report::install_debug_hook::<Actual>(|actual, context| match actual {
         Actual::Json(json) => context.push_body(format!("actual: {json:#}")),
+        Actual::Property(json) => {
+            if let Ok(json) = serde_json::to_value(json) {
+                context.push_body(format!("actual: {json:#}"));
+            }
+        }
         Actual::Properties(properties) => {
             if let Ok(json) = serde_json::to_value(properties) {
                 context.push_body(format!("actual: {json:#}"));
@@ -17,14 +25,29 @@ pub fn install_error_stack_hooks() {
     Report::install_debug_hook::<Expected>(|expected, context| {
         struct AttachedSchemas(HashSet<VersionedUrl>);
 
-        let id = expected.id();
-        context.push_body(format!("expected schema: {id}"));
+        let ids = match expected {
+            Expected::EntityType(entity_type) => {
+                entity_type.schemas.keys().cloned().collect::<Vec<_>>()
+            }
+            Expected::PropertyType(property_type) => vec![property_type.id.clone()],
+            Expected::DataType(data_type) => vec![data_type.id.clone()],
+        };
+        let stringified_ids = ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        context.push_body(format!("expected schemas: {stringified_ids}"));
 
         let attach = context
             .get_mut::<AttachedSchemas>()
-            .map(|attached| attached.0.insert(id.clone()))
+            .map(|attached| {
+                let currently_attached = attached.0.len();
+                attached.0.extend(ids.iter().cloned());
+                currently_attached != attached.0.len()
+            })
             .unwrap_or_else(|| {
-                context.insert(AttachedSchemas(HashSet::from([id.clone()])));
+                context.insert(AttachedSchemas(ids.into_iter().collect()));
                 true
             });
 
@@ -35,7 +58,7 @@ pub fn install_error_stack_hooks() {
                 Expected::DataType(data_type) => serde_json::to_value(data_type.clone()),
             };
             if let Ok(json) = json {
-                context.push_appendix(format!("{id}\n{json:#}"));
+                context.push_appendix(format!("{stringified_ids}\n{json:#}"));
             }
         }
     });
@@ -44,23 +67,13 @@ pub fn install_error_stack_hooks() {
 #[derive(Debug)]
 pub enum Actual {
     Json(JsonValue),
-    Properties(EntityProperties),
+    Property(PropertyWithMetadata),
+    Properties(PropertyWithMetadataObject),
 }
 
 #[derive(Debug)]
 pub enum Expected {
-    EntityType(EntityType),
+    EntityType(Box<ClosedEntityType>),
     PropertyType(PropertyType),
     DataType(DataType),
-}
-
-impl Expected {
-    #[must_use]
-    pub const fn id(&self) -> &VersionedUrl {
-        match self {
-            Self::EntityType(entity_type) => entity_type.id(),
-            Self::PropertyType(property_type) => property_type.id(),
-            Self::DataType(data_type) => data_type.id(),
-        }
-    }
 }

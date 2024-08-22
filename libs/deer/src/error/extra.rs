@@ -1,3 +1,4 @@
+#[cfg_attr(feature = "std", allow(unused_imports))]
 use alloc::{string::String, vec::Vec};
 use core::{
     fmt,
@@ -84,7 +85,7 @@ impl Display for ObjectItemsExtraError {
 pub struct ObjectLengthError;
 
 impl ObjectLengthError {
-    #[allow(clippy::new_ret_no_self)] // Reason: `Variant` are special
+    #[expect(clippy::new_ret_no_self)] // Reason: `Variant` are special
     pub fn new<'de, A: ObjectAccess<'de>>(access: &A, expected: usize) -> Report<Error> {
         let mut error = Report::new(Self.into_error()).attach(ExpectedLength::new(expected));
 
@@ -187,7 +188,7 @@ impl ErrorProperty for ReceivedLength {
 pub struct ArrayLengthError;
 
 impl ArrayLengthError {
-    #[allow(clippy::new_ret_no_self)] // Reason: `Variant` are special
+    #[expect(clippy::new_ret_no_self)] // Reason: `Variant` are special
     pub fn new<'de, A: ArrayAccess<'de>>(access: &A, expected: usize) -> Report<Error> {
         let mut error = Report::new(Self.into_error()).attach(ExpectedLength::new(expected));
 
@@ -244,16 +245,13 @@ impl Display for ArrayLengthError {
 
 #[cfg(test)]
 mod tests {
+    #[cfg_attr(feature = "std", allow(unused_imports))]
     use alloc::{borrow::ToOwned, vec};
 
-    use error_stack::Report;
     use serde_json::json;
 
     use super::*;
-    use crate::{
-        error::Error,
-        test::{to_json, to_message},
-    };
+    use crate::test::{to_json, to_message};
 
     #[test]
     fn array() {

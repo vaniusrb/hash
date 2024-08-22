@@ -1,28 +1,36 @@
 import { EntityTypeMismatchError } from "@local/hash-backend-utils/error";
+import type { LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import { createOrgMembershipAuthorizationRelationships } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemLinkEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { IsMemberOfProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import {
+import type { IsMemberOf } from "@local/hash-isomorphic-utils/system-types/shared";
+import type {
   AccountEntityId,
   AccountGroupEntityId,
-  EntityId,
+} from "@local/hash-subgraph";
+import {
   extractAccountGroupId,
   extractAccountId,
   extractEntityUuidFromEntityId,
-  OwnedById,
 } from "@local/hash-subgraph";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
 
-import { ImpureGraphFunction, PureGraphFunction } from "../../context-types";
+import type {
+  ImpureGraphFunction,
+  PureGraphFunction,
+} from "../../context-types";
 import {
   createLinkEntity,
   getLinkEntityLeftEntity,
   getLinkEntityRightEntity,
 } from "../primitive/link-entity";
-import { getOrgFromEntity, Org } from "./org";
-import { getUserFromEntity, User } from "./user";
+import type { Org } from "./org";
+import { getOrgFromEntity } from "./org";
+import type { User } from "./user";
+import { getUserFromEntity } from "./user";
 
 export type OrgMembership = {
-  linkEntity: LinkEntity<IsMemberOfProperties>;
+  linkEntity: LinkEntity<IsMemberOf>;
 };
 
 export const getOrgMembershipFromLinkEntity: PureGraphFunction<
@@ -41,7 +49,7 @@ export const getOrgMembershipFromLinkEntity: PureGraphFunction<
   }
 
   return {
-    linkEntity,
+    linkEntity: linkEntity as LinkEntity<IsMemberOf>,
   };
 };
 
@@ -73,34 +81,17 @@ export const createOrgMembership: ImpureGraphFunction<
 
   let linkEntity;
   try {
-    linkEntity = await createLinkEntity(ctx, authentication, {
+    linkEntity = await createLinkEntity<IsMemberOf>(ctx, authentication, {
       ownedById: orgAccountGroupId as OwnedById,
-      linkEntityTypeId: systemLinkEntityTypes.isMemberOf.linkEntityTypeId,
-      leftEntityId: userEntityId,
-      rightEntityId: orgEntityId,
-      properties: {},
-      relationships: [
-        {
-          relation: "setting",
-          subject: {
-            kind: "setting",
-            subjectId: "administratorFromWeb",
-          },
-        },
-        {
-          relation: "editor",
-          subject: {
-            kind: "account",
-            subjectId: userAccountId,
-          },
-        },
-        {
-          relation: "viewer",
-          subject: {
-            kind: "public",
-          },
-        },
-      ],
+      properties: { value: {} },
+      linkData: {
+        leftEntityId: userEntityId,
+        rightEntityId: orgEntityId,
+      },
+      entityTypeId: systemLinkEntityTypes.isMemberOf.linkEntityTypeId,
+      relationships: createOrgMembershipAuthorizationRelationships({
+        memberAccountId: userAccountId,
+      }),
     });
   } catch (error) {
     await ctx.graphApi.removeAccountGroupMember(
@@ -112,7 +103,7 @@ export const createOrgMembership: ImpureGraphFunction<
     throw error;
   }
 
-  return getOrgMembershipFromLinkEntity({ linkEntity });
+  return { linkEntity };
 };
 
 /**

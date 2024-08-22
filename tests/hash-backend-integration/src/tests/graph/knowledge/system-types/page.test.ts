@@ -1,79 +1,75 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import { createEntity } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
-import {
-  Block,
-  createBlock,
-} from "@apps/hash-api/src/graph/knowledge/system-types/block";
+import type { Block } from "@apps/hash-api/src/graph/knowledge/system-types/block";
+import { createBlock } from "@apps/hash-api/src/graph/knowledge/system-types/block";
 import {
   addBlockToBlockCollection,
   moveBlockInBlockCollection,
   removeBlockFromBlockCollection,
 } from "@apps/hash-api/src/graph/knowledge/system-types/block-collection";
+import type { Page } from "@apps/hash-api/src/graph/knowledge/system-types/page";
 import {
   createPage,
   getAllPagesInWorkspace,
   getPageBlocks,
   getPageById,
   getPageParentPage,
-  Page,
   setPageParentPage,
 } from "@apps/hash-api/src/graph/knowledge/system-types/page";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { Logger } from "@local/hash-backend-utils/logger";
+import { LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { createDefaultAuthorizationRelationships } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import {
-  HasIndexedContentProperties,
-  TextProperties,
+import type {
+  HasIndexedContent,
+  Text,
 } from "@local/hash-isomorphic-utils/system-types/shared";
-import { OwnedById } from "@local/hash-subgraph";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
 import { generateKeyBetween } from "fractional-indexing";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import { createTestImpureGraphContext, createTestUser } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("Page", () => {
   let testUser: User;
 
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "pageTest", logger);
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   const createTestBlock = async () => {
     const authentication = { actorId: testUser.accountId };
 
-    const blockData = await createEntity(graphContext, authentication, {
+    const blockData = await createEntity<Text>(graphContext, authentication, {
       ownedById: testUser.accountId as OwnedById,
       entityTypeId: systemEntityTypes.text.entityTypeId,
       properties: {
-        "https://blockprotocol.org/@blockprotocol/types/property-type/textual-content/":
-          [],
-      } as TextProperties,
+        value: {
+          "https://blockprotocol.org/@blockprotocol/types/property-type/textual-content/":
+            { value: [] },
+        },
+      },
       relationships: createDefaultAuthorizationRelationships({
         actorId: testUser.accountId,
       }),
@@ -196,13 +192,13 @@ describe("Page", () => {
   });
 
   let testBlock1: Block;
-  let testBlockLink1: LinkEntity<HasIndexedContentProperties>;
+  let testBlockLink1: LinkEntity<HasIndexedContent>;
 
   let testBlock2: Block;
-  let testBlockLink2: LinkEntity<HasIndexedContentProperties>;
+  let testBlockLink2: LinkEntity<HasIndexedContent>;
 
   let testBlock3: Block;
-  let testBlockLink3: LinkEntity<HasIndexedContentProperties>;
+  let testBlockLink3: LinkEntity<HasIndexedContent>;
 
   let firstKey: string;
 
@@ -233,8 +229,9 @@ describe("Page", () => {
     expect(existingBlocks).toHaveLength(1);
 
     testBlock1 = existingBlocks[0]!.rightEntity!;
-    testBlockLink1 = existingBlocks[0]!
-      .linkEntity as unknown as LinkEntity<HasIndexedContentProperties>;
+    testBlockLink1 = new LinkEntity<HasIndexedContent>(
+      existingBlocks[0]!.linkEntity,
+    );
 
     [testBlock2, testBlock3] = await Promise.all([
       createTestBlock(),
@@ -261,7 +258,7 @@ describe("Page", () => {
           },
         },
       },
-    )) as unknown as LinkEntity<HasIndexedContentProperties>;
+    )) as unknown as LinkEntity<HasIndexedContent>;
 
     testBlockLink3 = (await addBlockToBlockCollection(
       graphContext,
@@ -282,7 +279,7 @@ describe("Page", () => {
           },
         },
       },
-    )) as unknown as LinkEntity<HasIndexedContentProperties>;
+    )) as unknown as LinkEntity<HasIndexedContent>;
 
     const blocks = (
       await getPageBlocks(graphContext, authentication, {

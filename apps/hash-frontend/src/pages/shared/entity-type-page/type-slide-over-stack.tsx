@@ -1,6 +1,7 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { Backdrop } from "@mui/material";
-import { FunctionComponent, useCallback, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useState } from "react";
 
 import { TypeSlideOverSlide } from "./type-slide-over-stack/type-slide-over-slide";
 
@@ -40,7 +41,7 @@ export const TypeSlideOverStack: FunctionComponent<{
       setAnimateOut(false);
       setItems([]);
       onClose();
-    }, 300);
+    }, 200);
   }, [setAnimateOut, setItems, onClose]);
 
   return (

@@ -1,46 +1,40 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import {
   getEntityOutgoingLinks,
-  updateEntityProperties,
+  updateEntity,
 } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
+import type { Block } from "@apps/hash-api/src/graph/knowledge/system-types/block";
+import { getBlockData } from "@apps/hash-api/src/graph/knowledge/system-types/block";
+import type { Comment } from "@apps/hash-api/src/graph/knowledge/system-types/comment";
 import {
-  Block,
-  getBlockData,
-} from "@apps/hash-api/src/graph/knowledge/system-types/block";
-import {
-  Comment,
   createComment,
   getCommentText,
 } from "@apps/hash-api/src/graph/knowledge/system-types/comment";
+import type { MentionNotification } from "@apps/hash-api/src/graph/knowledge/system-types/notification";
 import {
   archiveNotification,
   createMentionNotification,
   getMentionNotification,
-  MentionNotification,
 } from "@apps/hash-api/src/graph/knowledge/system-types/notification";
+import type { Page } from "@apps/hash-api/src/graph/knowledge/system-types/page";
 import {
   createPage,
   getPageBlocks,
-  Page,
 } from "@apps/hash-api/src/graph/knowledge/system-types/page";
-import {
-  getTextFromEntity,
-  Text,
-} from "@apps/hash-api/src/graph/knowledge/system-types/text";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
+import type { Text } from "@apps/hash-api/src/graph/knowledge/system-types/text";
+import { getTextFromEntity } from "@apps/hash-api/src/graph/knowledge/system-types/text";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   blockProtocolPropertyTypes,
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { TextProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import { Entity, OwnedById } from "@local/hash-subgraph";
-import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
+import type { TextualContentPropertyValueWithMetadata } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import {
@@ -49,10 +43,8 @@ import {
   waitForAfterHookTriggerToComplete,
 } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
@@ -66,9 +58,7 @@ describe.skip("Page Mention Notification", () => {
   let recipientUser: User;
 
   beforeAll(async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
-
-    await TypeSystemInitializer.initialize();
+    const graphContext = createTestImpureGraphContext();
 
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
@@ -101,7 +91,7 @@ describe.skip("Page Mention Notification", () => {
   let occurredInText: Text;
 
   it("can create a page mention notification", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
     const authentication = { actorId: triggerUser.accountId };
 
     occurredInEntity = await createPage(graphContext, authentication, {
@@ -193,7 +183,7 @@ describe.skip("Page Mention Notification", () => {
   });
 
   it("can get a mention notification by its triggered user, recipient user, page and text", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
     const authentication = { actorId: recipientUser.accountId };
 
     const fetchedPageMentionNotification = (await getMentionNotification(
@@ -216,7 +206,7 @@ describe.skip("Page Mention Notification", () => {
   });
 
   it("can archive a notification", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
     const authentication = { actorId: recipientUser.accountId };
 
     await archiveNotification(graphContext, authentication, {
@@ -239,7 +229,7 @@ describe.skip("Page Mention Notification", () => {
   });
 
   it("can create a page mention notification when a user is mentioned in a page via an update to a text entity", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
 
     const beforePageMentionNotification = await getMentionNotification(
       graphContext,
@@ -264,21 +254,30 @@ describe.skip("Page Mention Notification", () => {
     ];
 
     occurredInText.textualContent = updatedTextualContent;
-    occurredInText.entity = (await updateEntityProperties(
+    occurredInText.entity = await updateEntity(
       graphContext,
       { actorId: triggerUser.accountId },
       {
         entity: occurredInText.entity,
-        updatedProperties: [
+        propertyPatches: [
           {
-            propertyTypeBaseUrl: extractBaseUrl(
-              blockProtocolPropertyTypes.textualContent.propertyTypeId,
-            ),
-            value: updatedTextualContent,
+            op: "replace",
+            path: [
+              blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl,
+            ],
+            property: {
+              value: updatedTextualContent.map((token) => ({
+                value: token,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/object/v/1",
+                },
+              })),
+            } satisfies TextualContentPropertyValueWithMetadata,
           },
         ],
       },
-    )) as Entity<TextProperties>;
+    );
 
     /**
      * Notifications are created after the request is resolved, so we need to wait
@@ -304,7 +303,7 @@ describe.skip("Page Mention Notification", () => {
   });
 
   it("can archive a page mention notification when a user mention is removed from a page", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
 
     const beforePageMentionNotification = await getMentionNotification(
       graphContext,
@@ -323,21 +322,30 @@ describe.skip("Page Mention Notification", () => {
     const updatedTextualContent: TextToken[] = [];
 
     occurredInText.textualContent = updatedTextualContent;
-    occurredInText.entity = (await updateEntityProperties(
+    occurredInText.entity = await updateEntity(
       graphContext,
       { actorId: triggerUser.accountId },
       {
         entity: occurredInText.entity,
-        updatedProperties: [
+        propertyPatches: [
           {
-            propertyTypeBaseUrl: extractBaseUrl(
-              blockProtocolPropertyTypes.textualContent.propertyTypeId,
-            ),
-            value: updatedTextualContent,
+            op: "replace",
+            path: [
+              blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl,
+            ],
+            property: {
+              value: updatedTextualContent.map((token) => ({
+                value: token,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/object/v/1",
+                },
+              })),
+            } satisfies TextualContentPropertyValueWithMetadata,
           },
         ],
       },
-    )) as Entity<TextProperties>;
+    );
 
     /**
      * Notifications are created after the request is resolved, so we need to wait
@@ -367,7 +375,7 @@ describe.skip("Page Mention Notification", () => {
   let commentText: Text;
 
   it("can create a comment mention notification when a user is mentioned in a comment", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
 
     occurredInComment = await createComment(
       graphContext,
@@ -417,7 +425,7 @@ describe.skip("Page Mention Notification", () => {
   });
 
   it("can archive a comment mention notification when a user mention is removed from a comment", async () => {
-    const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+    const graphContext = createTestImpureGraphContext();
 
     const beforeCommentMentionNotification = await getMentionNotification(
       graphContext,
@@ -436,21 +444,30 @@ describe.skip("Page Mention Notification", () => {
 
     const updatedCommentTextualContent: TextToken[] = [];
 
-    commentText.entity = (await updateEntityProperties(
+    commentText.entity = await updateEntity(
       graphContext,
       { actorId: triggerUser.accountId },
       {
         entity: commentText.entity,
-        updatedProperties: [
+        propertyPatches: [
           {
-            propertyTypeBaseUrl: extractBaseUrl(
-              blockProtocolPropertyTypes.textualContent.propertyTypeId,
-            ),
-            value: updatedCommentTextualContent,
+            op: "replace",
+            path: [
+              blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl,
+            ],
+            property: {
+              value: updatedCommentTextualContent.map((token) => ({
+                value: token,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/object/v/1",
+                },
+              })),
+            } satisfies TextualContentPropertyValueWithMetadata,
           },
         ],
       },
-    )) as Entity<TextProperties>;
+    );
     commentText.textualContent = updatedCommentTextualContent;
 
     /**

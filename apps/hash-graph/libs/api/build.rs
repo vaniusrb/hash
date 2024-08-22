@@ -1,8 +1,8 @@
-#![allow(clippy::print_stderr)]
+#![expect(clippy::print_stderr)]
 
 use std::path::PathBuf;
 
-const CODEGEN_PACKAGE_PATH: &str = "../../libs/@local/status";
+const CODEGEN_PACKAGE_PATH: &str = "../../libs/@local/status/typescript";
 const CODEGEN_SCRIPT_PATH: &str = "scripts/codegen.ts";
 const TYPE_DEFS_PATH: &str = "./type-defs";
 
@@ -37,7 +37,7 @@ fn main() {
 
     if !std::process::Command::new("yarn")
         .args([
-            "exe",
+            "tsx",
             &codegen_script_path.to_string_lossy(),
             &type_defs_path.to_string_lossy(),
             "--rust-out-dir",

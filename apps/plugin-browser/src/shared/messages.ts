@@ -1,26 +1,29 @@
-import { VersionedUrl } from "@blockprotocol/graph";
-import { InferenceModelName } from "@local/hash-isomorphic-utils/ai-inference-types";
-import { OwnedById } from "@local/hash-subgraph";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import type { InferenceModelName } from "@local/hash-isomorphic-utils/ai-inference-types";
+import type { WebPage } from "@local/hash-isomorphic-utils/flows/types";
 
 export type InferEntitiesRequest = {
   createAs: "draft" | "live";
   entityTypeIds: VersionedUrl[];
   model: InferenceModelName;
   ownedById: OwnedById;
-  sourceTitle: string;
-  sourceUrl: string;
+  sourceWebPage: WebPage;
   type: "infer-entities";
-  textInput: string;
 };
 
-export type GetSiteContentRequest = {
-  type: "get-site-content";
+export type CancelInferEntitiesRequest = {
+  type: "cancel-infer-entities";
+  flowRunId: string;
 };
 
-export type GetSiteContentReturn = {
-  innerText: string;
-  pageTitle: string;
-  pageUrl: string;
+export type GetTabContentRequest = {
+  type: "get-tab-content";
 };
 
-export type Message = InferEntitiesRequest | GetSiteContentRequest;
+export type GetTabContentReturn = WebPage;
+
+export type Message =
+  | InferEntitiesRequest
+  | CancelInferEntitiesRequest
+  | GetTabContentRequest;

@@ -2,17 +2,21 @@ import {
   shortnameIsRestricted,
   shortnameIsTaken,
 } from "../../../../graph/knowledge/system-types/account.fields";
-import { QueryIsShortnameTakenArgs, ResolverFn } from "../../../api-types.gen";
-import { GraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
+import type {
+  QueryIsShortnameTakenArgs,
+  ResolverFn,
+} from "../../../api-types.gen";
+import type { GraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 
 export const isShortnameTakenResolver: ResolverFn<
   Promise<boolean>,
-  {},
+  Record<string, never>,
   GraphQLContext,
   QueryIsShortnameTakenArgs
-> = async (_, { shortname }, { dataSources, authentication }) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+> = async (_, { shortname }, graphQLContext) => {
+  const { authentication } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
   return (
     shortnameIsRestricted({ shortname }) ||

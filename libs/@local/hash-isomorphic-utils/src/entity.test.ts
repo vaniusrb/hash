@@ -1,4 +1,6 @@
-import { flatMapTree } from "./util";
+import { describe, expect, it } from "vitest";
+
+import { flatMapTree } from "./util.js";
 
 describe("flatMapTree", () => {
   it("can flatmap simple properties", () => {
@@ -20,7 +22,7 @@ describe("flatMapTree", () => {
     const result = [];
     for (const block of test1) {
       result.push(
-        ...flatMapTree(block, (node: any) => {
+        ...flatMapTree(block, (node: unknown) => {
           return [node];
         }),
       );
@@ -79,7 +81,7 @@ describe("flatMapTree", () => {
     const result = [];
     for (const block of test1) {
       result.push(
-        ...flatMapTree(block, (node: any) => {
+        ...flatMapTree(block, (node: unknown) => {
           return [node];
         }),
       );

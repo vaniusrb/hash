@@ -1,25 +1,28 @@
-import { Entity } from "@local/hash-subgraph";
+import type { SerializedEntity } from "@local/hash-graph-sdk/entity";
 
 import {
   getBlockById,
   getBlockData,
 } from "../../../../graph/knowledge/system-types/block";
-import { ResolverFn } from "../../../api-types.gen";
-import { GraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
-import { mapEntityToGQL, UnresolvedBlockGQL } from "../graphql-mapping";
+import type { ResolverFn } from "../../../api-types.gen";
+import type { GraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
+import type { UnresolvedBlockGQL } from "../graphql-mapping";
 
 export const blockChildEntityResolver: ResolverFn<
-  Promise<Entity>,
+  Promise<SerializedEntity>,
   UnresolvedBlockGQL,
   GraphQLContext,
-  {}
-> = async ({ metadata }, _, { dataSources, authentication }) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  Record<string, never>
+> = async ({ metadata }, _, graphQLContext) => {
+  const { authentication } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
   const block = await getBlockById(context, authentication, {
     entityId: metadata.recordId.entityId,
   });
 
-  return mapEntityToGQL(await getBlockData(context, authentication, { block }));
+  return getBlockData(context, authentication, { block }).then((blockData) =>
+    blockData.toJSON(),
+  );
 };

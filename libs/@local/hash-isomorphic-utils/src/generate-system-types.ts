@@ -1,13 +1,15 @@
-import { codegen, CodegenParameters } from "@blockprotocol/graph/codegen";
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { CodegenParameters } from "@blockprotocol/graph/codegen";
+import { codegen } from "@blockprotocol/graph/codegen";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { linkEntityTypeUrl } from "@local/hash-subgraph";
-import slugify from "slugify";
 
 import {
   blockProtocolEntityTypes,
+  googleEntityTypes,
   linearEntityTypes,
   systemEntityTypes,
-} from "./ontology-type-ids";
+} from "./ontology-type-ids.js";
+import { slugify } from "./slugify.js";
 
 const generateTypes = async (
   typeMap: Record<string, { entityTypeId: VersionedUrl }>,
@@ -38,9 +40,7 @@ const generateTypes = async (
        */
       continue;
     }
-    targets[`${slugify(name, { strict: true, lower: true })}.ts`] = [
-      { sourceTypeId: entityTypeId },
-    ];
+    targets[`${slugify(name)}.ts`] = [{ sourceTypeId: entityTypeId }];
   }
 
   await codegen({
@@ -66,12 +66,14 @@ const generateTypes = async (
 /**
  * Generate TypeScript types for the system types. The API and frontend must be running, i.e. `yarn dev`
  *
- * Note that because part of the system type definitions depend on an environment variable (the frontend origin),
- * you cannot use these types to check the correct value of keys and values that are URLs – they might be different at runtime.
+ * @todo H-2307 – if you run this as shown (with multiple namespaces), there will be an error
+ *   – you have to comment the others out and run them one at a time, in which case they all work fine.
+ *   need to hunt down where the interaction or shared state is between them.
  */
 const generateSystemTypeTypes = async () => {
   await generateTypes(systemEntityTypes, "system");
   await generateTypes(linearEntityTypes, "linear", "linear");
+  await generateTypes(googleEntityTypes, "google", "google");
   await generateTypes(
     blockProtocolEntityTypes,
     "Block Protocol",

@@ -1,20 +1,25 @@
 import { randomUUID } from "node:crypto";
 
-import { Client } from "@opensearch-project/opensearch";
+import type { Client } from "@opensearch-project/opensearch";
+import { describe, expect, it, vi } from "vitest";
 
-import { Logger } from "../logger";
-import { OpenSearch } from "./opensearch";
+import { Logger } from "../logger.js";
+import { OpenSearch } from "./opensearch.js";
 
 const ENTITIES_SEARCH_INDEX = "entities";
 
 const stub = {
-  clear_scroll: jest.fn(),
-  search: jest.fn(),
-  scroll: jest.fn(),
+  clear_scroll: vi.fn(),
+  search: vi.fn(),
+  scroll: vi.fn(),
 };
 const openSearch: OpenSearch = new OpenSearch(
   stub as unknown as Client,
-  new Logger({ level: "debug", mode: "dev", serviceName: "dbg" }),
+  new Logger({
+    level: "debug",
+    environment: "development",
+    serviceName: "dbg",
+  }),
 );
 
 const generateSearchHit = (searchIndex: string, itemId: number) => ({

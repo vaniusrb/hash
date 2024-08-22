@@ -1,4 +1,5 @@
-import { SetStateAction, useLayoutEffect, useRef, useState } from "react";
+import type { SetStateAction } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 /**
  * This allows you to pass a second parameter to the setState function which
@@ -8,7 +9,8 @@ import { SetStateAction, useLayoutEffect, useRef, useState } from "react";
  *          this is therefore not safe to call from render
  *
  */
-export const useStateCallback = <T extends any>(initialValue: T) => {
+
+export const useStateCallback = <T>(initialValue: T) => {
   const [state, setState] = useState(initialValue);
 
   const callbacksRef = useRef<(() => void)[]>([]);

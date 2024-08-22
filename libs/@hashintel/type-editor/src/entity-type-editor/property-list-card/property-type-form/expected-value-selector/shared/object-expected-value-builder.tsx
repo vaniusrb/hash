@@ -14,15 +14,16 @@ import {
   Typography,
 } from "@mui/material";
 import { usePopupState } from "material-ui-popup-state/hooks";
-import { FunctionComponent, useEffect, useMemo, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 
 import { usePropertyTypesOptions } from "../../../../../shared/property-types-options-context";
-import { Property } from "../../../shared/expected-value-types";
+import type { Property } from "../../../shared/expected-value-types";
 import { CustomExpectedValueSelector } from "./custom-expected-value-selector";
 import { DeleteExpectedValueModal } from "./delete-expected-value-modal";
 import { ExpectedValueBadge } from "./expected-value-badge";
-import { ExpectedValueSelectorFormValues } from "./expected-value-selector-form-values";
+import type { ExpectedValueSelectorFormValues } from "./expected-value-selector-form-values";
 
 const StyledTableRow = styled(Box)(({ theme }) => ({
   display: "flex",
@@ -66,17 +67,17 @@ const ObjectExpectedValueRow: FunctionComponent<
   const { setValue } = useFormContext<ExpectedValueSelectorFormValues>();
 
   const propertyTypes = usePropertyTypesOptions();
-  const propertyType = propertyTypes[property.id];
+  const propertyTypeSchema = propertyTypes[property.id]?.schema;
 
   useEffect(() => {
-    if (propertyType) {
+    if (propertyTypeSchema) {
       setShow(true);
     }
-  }, [propertyType]);
+  }, [propertyTypeSchema]);
 
   const { allowArrays, required, animatingOut } = property;
 
-  return propertyType ? (
+  return propertyTypeSchema ? (
     <Collapse in={show && !animatingOut} sx={{ width: 1 }}>
       <StyledTableRow sx={{ backgroundColor: "red" }}>
         <StyledTableBodyCell sx={{ justifyContent: "flex-start", flex: 1 }}>
@@ -93,7 +94,7 @@ const ObjectExpectedValueRow: FunctionComponent<
             ml={1.5}
             color={(theme) => theme.palette.gray[80]}
           >
-            {propertyType.title}
+            {propertyTypeSchema.title}
           </Typography>
           <Chip
             color="purple"
@@ -196,7 +197,7 @@ export const ObjectExpectedValueBuilder: FunctionComponent<
   const options = useMemo(() => {
     const propertyTypeBaseUrl = getValues(`propertyTypeBaseUrl`);
     return Object.values(propertyTypes)
-      .map(({ $id }) => $id)
+      .map(({ schema }) => schema.$id)
       .filter(
         (versionedUrl) => extractBaseUrl(versionedUrl) !== propertyTypeBaseUrl,
       );
@@ -333,8 +334,8 @@ export const ObjectExpectedValueBuilder: FunctionComponent<
               }
             }}
             renderOption={(optProps, opt) => {
-              const property = propertyTypes[opt];
-              return property ? (
+              const propertySchema = propertyTypes[opt]?.schema;
+              return propertySchema ? (
                 <Box component="li" {...optProps} sx={{ py: 1.5, px: 2.25 }}>
                   <FontAwesomeIcon
                     icon={faAsterisk}
@@ -349,7 +350,7 @@ export const ObjectExpectedValueBuilder: FunctionComponent<
                     color={(theme) => theme.palette.gray[80]}
                     fontWeight={500}
                   >
-                    {property.title}
+                    {propertySchema.title}
                   </Typography>
                   <Chip
                     color="purple"

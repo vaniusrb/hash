@@ -12,33 +12,34 @@
     }
   },
   "scripts": {
-    "build:docker": "docker buildx build --build-arg PROFILE=dev --tag hash-graph --file docker/Dockerfile ../../ --load",
-    "build:docker:offline": "docker buildx build --build-arg PROFILE=dev --build-arg ENABLE_TYPE_FETCHER=no --tag hash-graph --file docker/Dockerfile ../../ --load",
-    "build:docker:prod": "docker buildx build --build-arg PROFILE=production --tag hash-graph --tag hash-graph:prod --file docker/Dockerfile ../../ --load",
-    "build:docker:test": "docker buildx build --build-arg PROFILE=dev --build-arg ENABLE_TEST_SERVER=yes --tag hash-graph --tag hash-graph:test --file docker/Dockerfile ../../ --load",
-    "codegen:generate-openapi-specs": "just generate-openapi-specs",
-    "dev": "RUST_LOG=info cargo run --bin hash-graph --all-features -- server",
-    "dev:test-server": "RUST_LOG=info cargo run --bin hash-graph --all-features -- test-server --api-port 4001",
-    "exe": "ts-node",
+    "build:docker": "docker buildx build --build-arg PROFILE=production --tag hash-graph --file docker/Dockerfile ../../ --load",
+    "codegen:generate-openapi-specs": "../../target/release/hash-graph server --generate-openapi-specs",
+    "compile": "cargo build --bin hash-graph --all-features",
+    "compile:release": "cargo build --bin hash-graph --all-features --release",
+    "exe": "tsx",
     "fix:clippy": "just clippy --fix",
     "lint:clippy": "just clippy",
     "reset-database": "httpyac send --all tests/reset-database.http",
+    "start": "../../target/release/hash-graph server",
+    "start:healthcheck": "../../target/release/hash-graph server --healthcheck --wait --timeout 600 --logging-console-level=warn",
+    "start:migrate": "../../target/release/hash-graph migrate --user postgres --password postgres",
+    "start:test": "../../target/debug/hash-graph server",
+    "start:test:healthcheck": "../../target/debug/hash-graph server --healthcheck --wait --timeout 300 --logging-console-level=warn",
+    "start:test:migrate": "../../target/debug/hash-graph migrate --user postgres --password postgres",
     "test:integration": "just test-integration",
     "test:unit": "just test-unit"
   },
   "dependencies": {
-    "@local/codec-rs": "0.0.0-private",
-    "@local/hash-authorization-rs": "0.0.0-private",
-    "@local/hash-graph-types-rs": "0.0.0-private",
-    "@local/hash-validation-rs": "0.0.0-private",
-    "@local/status-rust": "0.0.0-private",
-    "@local/temporal-versioning-rs": "0.0.0-private",
-    "ts-node": "10.9.1"
+    "@rust/graph": "0.0.0-private",
+    "@rust/graph-api": "0.0.0-private",
+    "@rust/hash-graph": "0.0.0-private",
+    "@rust/type-fetcher": "0.0.0-private"
   },
   "devDependencies": {
-    "@tests/hash-graph-test-data-rs": "0.0.0-private",
-    "httpyac": "6.11.0",
-    "quicktype": "^16.0.43",
-    "typescript": "5.1.6"
+    "@rust/graph-test-data": "0.0.0-private",
+    "httpyac": "6.15.0",
+    "quicktype": "16.0.43",
+    "tsx": "4.16.2",
+    "typescript": "5.5.4"
   }
 }

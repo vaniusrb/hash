@@ -1,40 +1,44 @@
-import {
-  Autocomplete,
-  IconButton,
-  Modal,
-  TextField,
-} from "@hashintel/design-system";
+import { useMutation } from "@apollo/client";
+import { Autocomplete, TextField } from "@hashintel/design-system";
+import { Entity } from "@local/hash-graph-sdk/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { PageProperties } from "@local/hash-isomorphic-utils/system-types/page";
-import { Entity, OwnedById } from "@local/hash-subgraph";
+import type {
+  FractionalIndexPropertyValueWithMetadata,
+  PageProperties,
+  TitlePropertyValueWithMetadata,
+} from "@local/hash-isomorphic-utils/system-types/page";
+import type { ModalProps } from "@mui/material";
 import {
   autocompleteClasses,
   Box,
-  Divider,
-  ModalProps,
   outlinedInputClasses,
   Typography,
 } from "@mui/material";
 import { generateKeyBetween } from "fractional-indexing";
-import { FunctionComponent, useCallback } from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useMemo } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { useBlockProtocolCreateEntity } from "../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-create-entity";
-import { useBlockProtocolUpdateEntity } from "../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-update-entity";
-import {
-  SimplePage,
-  useAccountPages,
-} from "../../components/hooks/use-account-pages";
+import type { SimplePage } from "../../components/hooks/use-account-pages";
+import { useAccountPages } from "../../components/hooks/use-account-pages";
 import { PageIcon } from "../../components/page-icon";
-import { XMarkRegularIcon } from "../../shared/icons/x-mark-regular-icon";
-import { Button } from "../../shared/ui";
+import type {
+  UpdateEntityMutation,
+  UpdateEntityMutationVariables,
+} from "../../graphql/api-types.gen";
+import { updateEntityMutation } from "../../graphql/queries/knowledge/entity.queries";
+import { Button, Modal } from "../../shared/ui";
 import { useAuthenticatedUser } from "../shared/auth-info-context";
-import { QuickNoteEntityWithCreatedAt } from "./types";
 
-export type PageWithParentLink = SimplePage & { parentLinkEntity?: Entity };
+export type PageWithParentLink = SimplePage & {
+  parentLinkEntity?: Entity;
+};
 
 type ConvertToPageFormData = {
   title?: string;
@@ -45,26 +49,29 @@ export const ConvertQuickNoteToPageModal: FunctionComponent<
   Omit<ModalProps, "children" | "onClose"> & {
     onClose: () => void;
     onConvertedToPage: (page: PageWithParentLink) => void;
-    quickNoteEntityWithCreatedAt: QuickNoteEntityWithCreatedAt;
+    quickNoteEntity: Entity;
   }
-> = ({
-  quickNoteEntityWithCreatedAt,
-  onClose,
-  onConvertedToPage,
-  ...modalProps
-}) => {
+> = ({ quickNoteEntity, onClose, onConvertedToPage, ...modalProps }) => {
   const { authenticatedUser } = useAuthenticatedUser();
 
   const { control, reset, handleSubmit, register, setValue } =
     useForm<ConvertToPageFormData>();
 
-  const defaultTitle = `Quick Note - ${quickNoteEntityWithCreatedAt.createdAt.toLocaleString()}`;
+  const createdAt = useMemo(
+    () => new Date(quickNoteEntity.metadata.provenance.createdAtDecisionTime),
+    [quickNoteEntity],
+  );
+
+  const defaultTitle = `Quick Note - ${createdAt.toLocaleString()}`;
 
   const { data: pages } = useAccountPages(
     authenticatedUser.accountId as OwnedById,
   );
 
-  const { updateEntity } = useBlockProtocolUpdateEntity();
+  const [updateEntity] = useMutation<
+    UpdateEntityMutation,
+    UpdateEntityMutationVariables
+  >(updateEntityMutation);
 
   const { createEntity } = useBlockProtocolCreateEntity(
     authenticatedUser.accountId as OwnedById,
@@ -90,23 +97,48 @@ export const ConvertQuickNoteToPageModal: FunctionComponent<
 
     const fractionalIndex = generateKeyBetween(prevFractionalIndex, null);
 
-    const { data: pageEntity, errors } = await updateEntity({
-      data: {
-        entityId:
-          quickNoteEntityWithCreatedAt.quickNoteEntity.metadata.recordId
-            .entityId,
-        entityTypeId: systemEntityTypes.document.entityTypeId,
-        properties: {
-          "https://hash.ai/@hash/types/property-type/title/": title,
-          "https://hash.ai/@hash/types/property-type/fractional-index/":
-            fractionalIndex,
-        } as PageProperties,
+    const { data: pageEntityData, errors } = await updateEntity({
+      variables: {
+        entityUpdate: {
+          entityId: quickNoteEntity.metadata.recordId.entityId,
+          entityTypeId: systemEntityTypes.document.entityTypeId,
+          propertyPatches: [
+            {
+              path: [
+                "https://hash.ai/@hash/types/property-type/title/" satisfies keyof PageProperties as BaseUrl,
+              ],
+              op: "add",
+              property: {
+                value: title,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                },
+              } satisfies TitlePropertyValueWithMetadata,
+            },
+            {
+              path: [
+                "https://hash.ai/@hash/types/property-type/fractional-index/" satisfies keyof PageProperties as BaseUrl,
+              ],
+              op: "add",
+              property: {
+                value: fractionalIndex,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                },
+              } satisfies FractionalIndexPropertyValueWithMetadata,
+            },
+          ],
+        },
       },
     });
 
-    if (!pageEntity || errors) {
+    if (!pageEntityData || errors) {
       throw new Error("Failed to update quick note entity to page entity");
     }
+
+    const pageEntity = new Entity(pageEntityData.updateEntity);
 
     if (parentPage) {
       await createEntity({
@@ -127,7 +159,7 @@ export const ConvertQuickNoteToPageModal: FunctionComponent<
       fractionalIndex,
       parentPage,
       type: "document",
-      ...pageEntity,
+      metadata: pageEntity.metadata,
     });
     onClose();
   });
@@ -146,38 +178,12 @@ export const ConvertQuickNoteToPageModal: FunctionComponent<
           padding: 0,
         },
       }}
+      header={{
+        title: "Convert note to page",
+      }}
       onClose={onClose}
     >
       <Box>
-        <Box
-          sx={{
-            paddingX: 3,
-            paddingTop: 2,
-            paddingBottom: 1.5,
-            position: "relative",
-          }}
-        >
-          <Typography
-            sx={{
-              fontSize: 16,
-              fontWeight: 500,
-              color: ({ palette }) => palette.gray[80],
-            }}
-          >
-            Convert note to page
-          </Typography>
-          <IconButton
-            onClick={onClose}
-            sx={{
-              position: "absolute",
-              top: ({ spacing }) => spacing(1),
-              right: ({ spacing }) => spacing(1),
-            }}
-          >
-            <XMarkRegularIcon />
-          </IconButton>
-        </Box>
-        <Divider sx={{ borderColor: ({ palette }) => palette.gray[20] }} />
         <Box
           component="form"
           onSubmit={innerSubmit}

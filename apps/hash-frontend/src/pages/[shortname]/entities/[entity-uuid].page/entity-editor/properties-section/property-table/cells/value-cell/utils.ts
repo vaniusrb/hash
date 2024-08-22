@@ -1,7 +1,7 @@
-import { DataTypeWithMetadata } from "@local/hash-subgraph";
-import { isPlainObject } from "lodash";
+import type { DataTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import isPlainObject from "lodash/isPlainObject";
 
-import { EditorType } from "./types";
+import type { EditorType } from "./types";
 
 const isEmptyArray = (value: unknown) => Array.isArray(value) && !value.length;
 

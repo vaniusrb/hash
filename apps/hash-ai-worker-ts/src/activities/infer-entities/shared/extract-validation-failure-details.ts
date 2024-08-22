@@ -1,4 +1,6 @@
-import { stringify } from "../stringify";
+import { stringifyError } from "@local/hash-isomorphic-utils/stringify-error";
+
+import { stringify } from "../../shared/stringify.js";
 
 const generateErrorMessage = (err: unknown) =>
   err instanceof Error ? err.message : stringify(err);
@@ -34,7 +36,7 @@ const isContextObject = (obj: unknown): obj is ContextObject =>
  *             {
  *               "context": "The properties of the entity do not match the schema",
  *               "attachments": [],
- *               "sources": [
+ *               "sources": [ // This might be empty depending on where the validation failure occurs
  *                 {
  *                   "context": "the property `https://hash.ai/@hash/types/property-type/title/` was specified, but not in the schema",
  *                   "attachments": [],
@@ -54,17 +56,22 @@ export const extractErrorMessage = (err: unknown) => {
     ) {
       const nestedContextObject = err.status.contents[0][0].sources[0];
       if (nestedContextObject) {
-        const validationFailureMessages = nestedContextObject.sources.map(
+        const thisLevelContextMessage = nestedContextObject.context;
+
+        const nestedAgainFailureMessages = nestedContextObject.sources.map(
           (source) => source.context,
         );
-        return `Entity validation failed: ${validationFailureMessages.join(
-          ", ",
-        )}`;
+
+        return `Entity validation failed: ${
+          nestedAgainFailureMessages.length
+            ? nestedAgainFailureMessages.join(", ")
+            : thisLevelContextMessage
+        }`;
       }
     }
   } catch {
     // eslint-disable-next-line no-console
-    console.error(`Unexpected error message structure: ${stringify(err)}`);
+    console.error(`Unexpected error message structure: ${stringifyError(err)}`);
   }
   return generateErrorMessage(err);
 };

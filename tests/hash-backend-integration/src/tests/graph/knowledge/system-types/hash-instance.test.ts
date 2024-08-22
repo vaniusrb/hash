@@ -1,42 +1,38 @@
-import { publicUserAccountId } from "@apps/hash-api/src/auth/public-user-account-id";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import {
   addHashInstanceAdmin,
   removeHashInstanceAdmin,
 } from "@apps/hash-api/src/graph/knowledge/system-types/hash-instance";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { systemAccountId } from "@apps/hash-api/src/graph/system-account";
-import { AuthenticationContext } from "@apps/hash-api/src/graphql/authentication-context";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
+import type { HashInstance } from "@local/hash-backend-utils/hash-instance";
 import {
   getHashInstance,
-  HashInstance,
   isUserHashInstanceAdmin,
 } from "@local/hash-backend-utils/hash-instance";
 import { Logger } from "@local/hash-backend-utils/logger";
+import { publicUserAccountId } from "@local/hash-backend-utils/public-user-account-id";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import { createTestImpureGraphContext, createTestUser } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("Hash Instance", () => {
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
-  });
 
-  afterAll(async () => {
-    await resetGraph();
+    return async () => {
+      await resetGraph();
+    };
   });
 
   let hashInstance: HashInstance;

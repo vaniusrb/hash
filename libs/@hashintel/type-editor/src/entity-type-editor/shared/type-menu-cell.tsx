@@ -1,16 +1,21 @@
-import { extractVersion, VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
+import {
+  extractBaseUrl,
+  extractVersion,
+} from "@blockprotocol/type-system/slim";
 import { faCopy } from "@fortawesome/free-regular-svg-icons";
 import { faEllipsis } from "@fortawesome/free-solid-svg-icons";
+import type { MenuItemProps } from "@hashintel/design-system";
 import {
   faCheck,
   FontAwesomeIcon,
   IconButton,
   MenuItem,
-  MenuItemProps,
   OntologyChip,
   parseUrlForOntologyChip,
 } from "@hashintel/design-system";
 import { fluidFontClassName } from "@hashintel/design-system/theme";
+import type { TooltipProps } from "@mui/material";
 import {
   Box,
   Divider,
@@ -26,7 +31,6 @@ import {
   tableRowClasses,
   Tooltip,
   tooltipClasses,
-  TooltipProps,
   Typography,
 } from "@mui/material";
 import clsx from "clsx";
@@ -35,14 +39,11 @@ import {
   bindTrigger,
   usePopupState,
 } from "material-ui-popup-state/hooks";
-import {
-  Fragment,
-  MouseEventHandler,
-  useCallback,
-  useId,
-  useState,
-} from "react";
+import type { MouseEventHandler } from "react";
+import { Fragment, useCallback, useId, useState } from "react";
+import { useController, useFormContext } from "react-hook-form";
 
+import type { EntityTypeEditorFormData } from "../../shared/form-types";
 import { useIsReadonly } from "../../shared/read-only-context";
 
 export const TYPE_MENU_CELL_WIDTH = 70;
@@ -84,6 +85,16 @@ export const TypeMenuCell = ({
 
   const isReadonly = useIsReadonly();
   const canEdit = editable && !isReadonly;
+
+  const { control } = useFormContext<EntityTypeEditorFormData>();
+
+  const labelPropertyController = useController({
+    control,
+    name: "labelProperty",
+  });
+  const isLabelProperty =
+    variant === "property" &&
+    extractBaseUrl(typeId) === labelPropertyController.field.value;
 
   const EditButton = useCallback(
     () => (
@@ -205,6 +216,27 @@ export const TypeMenuCell = ({
               >
                 <ListItemText primary={<>Remove {variant}</>} />
               </MenuItem>,
+              ...(variant === "property"
+                ? [
+                    <MenuItem
+                      key="label-property"
+                      onClick={() => {
+                        popupState.close();
+                        labelPropertyController.field.onChange(
+                          isLabelProperty ? null : extractBaseUrl(typeId),
+                        );
+                      }}
+                    >
+                      <ListItemText
+                        primary={
+                          <>
+                            {isLabelProperty ? "Unset" : "Set"} as entity label
+                          </>
+                        }
+                      />
+                    </MenuItem>,
+                  ]
+                : []),
               <Divider key="divider" />,
             ]
           : null}

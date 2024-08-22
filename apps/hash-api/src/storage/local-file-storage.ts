@@ -2,17 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 
-import appRoot from "app-root-path";
-import express, { Express } from "express";
-
-import {
+import type {
   GetFileEntityStorageKeyParams,
   PresignedDownloadRequest,
   PresignedPutUpload,
   PresignedStorageRequest,
   StorageType,
   UploadableStorageProvider,
-} from "./storage-provider";
+} from "@local/hash-backend-utils/file-storage";
+import type { File } from "@local/hash-isomorphic-utils/system-types/shared";
+import appRoot from "app-root-path";
+import type { Express } from "express";
+import express from "express";
 
 export const UPLOAD_BASE_URL = "/local-file-storage-upload";
 const DOWNLOAD_BASE_URL = "/uploads";
@@ -58,8 +59,26 @@ export class LocalFileSystemStorageProvider
     return {
       presignedPut,
       fileStorageProperties: {
-        key,
-        provider: "LOCAL_FILE_SYSTEM" as const,
+        value: {
+          "https://hash.ai/@hash/types/property-type/file-storage-key/": {
+            value: key,
+            metadata: {
+              dataTypeId:
+                "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+            },
+          },
+          "https://hash.ai/@hash/types/property-type/file-storage-provider/": {
+            value: this.storageType,
+            metadata: {
+              dataTypeId:
+                "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+            },
+          },
+        } satisfies Pick<
+          File["propertiesWithMetadata"]["value"],
+          | "https://hash.ai/@hash/types/property-type/file-storage-key/"
+          | "https://hash.ai/@hash/types/property-type/file-storage-provider/"
+        >,
       },
     };
   }

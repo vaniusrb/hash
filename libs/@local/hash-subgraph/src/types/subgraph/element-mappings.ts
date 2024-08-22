@@ -1,25 +1,23 @@
-import { type GraphElementIdentifiers as GraphElementIdentifiersBp } from "@blockprotocol/graph/temporal";
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
-import { Subtype } from "@local/advanced-types/subtype";
-
-import {
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityId, EntityRecordId } from "@local/hash-graph-types/entity";
+import type {
+  BaseUrl,
   DataTypeWithMetadata,
-  Entity,
-  EntityRecordId,
   EntityTypeWithMetadata,
   OntologyTypeRecordId,
   PropertyTypeWithMetadata,
-} from "../element";
-import { BaseUrl, EntityId } from "../shared";
-import { EntityIdWithInterval, EntityIdWithTimestamp } from "./edges";
-import {
+} from "@local/hash-graph-types/ontology";
+
+import type { EntityIdWithInterval, EntityIdWithTimestamp } from "./edges.js";
+import type {
   DataTypeVertex,
   EntityTypeVertex,
   EntityVertex,
   EntityVertexId,
   OntologyTypeVertexId,
   PropertyTypeVertex,
-} from "./vertices";
+} from "./vertices.js";
 
 /**
  * A utility type that maps various ways of identifying a single (or series of) element(s) of the graph to their
@@ -27,8 +25,7 @@ import {
  *
  * Helpful when creating generic functions that operate over a {@link Subgraph}
  */
-export type GraphElementIdentifiers = Subtype<
-  GraphElementIdentifiersBp,
+export type GraphElementIdentifiers =
   | {
       identifier: VersionedUrl | OntologyTypeVertexId | OntologyTypeRecordId;
       element:
@@ -54,8 +51,7 @@ export type GraphElementIdentifiers = Subtype<
       identifier: EntityId | EntityIdWithInterval;
       element: Entity[];
       vertex: EntityVertex[];
-    }
->;
+    };
 
 /**
  * A helper type that takes a type `T` and a type `U`, and tries to select subtypes of `T` that match the given type
@@ -83,7 +79,7 @@ type RecursiveSelect<T, U, Reversed extends boolean = false> = T extends U
  * mapping in {@link GraphElementIdentifiers}.
  */
 /* @todo - unsure why this doesn't work
-import { type IdentifierForGraphElement as IdentifierForGraphElementBp }from "@blockprotocol/graph/temporal";
+import { type IdentifierForGraphElement as IdentifierForGraphElementBp }from "@blockprotocol/graph";
 export type IdentifierForGraphElement<
   Element extends GraphElementIdentifiers["element"],
 > = Subtype<
@@ -112,7 +108,7 @@ export type IdentifierForGraphElement<
  * associated mapping in {@link GraphElementIdentifiers}.
  */
 /* @todo - unsure why this doesn't work
-import { type GraphElementForIdentifier as GraphElementForIdentifierBp }from "@blockprotocol/graph/temporal";
+import { type GraphElementForIdentifier as GraphElementForIdentifierBp }from "@blockprotocol/graph";
 export type GraphElementForIdentifier<
   Identifier extends GraphElementIdentifiers["identifier"],
 > = Subtype<

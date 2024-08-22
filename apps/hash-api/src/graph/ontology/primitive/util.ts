@@ -1,18 +1,17 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import {
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type {
   ModifyRelationshipOperation,
   WebPermission,
 } from "@local/hash-graph-client";
+import type { Uuid } from "@local/hash-graph-types/branded";
+import type { EntityUuid } from "@local/hash-graph-types/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { frontendUrl } from "@local/hash-isomorphic-utils/environment";
-import {
-  entityIdFromOwnedByIdAndEntityUuid,
-  EntityUuid,
-  OwnedById,
-  Uuid,
-  WebAuthorizationRelationship,
-} from "@local/hash-subgraph";
+import { isSelfHostedInstance } from "@local/hash-isomorphic-utils/instance";
+import type { WebAuthorizationRelationship } from "@local/hash-subgraph";
+import { entityIdFromComponents } from "@local/hash-subgraph";
 
-import { ImpureGraphFunction } from "../../context-types";
+import type { ImpureGraphFunction } from "../../context-types";
 import { getOrgById } from "../../knowledge/system-types/org";
 import { getUserById } from "../../knowledge/system-types/user";
 
@@ -20,7 +19,7 @@ export const isExternalTypeId = (typeId: VersionedUrl) =>
   !typeId.startsWith(frontendUrl) &&
   // To be removed in H-1172: Temporary provision to serve types with a https://hash.ai URL from https://app.hash.ai
   !(
-    process.env.NEXT_PUBLIC_SELF_HOSTED_HASH !== "true" &&
+    !isSelfHostedInstance &&
     ["https://app.hash.ai", "http://localhost:3000"].includes(frontendUrl) &&
     new URL(typeId).hostname === "hash.ai"
   );
@@ -36,13 +35,13 @@ export const getWebShortname: ImpureGraphFunction<
 > = async (ctx, authentication, params) => {
   const namespace = (
     (await getUserById(ctx, authentication, {
-      entityId: entityIdFromOwnedByIdAndEntityUuid(
+      entityId: entityIdFromComponents(
         params.accountOrAccountGroupId as Uuid as OwnedById,
         params.accountOrAccountGroupId as Uuid as EntityUuid,
       ),
     }).catch(() => undefined)) ??
     (await getOrgById(ctx, authentication, {
-      entityId: entityIdFromOwnedByIdAndEntityUuid(
+      entityId: entityIdFromComponents(
         params.accountOrAccountGroupId as Uuid as OwnedById,
         params.accountOrAccountGroupId as Uuid as EntityUuid,
       ),

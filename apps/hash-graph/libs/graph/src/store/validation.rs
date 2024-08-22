@@ -1,11 +1,10 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
+use alloc::sync::Arc;
+use core::{fmt::Debug, hash::Hash};
+use std::collections::HashMap;
 
 use authorization::{
     backend::PermissionAssertion,
-    schema::{
-        DataTypeId, DataTypePermission, EntityPermission, EntityTypeId, EntityTypePermission,
-        PropertyTypeId, PropertyTypePermission,
-    },
+    schema::{DataTypePermission, EntityPermission, EntityTypePermission, PropertyTypePermission},
     zanzibar::Consistency,
     AuthorizationApi,
 };
@@ -14,15 +13,18 @@ use futures::TryStreamExt;
 use graph_types::{
     account::AccountId,
     knowledge::entity::{Entity, EntityId},
-    ontology::{DataTypeWithMetadata, EntityTypeWithMetadata, PropertyTypeWithMetadata},
+    ontology::{
+        DataTypeId, DataTypeWithMetadata, EntityTypeId, EntityTypeWithMetadata, PropertyTypeId,
+        PropertyTypeWithMetadata,
+    },
 };
 use tokio::sync::RwLock;
 use tokio_postgres::GenericClient;
 use type_system::{
+    schema::{ClosedEntityType, DataType, PropertyType},
     url::{BaseUrl, VersionedUrl},
-    DataType, EntityType, PropertyType,
 };
-use validation::{EntityProvider, EntityTypeProvider, OntologyTypeProvider};
+use validation::{DataTypeProvider, EntityProvider, EntityTypeProvider, OntologyTypeProvider};
 
 use crate::{
     store::{crud::Read, query::Filter, AsClient, PostgresStore, QueryError},
@@ -110,15 +112,12 @@ where
     }
 }
 
-#[expect(
-    clippy::struct_field_names,
-    reason = "The fields are named after the types they contain"
-)]
 #[derive(Debug, Default)]
 pub struct StoreCache {
     data_types: CacheHashMap<DataTypeId, DataType>,
     property_types: CacheHashMap<PropertyTypeId, PropertyType>,
-    entity_types: CacheHashMap<EntityTypeId, EntityType>,
+    entity_types: CacheHashMap<EntityTypeId, ClosedEntityType>,
+    entities: CacheHashMap<EntityId, Entity>,
 }
 
 #[derive(Debug)]
@@ -130,8 +129,8 @@ pub struct StoreProvider<'a, S, A> {
 
 impl<S, A> StoreProvider<'_, S, A>
 where
-    S: Read<DataTypeWithMetadata, Record = DataTypeWithMetadata>,
-    A: AuthorizationApi + Sync,
+    S: Read<DataTypeWithMetadata>,
+    A: AuthorizationApi,
 {
     async fn authorize_data_type(&self, type_id: DataTypeId) -> Result<(), Report<QueryError>> {
         if let Some((authorization_api, actor_id, consistency)) = self.authorization {
@@ -154,8 +153,8 @@ where
 
 impl<S, A> OntologyTypeProvider<DataType> for StoreProvider<'_, S, A>
 where
-    S: Read<DataTypeWithMetadata, Record = DataTypeWithMetadata>,
-    A: AuthorizationApi + Sync,
+    S: Read<DataTypeWithMetadata>,
+    A: AuthorizationApi,
 {
     #[expect(refining_impl_trait)]
     async fn provide_type(
@@ -176,7 +175,7 @@ where
         let schema = self
             .store
             .read_one(
-                &Filter::<S::Record>::for_versioned_url(type_id),
+                &Filter::for_versioned_url(type_id),
                 Some(
                     &QueryTemporalAxesUnresolved::DecisionTime {
                         pinned: PinnedTemporalAxisUnresolved::new(None),
@@ -195,10 +194,62 @@ where
     }
 }
 
+impl<C, A> DataTypeProvider for StoreProvider<'_, PostgresStore<C, A>, A>
+where
+    C: AsClient,
+    A: AuthorizationApi,
+{
+    #[expect(refining_impl_trait)]
+    async fn is_parent_of(
+        &self,
+        child: &VersionedUrl,
+        parent: &BaseUrl,
+    ) -> Result<bool, Report<QueryError>> {
+        let client = self.store.as_client().client();
+        let child = DataTypeId::from_url(child);
+
+        Ok(client
+            .query_one(
+                "
+                    SELECT EXISTS (
+                        SELECT 1 FROM data_type_inherits_from
+                         JOIN ontology_ids
+                           ON ontology_ids.ontology_id = target_data_type_ontology_id
+                        WHERE source_data_type_ontology_id = $1
+                          AND ontology_ids.base_url = $2
+                    );
+                ",
+                &[&child, &parent],
+            )
+            .await
+            .change_context(QueryError)?
+            .get(0))
+    }
+
+    #[expect(refining_impl_trait)]
+    async fn has_children(&self, data_type: DataTypeId) -> Result<bool, Report<QueryError>> {
+        let client = self.store.as_client().client();
+
+        Ok(client
+            .query_one(
+                "
+                    SELECT EXISTS (
+                        SELECT 1 FROM data_type_inherits_from
+                        WHERE target_data_type_ontology_id = $1
+                    );
+                ",
+                &[&data_type],
+            )
+            .await
+            .change_context(QueryError)?
+            .get(0))
+    }
+}
+
 impl<S, A> StoreProvider<'_, S, A>
 where
-    S: Read<PropertyTypeWithMetadata, Record = PropertyTypeWithMetadata>,
-    A: AuthorizationApi + Sync,
+    S: Read<PropertyTypeWithMetadata>,
+    A: AuthorizationApi,
 {
     async fn authorize_property_type(
         &self,
@@ -224,8 +275,8 @@ where
 
 impl<S, A> OntologyTypeProvider<PropertyType> for StoreProvider<'_, S, A>
 where
-    S: Read<PropertyTypeWithMetadata, Record = PropertyTypeWithMetadata>,
-    A: AuthorizationApi + Sync,
+    S: Read<PropertyTypeWithMetadata>,
+    A: AuthorizationApi,
 {
     #[expect(refining_impl_trait)]
     async fn provide_type(
@@ -246,7 +297,7 @@ where
         let schema = self
             .store
             .read_one(
-                &Filter::<S::Record>::for_versioned_url(type_id),
+                &Filter::for_versioned_url(type_id),
                 Some(
                     &QueryTemporalAxesUnresolved::DecisionTime {
                         pinned: PinnedTemporalAxisUnresolved::new(None),
@@ -269,10 +320,10 @@ where
     }
 }
 
-impl<C, A> StoreProvider<'_, PostgresStore<C>, A>
+impl<C, A> StoreProvider<'_, PostgresStore<C, A>, A>
 where
     C: AsClient,
-    A: AuthorizationApi + Sync,
+    A: AuthorizationApi,
 {
     async fn authorize_entity_type(&self, type_id: EntityTypeId) -> Result<(), Report<QueryError>> {
         if let Some((authorization_api, actor_id, consistency)) = self.authorization {
@@ -295,7 +346,7 @@ where
     async fn fetch_entity_type(
         &self,
         type_id: &VersionedUrl,
-    ) -> Result<EntityType, Report<QueryError>> {
+    ) -> Result<ClosedEntityType, Report<QueryError>> {
         let mut schemas = self
             .store
             .read_closed_schemas(
@@ -333,16 +384,16 @@ where
     }
 }
 
-impl<C, A> OntologyTypeProvider<EntityType> for StoreProvider<'_, PostgresStore<C>, A>
+impl<C, A> OntologyTypeProvider<ClosedEntityType> for StoreProvider<'_, PostgresStore<C, A>, A>
 where
     C: AsClient,
-    A: AuthorizationApi + Sync,
+    A: AuthorizationApi,
 {
     #[expect(refining_impl_trait)]
     async fn provide_type(
         &self,
         type_id: &VersionedUrl,
-    ) -> Result<Arc<EntityType>, Report<QueryError>> {
+    ) -> Result<Arc<ClosedEntityType>, Report<QueryError>> {
         let entity_type_id = EntityTypeId::from_url(type_id);
 
         if let Some(cached) = self.cache.entity_types.get(&entity_type_id).await {
@@ -367,10 +418,10 @@ where
     }
 }
 
-impl<C, A> EntityTypeProvider for StoreProvider<'_, PostgresStore<C>, A>
+impl<C, A> EntityTypeProvider for StoreProvider<'_, PostgresStore<C, A>, A>
 where
     C: AsClient,
-    A: AuthorizationApi + Sync,
+    A: AuthorizationApi,
 {
     #[expect(refining_impl_trait)]
     async fn is_parent_of(
@@ -402,15 +453,14 @@ where
 
 impl<S, A> EntityProvider for StoreProvider<'_, S, A>
 where
-    S: Read<Entity, Record = Entity>,
-    A: AuthorizationApi + Sync,
+    S: Read<Entity>,
+    A: AuthorizationApi,
 {
     #[expect(refining_impl_trait)]
-    async fn provide_entity(
-        &self,
-        entity_id: EntityId,
-        include_drafts: bool,
-    ) -> Result<Entity, Report<QueryError>> {
+    async fn provide_entity(&self, entity_id: EntityId) -> Result<Arc<Entity>, Report<QueryError>> {
+        if let Some(cached) = self.cache.entities.get(&entity_id).await {
+            return cached;
+        }
         if let Some((authorization_api, actor_id, consistency)) = self.authorization {
             authorization_api
                 .check_entity_permission(actor_id, EntityPermission::View, entity_id, consistency)
@@ -420,9 +470,10 @@ where
                 .change_context(QueryError)?;
         }
 
-        self.store
+        let entity = self
+            .store
             .read_one(
-                &Filter::<S::Record>::for_entity_by_entity_id(entity_id),
+                &Filter::for_entity_by_entity_id(entity_id),
                 Some(
                     &QueryTemporalAxesUnresolved::DecisionTime {
                         pinned: PinnedTemporalAxisUnresolved::new(None),
@@ -430,8 +481,9 @@ where
                     }
                     .resolve(),
                 ),
-                include_drafts,
+                entity_id.draft_id.is_some(),
             )
-            .await
+            .await?;
+        Ok(self.cache.entities.grant(entity_id, entity).await)
     }
 }

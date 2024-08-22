@@ -1,13 +1,22 @@
 import { useMutation } from "@apollo/client";
-import { OwnedById } from "@local/hash-subgraph";
+import {
+  Entity,
+  mergePropertyObjectAndMetadata,
+} from "@local/hash-graph-sdk/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { useCallback } from "react";
 
-import {
+import type {
   CreateEntityMutation,
   CreateEntityMutationVariables,
 } from "../../../../graphql/api-types.gen";
-import { createEntityMutation } from "../../../../graphql/queries/knowledge/entity.queries";
-import { CreateEntityMessageCallback } from "./knowledge-shim";
+import {
+  createEntityMutation,
+  queryEntitiesQuery,
+} from "../../../../graphql/queries/knowledge/entity.queries";
+import { useActiveWorkspace } from "../../../../pages/shared/workspace-context";
+import { generateUseEntityTypeEntitiesQueryVariables } from "../../../../shared/use-entity-type-entities";
+import type { CreateEntityMessageCallback } from "./knowledge-shim";
 
 export const useBlockProtocolCreateEntity = (
   ownedById: OwnedById | null,
@@ -15,10 +24,29 @@ export const useBlockProtocolCreateEntity = (
 ): {
   createEntity: CreateEntityMessageCallback;
 } => {
+  const { activeWorkspaceOwnedById } = useActiveWorkspace();
+
   const [createFn] = useMutation<
     CreateEntityMutation,
     CreateEntityMutationVariables
-  >(createEntityMutation);
+  >(createEntityMutation, {
+    refetchQueries:
+      ownedById === activeWorkspaceOwnedById
+        ? [
+            /**
+             * This refetch query accounts for the "Entities" section
+             * in the sidebar being updated when the first instance of
+             * a type is created by a user that is from a different web.
+             */
+            {
+              query: queryEntitiesQuery,
+              variables: generateUseEntityTypeEntitiesQueryVariables({
+                ownedById: activeWorkspaceOwnedById,
+              }),
+            },
+          ]
+        : [],
+  });
 
   const createEntity: CreateEntityMessageCallback = useCallback(
     async ({ data }) => {
@@ -56,7 +84,7 @@ export const useBlockProtocolCreateEntity = (
         variables: {
           entityTypeId,
           ownedById,
-          properties,
+          properties: mergePropertyObjectAndMetadata(properties, undefined),
           linkData,
         },
       });
@@ -75,7 +103,7 @@ export const useBlockProtocolCreateEntity = (
       }
 
       return {
-        data: createdEntity,
+        data: new Entity(createdEntity),
       };
     },
     [createFn, ownedById, readonly],

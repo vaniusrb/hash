@@ -1,23 +1,24 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { SizedGridColumn } from "@glideapps/glide-data-grid";
-import {
-  Entity,
-  EntityId,
-  EntityRootType,
-  EntityTypeWithMetadata,
-  Subgraph,
-} from "@local/hash-subgraph";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type { SizedGridColumn } from "@glideapps/glide-data-grid";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
 
-export type LinkAndTargetEntity = { rightEntity: Entity; linkEntity: Entity };
+export type LinkAndTargetEntity = {
+  rightEntity: Entity;
+  linkEntity: Entity;
+};
 
 export type LinkRow = {
   rowId: string;
   linkEntityTypeId: VersionedUrl;
   linkTitle: string;
   maxItems?: number;
+  isErroredUpload: boolean;
   isFile: boolean;
   isList: boolean;
-  isLoading: boolean;
+  isUploading: boolean;
   expectedEntityTypes: EntityTypeWithMetadata[];
   expectedEntityTypeTitles: string[];
   linkAndTargetEntities: (LinkAndTargetEntity & {
@@ -27,6 +28,7 @@ export type LinkRow = {
   entitySubgraph: Subgraph<EntityRootType>;
   markLinkAsArchived: (linkEntityId: EntityId) => void;
   onEntityClick: (params: { entity: Entity }) => void;
+  retryErroredUpload?: () => void;
 };
 
 export type LinkColumnKey = "linkTitle" | "linkedWith" | "expectedEntityTypes";

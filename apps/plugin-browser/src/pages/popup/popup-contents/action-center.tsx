@@ -3,27 +3,26 @@ import {
   PlusIcon,
   WandMagicSparklesIcon,
 } from "@hashintel/design-system";
+import type { SvgIconProps, TabProps as MuiTabProps } from "@mui/material";
 import {
   Box,
   Stack,
-  SvgIconProps,
   Tab as MuiTab,
-  TabProps as MuiTabProps,
   Tabs as MuiTabs,
   Typography,
 } from "@mui/material";
-import { FunctionComponent } from "react";
+import type { FunctionComponent } from "react";
 import type { Tabs } from "webextension-polyfill";
 
-import { LocalStorage } from "../../../shared/storage";
+import { createDefaultSettings } from "../../../shared/create-default-settings";
+import type { LocalStorage } from "../../../shared/storage";
 import {
   darkModeBorderColor,
   lightModeBorderColor,
 } from "../../shared/style-values";
-import { useLocalStorage } from "../../shared/use-local-storage";
+import { useStorageSync } from "../../shared/use-storage-sync";
 import { Automated } from "./action-center/automated";
-import { defaultProductionRules } from "./action-center/default-production-rules";
-import { Log } from "./action-center/log";
+import { History } from "./action-center/history";
 import { OneOff } from "./action-center/one-off";
 import { Avatar } from "./shared/avatar";
 import { popupWidth } from "./shared/sizing";
@@ -70,20 +69,14 @@ export const ActionCenter = ({
   user: NonNullable<LocalStorage["user"]>;
 }) => {
   const [automaticInferenceConfig, setAutomaticInferenceConfig] =
-    useLocalStorage("automaticInferenceConfig", {
-      createAs: "draft",
-      displayGroupedBy: "type",
-      enabled: false,
-      model: "gpt-4-turbo",
-      ownedById: user.webOwnedById,
-      rules:
-        FRONTEND_ORIGIN === "https://app.hash.ai" ? defaultProductionRules : [],
-    });
-
-  const [inferenceRequests] = useLocalStorage("inferenceRequests", []);
+    useStorageSync(
+      "automaticInferenceConfig",
+      createDefaultSettings({ userWebOwnedById: user.webOwnedById })
+        .automaticInferenceConfig,
+    );
 
   return (
-    <Box sx={{ maxWidth: "100%", width: popupWidth }}>
+    <Box sx={{ maxWidth: "100%", width: popupWidth, minHeight: 400 }}>
       <Stack
         component="header"
         direction="row"
@@ -103,7 +96,7 @@ export const ActionCenter = ({
         <Box>
           <MuiTabs
             onChange={(_event, newValue) =>
-              setPopupTab(newValue as "one-off" | "automated" | "log")
+              setPopupTab(newValue as "one-off" | "automated" | "history")
             }
             TabIndicatorProps={{ sx: { transition: "none" } }}
             value={popupTab}
@@ -125,10 +118,10 @@ export const ActionCenter = ({
               )}
             />
             <MuiTab
-              value="log"
+              value="history"
               {...generateCommonTabProps(
-                popupTab === "log",
-                "Log",
+                popupTab === "history",
+                "History",
                 ListRegularIcon,
               )}
             />
@@ -141,7 +134,7 @@ export const ActionCenter = ({
               ? `${FRONTEND_ORIGIN}/@${user.properties.shortname}`
               : undefined
           }
-          name={user.properties.preferredName}
+          name={user.properties.displayName}
         />
       </Stack>
       <Box sx={{ maxHeight: 545, overflowY: "scroll" }}>
@@ -154,7 +147,7 @@ export const ActionCenter = ({
             user={user}
           />
         ) : (
-          <Log inferenceRequests={inferenceRequests} user={user} />
+          <History />
         )}
       </Box>
     </Box>

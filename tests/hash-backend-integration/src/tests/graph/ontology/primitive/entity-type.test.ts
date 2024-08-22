@@ -1,12 +1,8 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { publicUserAccountId } from "@apps/hash-api/src/auth/public-user-account-id";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
-import { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
-import {
-  joinOrg,
-  User,
-} from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import type { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import { joinOrg } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import {
   createEntityType,
   getEntityTypeById,
@@ -14,23 +10,26 @@ import {
   updateEntityType,
 } from "@apps/hash-api/src/graph/ontology/primitive/entity-type";
 import { createPropertyType } from "@apps/hash-api/src/graph/ontology/primitive/property-type";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
 import { Logger } from "@local/hash-backend-utils/logger";
+import { publicUserAccountId } from "@local/hash-backend-utils/public-user-account-id";
+import type {
+  EntityTypeWithMetadata,
+  PropertyTypeWithMetadata,
+} from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   currentTimeInstantTemporalAxes,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
-import {
+import type {
   ConstructEntityTypeParams,
   SystemDefinedProperties,
 } from "@local/hash-isomorphic-utils/types";
 import {
-  EntityTypeWithMetadata,
   isOwnedOntologyElementMetadata,
   linkEntityTypeUrl,
-  OwnedById,
-  PropertyTypeWithMetadata,
 } from "@local/hash-subgraph";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import {
@@ -40,15 +39,13 @@ import {
   textDataTypeId,
 } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 let testOrg: Org;
 let testUser: User;
@@ -62,7 +59,6 @@ let previousAddressLinkEntityType: EntityTypeWithMetadata;
 let addressEntityType: EntityTypeWithMetadata;
 
 beforeAll(async () => {
-  await TypeSystemInitializer.initialize();
   await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
   testUser = await createTestUser(graphContext, "entity-type-test-1", logger);
@@ -74,7 +70,6 @@ beforeAll(async () => {
     graphContext,
     authentication,
     "entitytypetestorg",
-    logger,
   );
   await joinOrg(graphContext, authentication, {
     userEntityId: testUser2.entity.metadata.recordId.entityId,
@@ -212,28 +207,25 @@ beforeAll(async () => {
         items: {
           oneOf: [{ $ref: workerEntityType.schema.$id }],
         },
-        ordered: false,
       },
       [previousAddressLinkEntityType.schema.$id]: {
         type: "array",
         items: {
           oneOf: [{ $ref: addressEntityType.schema.$id }],
         },
-        ordered: true,
       },
     },
   };
-});
 
-afterAll(async () => {
-  await deleteKratosIdentity({
-    kratosIdentityId: testUser.kratosIdentityId,
-  });
-  await deleteKratosIdentity({
-    kratosIdentityId: testUser2.kratosIdentityId,
-  });
-
-  await resetGraph();
+  return async () => {
+    await deleteKratosIdentity({
+      kratosIdentityId: testUser.kratosIdentityId,
+    });
+    await deleteKratosIdentity({
+      kratosIdentityId: testUser2.kratosIdentityId,
+    });
+    await resetGraph();
+  };
 });
 
 describe("Entity type CRU", () => {

@@ -1,12 +1,15 @@
-const { config } = require("dotenv-flow");
-const withBundleAnalyzer = require("@next/bundle-analyzer")({
+import bundleAnalyzer from "@next/bundle-analyzer";
+import { withSentryConfig } from "@sentry/nextjs";
+import { config } from "dotenv-flow";
+import webpack from "webpack";
+
+// eslint-disable-next-line import/extensions
+import { buildStamp } from "./buildstamp.js";
+
+const { DefinePlugin } = webpack;
+const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 });
-const { withSentryConfig } = require("@sentry/nextjs");
-
-const { DefinePlugin } = require("webpack");
-
-const { buildStamp } = require("./buildstamp");
 
 config({ silent: true, path: "../.." });
 
@@ -22,6 +25,10 @@ const sentryWebpackPluginOptions = {
 // They then get converted into variables with the right name in `frontend/src/lib/public-env.ts`
 // NOTE THAT any environment variable which is _missing_ will be converted to the string 'undefined' if no fallback is set
 
+// Show the worker cost in the UI. Always enabled for admins
+process.env.NEXT_PUBLIC_SHOW_WORKER_COST =
+  process.env.SHOW_WORKER_COST ?? false;
+
 process.env.NEXT_PUBLIC_HASH_OPENSEARCH_ENABLED =
   process.env.HASH_OPENSEARCH_ENABLED ?? false;
 
@@ -36,7 +43,13 @@ process.env.NEXT_PUBLIC_SENTRY_DSN = process.env.SENTRY_DSN ?? "";
 process.env.NEXT_PUBLIC_SENTRY_REPLAY_SESSION_SAMPLE_RATE =
   process.env.SENTRY_REPLAY_SESSION_SAMPLE_RATE ?? 1;
 
+process.env.NEXT_PUBLIC_NOTIFICATION_POLL_INTERVAL =
+  process.env.NOTIFICATION_POLL_INTERVAL ?? "";
+
 process.env.NEXT_PUBLIC_SELF_HOSTED_HASH = process.env.SELF_HOSTED_HASH ?? "";
+
+process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID =
+  process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:5001";
 
@@ -52,7 +65,8 @@ const pageEntityTypeBaseUrl = "https://hash.ai/@hash/types/entity-type/page/";
  * @todo make plugin definition cleaner - some ideas in https://github.com/cyrilwanner/next-compose-plugins/issues/59
  *    next-compose plugins itself is unmaintained and leads to 'invalid config property' warnings if used
  */
-module.exports = withSentryConfig(
+// eslint-disable-next-line import/no-default-export
+export default withSentryConfig(
   withBundleAnalyzer(
     /** @type {import('next').NextConfig} */
     {
@@ -72,6 +86,11 @@ module.exports = withSentryConfig(
           {
             source: "/settings/organizations/:shortname(^(?!new)$)",
             destination: "/settings/organizations/:shortname/general",
+            permanent: true,
+          },
+          {
+            source: "/login",
+            destination: "/signin",
             permanent: true,
           },
         ];
@@ -153,7 +172,7 @@ module.exports = withSentryConfig(
       webpack: (webpackConfig, { isServer }) => {
         webpackConfig.module.rules.push({
           test: /\.svg$/,
-          use: [require.resolve("@svgr/webpack")],
+          use: ["@svgr/webpack"],
         });
 
         // eslint-disable-next-line no-param-reassign
@@ -173,8 +192,11 @@ module.exports = withSentryConfig(
         });
 
         // eslint-disable-next-line no-param-reassign
-        webpackConfig.resolve.alias["@blockprotocol/type-system$"] =
-          "@blockprotocol/type-system/slim";
+        webpackConfig.resolve.extensionAlias = {
+          ".js": [".ts", ".tsx", ".jsx", ".js"],
+          ".mjs": [".mts", ".mjs"],
+          ".cjs": [".cts", ".cjs"],
+        };
 
         webpackConfig.plugins.push(
           new DefinePlugin({

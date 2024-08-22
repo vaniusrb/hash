@@ -1,16 +1,20 @@
 import { useMutation } from "@apollo/client";
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
-import { FileProperties } from "@local/hash-isomorphic-utils/system-types/file";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
 import {
   Entity,
-  EntityId,
-  EntityPropertiesObject,
-  OwnedById,
-} from "@local/hash-subgraph";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
+  LinkEntity,
+  mergePropertyObjectAndMetadata,
+} from "@local/hash-graph-sdk/entity";
+import type { EntityId, PropertyObject } from "@local/hash-graph-types/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import type {
+  File as FileEntity,
+  UploadCompletedAtPropertyValueWithMetadata,
+} from "@local/hash-isomorphic-utils/system-types/shared";
+import type { PropsWithChildren } from "react";
 import {
   createContext,
-  PropsWithChildren,
   useCallback,
   useContext,
   useMemo,
@@ -18,13 +22,12 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 
-import { UploadFileRequestData } from "../components/hooks/block-protocol-functions/knowledge/knowledge-shim";
-import {
+import type { UploadFileRequestData } from "../components/hooks/block-protocol-functions/knowledge/knowledge-shim";
+import type {
   AddEntityViewerMutation,
   AddEntityViewerMutationVariables,
   ArchiveEntityMutation,
   ArchiveEntityMutationVariables,
-  AuthorizationSubjectKind,
   CreateEntityMutation,
   CreateEntityMutationVariables,
   CreateFileFromUrlMutation,
@@ -32,11 +35,15 @@ import {
   PresignedPut,
   RequestFileUploadMutation,
   RequestFileUploadMutationVariables,
+  UpdateEntityMutation,
+  UpdateEntityMutationVariables,
 } from "../graphql/api-types.gen";
+import { AuthorizationSubjectKind } from "../graphql/api-types.gen";
 import {
   addEntityViewerMutation,
   archiveEntityMutation,
   createEntityMutation,
+  updateEntityMutation,
 } from "../graphql/queries/knowledge/entity.queries";
 import {
   createFileFromUrl,
@@ -55,7 +62,7 @@ type FileLinkData = {
   // The entityTypeId of the link entity to create
   linkEntityTypeId: VersionedUrl;
   // The properties for the link entity to create, if any
-  linkProperties?: EntityPropertiesObject;
+  linkProperties?: PropertyObject;
   /**
    * If true, don't actually create or delete the specified link entity, just track this metadata in the upload object
    *
@@ -73,10 +80,12 @@ type FileUploadRequestData = {
   ownedById: OwnedById;
   // Pass if retrying an earlier request
   requestId?: string;
+  // A function which will be called when the upload is complete
+  onComplete?: (upload: FileUploadComplete) => unknown;
 };
 
 type FileUploadEntities = {
-  fileEntity: Entity<FileProperties>;
+  fileEntity: Entity<FileEntity>;
   linkEntity?: LinkEntity;
 };
 
@@ -173,6 +182,11 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
     CreateEntityMutationVariables
   >(createEntityMutation);
 
+  const [updateEntity] = useMutation<
+    UpdateEntityMutation,
+    UpdateEntityMutationVariables
+  >(updateEntityMutation);
+
   const [requestFileUploadFn] = useMutation<
     RequestFileUploadMutation,
     RequestFileUploadMutationVariables
@@ -198,6 +212,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
       fileData,
       linkedEntityData,
       makePublic,
+      onComplete,
       ownedById,
       requestId,
     }) => {
@@ -219,29 +234,20 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
 
       const newRequestId = requestId ? undefined : uuid();
 
-      const upload = existingUpload
-        ? ({
-            createdEntities: existingUpload.createdEntities,
-            fileData: existingUpload.fileData,
-            linkedEntityData: existingUpload.linkedEntityData,
-            makePublic: existingUpload.makePublic,
-            requestId,
-            ownedById: existingUpload.ownedById,
-            status: existingUpload.failedStep,
-          } as FileUpload)
-        : ({
-            fileData,
-            linkedEntityData,
-            makePublic,
-            ownedById,
-            requestId: newRequestId!,
-            status: "creating-file-entity",
-          } satisfies FileUpload);
+      const upload =
+        existingUpload ??
+        ({
+          fileData,
+          linkedEntityData,
+          makePublic,
+          onComplete,
+          ownedById,
+          requestId: newRequestId!,
+          status: "creating-file-entity",
+        } satisfies FileUpload);
 
       if (!existingUpload) {
         setUploads((prevUploads) => [...prevUploads, upload]);
-      } else {
-        updateUpload(upload);
       }
 
       const { description, name } = fileData;
@@ -275,8 +281,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
             throw new Error(errors?.[0]?.message ?? "unknown error");
           }
 
-          fileEntity =
-            data.createFileFromUrl as unknown as Entity<FileProperties>;
+          fileEntity = new Entity<FileEntity>(data.createFileFromUrl);
 
           if (makePublic) {
             /** @todo: make entity public as part of `createEntity` query once this is supported */
@@ -338,8 +343,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
               throw new Error(errors?.[0]?.message ?? "unknown error");
             }
 
-            fileEntity = data.requestFileUpload
-              .entity as unknown as Entity<FileProperties>;
+            fileEntity = new Entity<FileEntity>(data.requestFileUpload.entity);
 
             if (makePublic) {
               /** @todo: make entity public as part of `createEntity` query once this is supported */
@@ -382,6 +386,31 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
               }));
             },
           );
+
+          const uploadCompletedAt = new Date();
+
+          await updateEntity({
+            variables: {
+              entityUpdate: {
+                entityId: fileEntity.metadata.recordId.entityId,
+                propertyPatches: [
+                  {
+                    op: "add",
+                    path: [
+                      "https://hash.ai/@hash/types/property-type/upload-completed-at/" satisfies keyof FileEntity["properties"] as BaseUrl,
+                    ],
+                    property: {
+                      value: uploadCompletedAt.toISOString(),
+                      metadata: {
+                        dataTypeId:
+                          "https://hash.ai/@hash/types/data-type/datetime/v/1",
+                      },
+                    } satisfies UploadCompletedAtPropertyValueWithMetadata,
+                  },
+                ],
+              },
+            },
+          });
         } catch (err) {
           // requestFileUploadFn might itself throw rather than return errors, thus this catch
 
@@ -416,6 +445,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
           createdEntities: { fileEntity },
         };
         updateUpload(updatedUpload);
+        upload.onComplete?.(updatedUpload);
         return updatedUpload;
       }
 
@@ -484,7 +514,9 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
               leftEntityId: linkedEntityId,
               rightEntityId: fileEntity.metadata.recordId.entityId,
             },
-            properties: linkProperties ?? {},
+            properties: linkProperties
+              ? mergePropertyObjectAndMetadata(linkProperties, undefined)
+              : { value: {} },
           },
         });
 
@@ -492,7 +524,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
           throw new Error(errors?.[0]?.message ?? "unknown error");
         }
 
-        const linkEntity = data.createEntity as LinkEntity;
+        const linkEntity = new LinkEntity(data.createEntity);
 
         if (makePublic) {
           /** @todo: make entity public as part of `createEntity` query once this is supported */
@@ -513,6 +545,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
           },
         };
         updateUpload(updatedUpload);
+        upload.onComplete?.(updatedUpload);
         return updatedUpload;
       } catch (err) {
         const errorMessage = `Error creating link entity: ${
@@ -538,6 +571,7 @@ export const FileUploadsProvider = ({ children }: PropsWithChildren) => {
       createFileFromUrlFn,
       requestFileUploadFn,
       updateUpload,
+      updateEntity,
       uploads,
     ],
   );

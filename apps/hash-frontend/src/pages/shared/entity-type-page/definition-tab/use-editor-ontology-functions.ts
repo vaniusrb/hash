@@ -1,13 +1,13 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import {
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type {
   EditorOntologyFunctions,
   EntityTypeEditorProps,
 } from "@hashintel/type-editor";
-import {
+import type {
   EntityTypeWithMetadata,
-  OwnedById,
   PropertyTypeWithMetadata,
-} from "@local/hash-subgraph";
+} from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   getEntityTypeById,
   getPropertyTypeById,
@@ -50,6 +50,7 @@ export const useEditorOntologyFunctions = (
     EditorOntologyFunctions["createEntityType"]
   >(
     (args) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return createEntityType(args as any).then(async (res) => {
         await refetchEntityTypes();
         return res;
@@ -62,6 +63,7 @@ export const useEditorOntologyFunctions = (
     EditorOntologyFunctions["updateEntityType"]
   >(
     (args) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return updateEntityType(args as any).then(async (res) => {
         await refetchEntityTypes();
         return res;

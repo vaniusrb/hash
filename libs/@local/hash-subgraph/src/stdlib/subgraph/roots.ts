@@ -1,25 +1,21 @@
-import { Subgraph as SubgraphBp } from "@blockprotocol/graph/temporal";
+import type { Subgraph as SubgraphBp } from "@blockprotocol/graph";
 import {
-  getRoots as getRootsBp,
   isDataTypeRootedSubgraph as isDataTypeRootedSubgraphBp,
   isEntityRootedSubgraph as isEntityRootedSubgraphBp,
   isEntityTypeRootedSubgraph as isEntityTypeRootedSubgraphBp,
   isPropertyTypeRootedSubgraph as isPropertyTypeRootedSubgraphBp,
-} from "@blockprotocol/graph/temporal/stdlib";
-import {
-  EntityMetadata as GraphApiEntityMetadata,
-  Subgraph as GraphApiSubgraph,
-} from "@local/hash-graph-client";
+} from "@blockprotocol/graph/stdlib";
 
-import {
+import type {
   DataTypeRootType,
-  EntityMetadata,
   EntityRootType,
   EntityTypeRootType,
   PropertyTypeRootType,
   Subgraph,
   SubgraphRootType,
-} from "../../main";
+  Vertex,
+} from "../../main.js";
+import { mustBeDefined } from "../../shared/invariant.js";
 
 /**
  * Returns all root elements.
@@ -35,7 +31,22 @@ import {
 export const getRoots = <RootType extends SubgraphRootType>(
   subgraph: Subgraph<RootType>,
 ): RootType["element"][] =>
-  getRootsBp(subgraph as unknown as SubgraphBp<RootType>);
+  subgraph.roots.map((rootVertexId) => {
+    const root = mustBeDefined(
+      // @ts-expect-error - We could use type-guards here to convince TS that it's safe, but that
+      //                    would be slower, it's currently not smart enough to realise this can
+      //                    produce a value of type `Vertex` as it struggles with discriminating
+      //                    `EntityId` and `BaseUrl`
+      subgraph.vertices[rootVertexId.baseId]?.[
+        rootVertexId.revisionId
+      ] as Vertex,
+      `roots should have corresponding vertices but ${JSON.stringify(
+        rootVertexId,
+      )} was missing`,
+    );
+
+    return root.inner as RootType["element"];
+  });
 
 /**
  * A type-guard that can be used to constrain the generic parameter of `Subgraph` to `DataTypeWithMetadata`.
@@ -140,21 +151,3 @@ export const assertEntityRootedSubgraph: (
     throw new Error("Expected subgraph to be an entity rooted subgraph");
   }
 };
-
-/**
- * A mapping function that can be used to map the subgraph returned by the Graph API to the HASH `Subgraph` definition.
- *
- * @param subgraph
- */
-export const mapGraphApiSubgraphToSubgraph = <
-  RootType extends SubgraphRootType,
->(
-  subgraph: GraphApiSubgraph,
-) => subgraph as Subgraph<RootType>;
-
-/**
- * A mapping function that can be used to map entity metadata returned by the Graph API to the HASH `EntityMetadata` definition.
- */
-export const mapGraphApiEntityMetadataToMetadata = (
-  metadata: GraphApiEntityMetadata,
-) => metadata as EntityMetadata;

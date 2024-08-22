@@ -1,7 +1,15 @@
-import { WebOwnerSubject } from "@local/hash-graph-client";
-import { AccountGroupId, AccountId, OwnedById } from "@local/hash-subgraph";
+import type {
+  InsertAccountGroupIdParams,
+  InsertAccountIdParams,
+  WebOwnerSubject,
+} from "@local/hash-graph-client";
+import type {
+  AccountGroupId,
+  AccountId,
+} from "@local/hash-graph-types/account";
+import type { OwnedById } from "@local/hash-graph-types/web";
 
-import { ImpureGraphFunction } from "./context-types";
+import type { ImpureGraphFunction } from "./context-types";
 
 export const addAccountGroupMember: ImpureGraphFunction<
   { accountId: AccountId; accountGroupId: AccountGroupId },
@@ -30,17 +38,17 @@ export const removeAccountGroupMember: ImpureGraphFunction<
 };
 
 export const createAccount: ImpureGraphFunction<
-  {},
+  InsertAccountIdParams,
   Promise<AccountId>
-> = async ({ graphApi }, { actorId }, _) =>
-  graphApi.createAccount(actorId).then(({ data }) => data as AccountId);
+> = async ({ graphApi }, { actorId }, params) =>
+  graphApi.createAccount(actorId, params).then(({ data }) => data as AccountId);
 
 export const createAccountGroup: ImpureGraphFunction<
-  {},
+  InsertAccountGroupIdParams,
   Promise<AccountGroupId>
-> = async ({ graphApi }, { actorId }, _) =>
+> = async ({ graphApi }, { actorId }, params) =>
   graphApi
-    .createAccountGroup(actorId)
+    .createAccountGroup(actorId, params)
     .then(({ data }) => data as AccountGroupId);
 
 export const createWeb: ImpureGraphFunction<

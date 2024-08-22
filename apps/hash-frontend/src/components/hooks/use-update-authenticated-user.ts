@@ -1,25 +1,29 @@
 import { useLazyQuery, useMutation } from "@apollo/client";
+import { typedEntries } from "@local/advanced-types/typed-entries";
+import type { PropertyPatchOperation } from "@local/hash-graph-types/entity";
 import { mapGqlSubgraphFieldsFragmentToSubgraph } from "@local/hash-isomorphic-utils/graph-queries";
-import { systemPropertyTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { EntityRootType } from "@local/hash-subgraph";
+import {
+  blockProtocolPropertyTypes,
+  systemPropertyTypes,
+} from "@local/hash-isomorphic-utils/ontology-type-ids";
+import type { EntityRootType } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
-import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
-import { GraphQLError } from "graphql";
+import type { GraphQLError } from "graphql";
 import { useCallback, useState } from "react";
 
-import {
+import type {
   MeQuery,
   UpdateEntityMutation,
   UpdateEntityMutationVariables,
 } from "../../graphql/api-types.gen";
 import { updateEntityMutation } from "../../graphql/queries/knowledge/entity.queries";
 import { meQuery } from "../../graphql/queries/user.queries";
-import { User } from "../../lib/user-and-org";
+import type { User } from "../../lib/user-and-org";
 import { useAuthInfo } from "../../pages/shared/auth-info-context";
 
 type UpdateAuthenticatedUserParams = {
   shortname?: string;
-  preferredName?: string;
+  displayName?: string;
   location?: string;
   websiteUrl?: string;
   preferredPronouns?: string;
@@ -76,52 +80,45 @@ export const useUpdateAuthenticatedUser = () => {
 
         const latestUserEntity = getRoots(latestUserEntitySubgraph)[0]!;
 
-        /**
-         * @todo: use a partial update mutation instead
-         * @see https://app.asana.com/0/1202805690238892/1203285029221330/f
-         */
-        const { properties: currentProperties } = latestUserEntity;
+        const propertyPatches: PropertyPatchOperation[] = [];
+        const {
+          shortname,
+          displayName,
+          location,
+          websiteUrl,
+          preferredPronouns,
+        } = params;
+        for (const [key, value] of typedEntries({
+          shortname,
+          displayName,
+          location,
+          websiteUrl,
+          preferredPronouns,
+        })) {
+          if (typeof value !== "undefined") {
+            propertyPatches.push({
+              path: [
+                key === "displayName"
+                  ? blockProtocolPropertyTypes.displayName.propertyTypeBaseUrl
+                  : systemPropertyTypes[key].propertyTypeBaseUrl,
+              ],
+              op: "add",
+              property: {
+                value,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+                },
+              },
+            });
+          }
+        }
 
         const { errors } = await updateEntity({
           variables: {
-            entityId: latestUserEntity.metadata.recordId.entityId,
-            updatedProperties: {
-              ...currentProperties,
-              ...(params.shortname
-                ? {
-                    [extractBaseUrl(
-                      systemPropertyTypes.shortname.propertyTypeId,
-                    )]: params.shortname,
-                  }
-                : {}),
-              ...(params.preferredName
-                ? {
-                    [extractBaseUrl(
-                      systemPropertyTypes.preferredName.propertyTypeId,
-                    )]: params.preferredName,
-                  }
-                : {}),
-              ...(typeof params.location !== "undefined"
-                ? {
-                    [extractBaseUrl(
-                      systemPropertyTypes.location.propertyTypeId,
-                    )]: params.location,
-                  }
-                : {}),
-              ...(typeof params.websiteUrl !== "undefined"
-                ? {
-                    [extractBaseUrl(
-                      systemPropertyTypes.websiteUrl.propertyTypeId,
-                    )]: params.websiteUrl,
-                  }
-                : {}),
-              ...(typeof params.preferredPronouns !== "undefined"
-                ? {
-                    [extractBaseUrl(
-                      systemPropertyTypes.preferredPronouns.propertyTypeId,
-                    )]: params.preferredPronouns,
-                  }
-                : {}),
+            entityUpdate: {
+              entityId: latestUserEntity.metadata.recordId.entityId,
+              propertyPatches,
             },
           },
         });

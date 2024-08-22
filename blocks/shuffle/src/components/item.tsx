@@ -1,9 +1,11 @@
-import { DraggableAttributes } from "@dnd-kit/core";
+import type { DraggableAttributes } from "@dnd-kit/core";
 import CloseIcon from "@mui/icons-material/Close";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import LinkIcon from "@mui/icons-material/Link";
-import { SxProps, Tooltip } from "@mui/material";
-import React, { CSSProperties, forwardRef, RefObject, useState } from "react";
+import type { SxProps } from "@mui/material";
+import { Tooltip } from "@mui/material";
+import type { CSSProperties, RefObject } from "react";
+import React, { forwardRef, useState } from "react";
 
 import {
   SButtonsWrapper,
@@ -23,6 +25,7 @@ export type ItemProps = {
   onDelete?: () => void;
   paperStyle?: SxProps;
   attributes?: DraggableAttributes;
+  // eslint-disable-next-line @typescript-eslint/ban-types -- this matches the library type we get listeners from
   listeners?: Record<string, Function>;
   style?: CSSProperties;
   dragOverlay?: RefObject<HTMLDivElement>;
@@ -87,7 +90,7 @@ export const Item = forwardRef<HTMLLIElement, ItemProps>(
               <SIconButton
                 onClick={() => onDelete?.()}
                 sx={({ palette }) => ({
-                  opacity: dragOverlay || isHovered ? 1 : 0,
+                  opacity: (dragOverlay ?? isHovered) ? 1 : 0,
                   transition: ({ transitions }) =>
                     transitions.create("opacity"),
                   "&:focus-visible, :hover": {

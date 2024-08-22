@@ -4,16 +4,19 @@ import { Box } from "@mui/material";
 import { useRouter } from "next/router";
 
 import { useEntityTypeEntitiesContext } from "../../../shared/entity-type-entities-context";
+import { useEntityTypesContextRequired } from "../../../shared/entity-types-context/hooks/use-entity-types-context-required";
 import { TabLink } from "../../../shared/ui/tab-link";
 import { Tabs } from "../../../shared/ui/tabs";
 import { useEntityType } from "./shared/entity-type-context";
 import { getTabUrl, getTabValue, useCurrentTab } from "./shared/tabs";
 
 export const EntityTypeTabs = ({
+  canCreateEntity,
   isDraft,
   isFile,
   isImage,
 }: {
+  canCreateEntity: boolean;
   isDraft: boolean;
   isFile: boolean;
   isImage: boolean;
@@ -25,6 +28,10 @@ export const EntityTypeTabs = ({
   const { entities, loading } = useEntityTypeEntitiesContext();
 
   const currentTab = useCurrentTab();
+
+  const { isSpecialEntityTypeLookup } = useEntityTypesContextRequired();
+
+  const isLinkEntityType = isSpecialEntityTypeLookup?.[entityType.$id]?.isLink;
 
   return (
     <Box display="flex">
@@ -53,43 +60,47 @@ export const EntityTypeTabs = ({
                 count={entities?.length ?? 0}
                 active={currentTab === "entities"}
               />,
-              <TabLink
-                key={isFile ? "upload" : "create"}
-                value={isFile ? "upload" : "create"}
-                href={
-                  isFile
-                    ? getTabUrl("upload")
-                    : `/new/entity?entity-type-id=${encodeURIComponent(
-                        entityType.$id,
-                      )}`
-                }
-                label={
-                  isFile
-                    ? `Add new ${isImage ? "image" : "file"}`
-                    : "Create new entity"
-                }
-                sx={(theme) => ({
-                  ml: "auto",
-                  color: "inherit",
-                  fill: theme.palette.blue[70],
-                  "&:hover": {
-                    color: theme.palette.primary.main,
-                    fill: theme.palette.blue[60],
-                  },
-                  mr: 0,
-                })}
-                icon={
-                  <FontAwesomeIcon
-                    icon={faPlus}
-                    sx={(theme) => ({
-                      ...theme.typography.smallTextLabels,
-                      fill: "inherit",
-                      ml: 1,
-                    })}
-                  />
-                }
-              />,
-            ]}
+              isLinkEntityType ? (
+                []
+              ) : canCreateEntity ? (
+                <TabLink
+                  key={isFile ? "upload" : "create"}
+                  value={isFile ? "upload" : "create"}
+                  href={
+                    isFile
+                      ? getTabUrl("upload")
+                      : `/new/entity?entity-type-id=${encodeURIComponent(
+                          entityType.$id,
+                        )}`
+                  }
+                  label={
+                    isFile
+                      ? `Add new ${isImage ? "image" : "file"}`
+                      : "Create new entity"
+                  }
+                  sx={(theme) => ({
+                    ml: "auto",
+                    color: "inherit",
+                    fill: theme.palette.blue[70],
+                    "&:hover": {
+                      color: theme.palette.primary.main,
+                      fill: theme.palette.blue[60],
+                    },
+                    mr: 0,
+                  })}
+                  icon={
+                    <FontAwesomeIcon
+                      icon={faPlus}
+                      sx={(theme) => ({
+                        ...theme.typography.smallTextLabels,
+                        fill: "inherit",
+                        ml: 1,
+                      })}
+                    />
+                  }
+                />
+              ) : null,
+            ].flat()}
       </Tabs>
     </Box>
   );

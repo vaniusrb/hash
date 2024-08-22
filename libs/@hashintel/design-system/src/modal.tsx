@@ -1,12 +1,11 @@
-import {
-  Box,
-  Modal as MuiModal,
+import type {
   ModalProps as MuiModalProps,
   SxProps,
   Theme,
 } from "@mui/material";
+import { Box, Modal as MuiModal } from "@mui/material";
 import clsx from "clsx";
-import { FunctionComponent } from "react";
+import type { FunctionComponent } from "react";
 
 import { fluidFontClassName } from "./fluid-fonts";
 
@@ -49,6 +48,8 @@ export const Modal: FunctionComponent<ModalProps> = ({
               "0px 20px 41px rgba(61, 78, 133, 0.07), 0px 16px 25px rgba(61, 78, 133, 0.0531481), 0px 12px 12px rgba(61, 78, 133, 0.0325), 0px 2px 3.13px rgba(61, 78, 133, 0.02)",
             borderRadius: 2,
             p: { xs: 2, md: 4 },
+            maxHeight: "90vh",
+            overflow: "auto",
           },
           ...(Array.isArray(contentStyle) ? contentStyle : [contentStyle]),
         ]}

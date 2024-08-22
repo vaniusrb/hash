@@ -1,39 +1,29 @@
 import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
+import type { Theme } from "@mui/material";
 import {
   Box,
-  buttonClasses,
   Container,
   Divider,
   Grid,
   Stack,
-  Theme,
   Typography,
   useMediaQuery,
 } from "@mui/material";
-import { BoxProps } from "@mui/system";
+import type { BoxProps } from "@mui/system";
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import {
-  FunctionComponent,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import type { FunctionComponent, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { unstable_batchedUpdates } from "react-dom";
 
 import { FRONTEND_URL } from "../config";
-import { SubscribeResponseBody } from "../pages/api/subscribe.page";
-import {
-  BlogIndividualPage,
-  useBlogPosts,
-} from "../pages/shared/blog-posts-context";
+import type { SubscribeResponseBody } from "../pages/api/subscribe.page";
+import type { BlogIndividualPage } from "../pages/shared/blog-posts-context";
+import { useBlogPosts } from "../pages/shared/blog-posts-context";
 import { parseNameFromFileName } from "../util/client-mdx-util";
 import { Button } from "./button";
 import { CommentCodeSolidIcon } from "./icons/comment-code-solid-icon";
-import { DiscordIcon } from "./icons/discord-icon";
 import { EnvelopeDotSolidIcon } from "./icons/envelope-dot-solid-icon";
 import { EnvelopeRegularIcon } from "./icons/envelope-regular-icon";
 import { FontAwesomeIcon } from "./icons/font-awesome-icon";
@@ -227,7 +217,7 @@ export const Subscribe: FunctionComponent<
                   disabled={loading}
                   placeholder="you@example.com"
                   error={error !== null}
-                  helperText={error !== null ? error : undefined}
+                  helperText={error ?? undefined}
                   inputRef={inputRef}
                 />
                 <Button
@@ -503,20 +493,6 @@ const Community: FunctionComponent = () => {
               spacing={2}
               justifyContent="center"
             >
-              <Button
-                variant="primarySquare"
-                size="large"
-                color="purple"
-                href="https://hash.ai/discord"
-                startIcon={<DiscordIcon />}
-                sx={{
-                  [`.${buttonClasses.startIcon}>*:nth-of-type(1)`]: {
-                    fontSize: 28,
-                  },
-                }}
-              >
-                Join our Discord
-              </Button>
               <Button
                 variant="primarySquare"
                 size="large"

@@ -1,5 +1,4 @@
 [blockprotocol/blockprotocol repo]: https://github.com/blockprotocol/blockprotocol
-[discord]: https://hash.ai/discord?utm_medium=organic&utm_source=github_readme_hash-repo_apps
 [github_banner]: https://hash.dev/?utm_medium=organic&utm_source=github_readme_hash-repo_apps
 [github_star]: https://github.com/hashintel/hash/tree/main/apps#
 [hash]: https://hash.ai/platform/hash?utm_medium=organic&utm_source=github_readme_hash-repo_apps
@@ -9,7 +8,7 @@
 
 [![github_banner](https://hash.ai/cdn-cgi/imagedelivery/EipKtqu98OotgfhvKf6Eew/01e2b813-d046-4b70-cc4e-eb2f1ead6900/github)][github_banner]
 
-[![discord](https://img.shields.io/discord/840573247803097118)][discord] [![github_star](https://img.shields.io/github/stars/hashintel/hash?label=Star%20on%20GitHub&style=social)][github_star]
+[![github_star](https://img.shields.io/github/stars/hashintel/hash?label=Star%20on%20GitHub&style=social)][github_star]
 
 # Applications
 
@@ -23,7 +22,7 @@ This `apps` directory contains the source-code and/or content for a number of HA
 
 The [README in the `hash` directory](hash/README.md) provides a more detailed overview of the app, and instructions for running it.
 
-The application depends on a suite of constituent services, which are briefly described below. Please note that these are not designed or guaranteed to be useful when ran independently.
+The application depends on a suite of constituent services, which are briefly described below. Please note that these are not designed or guaranteed to be useful when run independently.
 
 | Subdirectory                                       | Description                                                                                                                                                                  |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

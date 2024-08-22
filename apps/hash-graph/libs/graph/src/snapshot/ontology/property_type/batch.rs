@@ -1,22 +1,20 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use authorization::{
-    backend::ZanzibarBackend,
-    schema::{PropertyTypeId, PropertyTypeRelationAndSubject},
-};
+use authorization::{backend::ZanzibarBackend, schema::PropertyTypeRelationAndSubject};
 use error_stack::{Result, ResultExt};
+use graph_types::ontology::PropertyTypeId;
 use tokio_postgres::GenericClient;
 
 use crate::{
-    snapshot::{
-        ontology::table::{
+    snapshot::WriteBatch,
+    store::{
+        postgres::query::rows::{
             PropertyTypeConstrainsPropertiesOnRow, PropertyTypeConstrainsValuesOnRow,
-            PropertyTypeRow,
+            PropertyTypeEmbeddingRow, PropertyTypeRow,
         },
-        WriteBatch,
+        AsClient, InsertionError, PostgresStore,
     },
-    store::{AsClient, InsertionError, PostgresStore},
 };
 
 pub enum PropertyTypeRowBatch {
@@ -24,30 +22,35 @@ pub enum PropertyTypeRowBatch {
     ConstrainsValues(Vec<PropertyTypeConstrainsValuesOnRow>),
     ConstrainsProperties(Vec<PropertyTypeConstrainsPropertiesOnRow>),
     Relations(HashMap<PropertyTypeId, Vec<PropertyTypeRelationAndSubject>>),
+    Embeddings(Vec<PropertyTypeEmbeddingRow<'static>>),
 }
 
 #[async_trait]
-impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
-    async fn begin(postgres_client: &PostgresStore<C>) -> Result<(), InsertionError> {
+impl<C, A> WriteBatch<C, A> for PropertyTypeRowBatch
+where
+    C: AsClient,
+    A: ZanzibarBackend + Send + Sync,
+{
+    async fn begin(postgres_client: &mut PostgresStore<C, A>) -> Result<(), InsertionError> {
         postgres_client
             .as_client()
             .client()
             .simple_query(
                 "
-                    CREATE TEMPORARY TABLE property_types_tmp
-                        (LIKE property_types INCLUDING ALL)
-                        ON COMMIT DROP;
+                    CREATE TEMPORARY TABLE property_types_tmp (
+                        LIKE property_types INCLUDING ALL
+                    ) ON COMMIT DROP;
 
                     CREATE TEMPORARY TABLE property_type_constrains_values_on_tmp (
-                        source_property_type_ontology_id UUID NOT NULL,
-                        target_data_type_base_url TEXT NOT NULL,
-                        target_data_type_version INT8 NOT NULL
+                        LIKE property_type_constrains_values_on INCLUDING ALL
                     ) ON COMMIT DROP;
 
                     CREATE TEMPORARY TABLE property_type_constrains_properties_on_tmp (
-                        source_property_type_ontology_id UUID NOT NULL,
-                        target_property_type_base_url TEXT NOT NULL,
-                        target_property_type_version INT8 NOT NULL
+                        LIKE property_type_constrains_properties_on INCLUDING ALL
+                    ) ON COMMIT DROP;
+
+                    CREATE TEMPORARY TABLE property_type_embeddings_tmp (
+                        LIKE property_type_embeddings INCLUDING ALL
                     ) ON COMMIT DROP;
                 ",
             )
@@ -57,11 +60,7 @@ impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
         Ok(())
     }
 
-    async fn write(
-        self,
-        postgres_client: &PostgresStore<C>,
-        authorization_api: &mut (impl ZanzibarBackend + Send),
-    ) -> Result<(), InsertionError> {
+    async fn write(self, postgres_client: &mut PostgresStore<C, A>) -> Result<(), InsertionError> {
         let client = postgres_client.as_client().client();
         match self {
             Self::Schema(property_types) => {
@@ -85,8 +84,8 @@ impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
                     .query(
                         "
                             INSERT INTO property_type_constrains_values_on_tmp
-                            SELECT DISTINCT * FROM \
-                         UNNEST($1::property_type_constrains_values_on_tmp[])
+                            SELECT DISTINCT *
+                              FROM UNNEST($1::property_type_constrains_values_on[])
                             RETURNING 1;
                         ",
                         &[&values],
@@ -103,7 +102,7 @@ impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
                         "
                             INSERT INTO property_type_constrains_properties_on_tmp
                             SELECT DISTINCT * FROM \
-                         UNNEST($1::property_type_constrains_properties_on_tmp[])
+                         UNNEST($1::property_type_constrains_properties_on[])
                             RETURNING 1;
                         ",
                         &[&properties],
@@ -119,7 +118,8 @@ impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
                 reason = "Lifetime error, probably the signatures are wrong"
             )]
             Self::Relations(relations) => {
-                authorization_api
+                postgres_client
+                    .authorization_api
                     .touch_relationships(
                         relations
                             .into_iter()
@@ -131,12 +131,28 @@ impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
                     .await
                     .change_context(InsertionError)?;
             }
+            Self::Embeddings(embeddings) => {
+                let rows = client
+                    .query(
+                        "
+                            INSERT INTO property_type_embeddings_tmp
+                            SELECT * FROM UNNEST($1::property_type_embeddings[])
+                            RETURNING 1;
+                        ",
+                        &[&embeddings],
+                    )
+                    .await
+                    .change_context(InsertionError)?;
+                if !rows.is_empty() {
+                    tracing::info!("Read {} property type embeddings", rows.len());
+                }
+            }
         }
         Ok(())
     }
 
     async fn commit(
-        postgres_client: &PostgresStore<C>,
+        postgres_client: &mut PostgresStore<C, A>,
         _validation: bool,
     ) -> Result<(), InsertionError> {
         postgres_client
@@ -144,29 +160,17 @@ impl<C: AsClient> WriteBatch<C> for PropertyTypeRowBatch {
             .client()
             .simple_query(
                 "
-                    INSERT INTO property_types SELECT * FROM property_types_tmp;
+                    INSERT INTO property_types
+                        SELECT * FROM property_types_tmp;
 
                     INSERT INTO property_type_constrains_values_on
-                        SELECT
-                            source_property_type_ontology_id,
-                            ontology_ids_tmp.ontology_id AS target_data_type_ontology_id
-                        FROM property_type_constrains_values_on_tmp
-                        INNER JOIN ontology_ids_tmp ON
-                            ontology_ids_tmp.base_url = \
-                 property_type_constrains_values_on_tmp.target_data_type_base_url
-                            AND ontology_ids_tmp.version = \
-                 property_type_constrains_values_on_tmp.target_data_type_version;
+                        SELECT * FROM property_type_constrains_values_on_tmp;
 
                     INSERT INTO property_type_constrains_properties_on
-                        SELECT
-                            source_property_type_ontology_id,
-                            ontology_ids_tmp.ontology_id AS target_property_type_ontology_id
-                        FROM property_type_constrains_properties_on_tmp
-                        INNER JOIN ontology_ids_tmp ON
-                            ontology_ids_tmp.base_url = \
-                 property_type_constrains_properties_on_tmp.target_property_type_base_url
-                            AND ontology_ids_tmp.version = \
-                 property_type_constrains_properties_on_tmp.target_property_type_version;
+                        SELECT * FROM property_type_constrains_properties_on_tmp;
+
+                    INSERT INTO property_type_embeddings
+                        SELECT * FROM property_type_embeddings_tmp;
                 ",
             )
             .await

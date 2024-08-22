@@ -1,18 +1,16 @@
 import type { Subgraph } from "@local/hash-graph-client";
+import { mapGraphApiSubgraphToSubgraph } from "@local/hash-isomorphic-utils/subgraph-mapping";
 import type { EntityTypeRootType } from "@local/hash-subgraph";
-import {
-  getRoots,
-  mapGraphApiSubgraphToSubgraph,
-} from "@local/hash-subgraph/stdlib";
+import { getRoots } from "@local/hash-subgraph/stdlib";
 import { useEffect } from "react";
 
-import {
+import type {
   GetEntityTypesQuery,
   GetEntityTypesQueryVariables,
 } from "../../graphql/api-types.gen";
 import { getEntityTypesQuery } from "../../graphql/queries/entity-type.queries";
 import { queryGraphQlApi } from "../../shared/query-graphql-api";
-import { useLocalStorage } from "./use-local-storage";
+import { useStorageSync } from "./use-storage-sync";
 
 const getEntityTypesSubgraph = () => {
   return queryGraphQlApi<GetEntityTypesQuery, GetEntityTypesQueryVariables>(
@@ -21,8 +19,8 @@ const getEntityTypesSubgraph = () => {
 };
 
 export const useEntityTypes = () => {
-  const [entityTypes, setEntityTypes] = useLocalStorage("entityTypes", []);
-  const [entityTypesSubgraph, setEntityTypesSubgraph] = useLocalStorage(
+  const [entityTypes, setEntityTypes] = useStorageSync("entityTypes", []);
+  const [entityTypesSubgraph, setEntityTypesSubgraph] = useStorageSync(
     "entityTypesSubgraph",
     null,
   );
@@ -30,7 +28,12 @@ export const useEntityTypes = () => {
   useEffect(() => {
     void getEntityTypesSubgraph().then((apiSubgraph) => {
       const mappedSubgraph = mapGraphApiSubgraphToSubgraph<EntityTypeRootType>(
-        apiSubgraph as Subgraph, // @todo why is this necessary
+        // @ts-expect-error - @todo figure out why this is necessary
+        //                  - It's possible to remove the ts-expect-error when changing the entity metadata to contain
+        //                    a list of entity types
+        apiSubgraph as Subgraph,
+        null,
+        true,
       );
 
       const apiEntityTypes = getRoots<EntityTypeRootType>(mappedSubgraph);

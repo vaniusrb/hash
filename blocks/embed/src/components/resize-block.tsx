@@ -1,13 +1,6 @@
 import { throttle } from "lodash";
-import {
-  FunctionComponent,
-  MouseEvent,
-  ReactNode,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
+import type { FunctionComponent, MouseEvent, ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { tw } from "twind";
 
 import { MIN_HEIGHT, MIN_WIDTH } from "../constants";
@@ -222,6 +215,7 @@ export const ResizeBlock: FunctionComponent<ResizeBlockProps> = ({
         if (["bottom-left", "bottom-right"].includes(position)) {
           return (
             <button
+              aria-label={`${position} resize button`}
               key={position}
               type="button"
               className={tw`transition-all absolute z-10 opacity-0 group-hover:opacity-100 focus:outline-none ${className}`}

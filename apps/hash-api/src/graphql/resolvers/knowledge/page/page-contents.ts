@@ -1,24 +1,26 @@
+import type { Entity } from "@local/hash-graph-sdk/entity";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { Entity } from "@local/hash-subgraph";
+import type { HasSpatiallyPositionedContent } from "@local/hash-isomorphic-utils/system-types/canvas";
+import type { HasIndexedContent } from "@local/hash-isomorphic-utils/system-types/shared";
 
 import { getPageBlocks } from "../../../../graph/knowledge/system-types/page";
-import { ResolverFn } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
-import {
-  mapBlockToGQL,
-  mapEntityToGQL,
-  UnresolvedBlockGQL,
-  UnresolvedPageGQL,
-} from "../graphql-mapping";
+import type { ResolverFn } from "../../../api-types.gen";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
+import type { UnresolvedBlockGQL, UnresolvedPageGQL } from "../graphql-mapping";
+import { mapBlockToGQL } from "../graphql-mapping";
 
 export const pageContents: ResolverFn<
-  { linkEntity: Entity; rightEntity: UnresolvedBlockGQL }[],
+  {
+    linkEntity: Entity<HasIndexedContent | HasSpatiallyPositionedContent>;
+    rightEntity: UnresolvedBlockGQL;
+  }[],
   UnresolvedPageGQL,
   LoggedInGraphQLContext,
-  {}
-> = async (page, _, { dataSources, authentication }) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  Record<string, never>
+> = async (page, _, graphQLContext) => {
+  const { authentication } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
   const contentItems = await getPageBlocks(context, authentication, {
     pageEntityId: page.metadata.recordId.entityId,
@@ -29,7 +31,7 @@ export const pageContents: ResolverFn<
   });
 
   return contentItems.map(({ linkEntity, rightEntity }) => ({
-    linkEntity: mapEntityToGQL(linkEntity),
+    linkEntity,
     rightEntity: mapBlockToGQL(rightEntity),
   }));
 };

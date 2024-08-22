@@ -1,11 +1,31 @@
-import { CustomCell, Rectangle } from "@glideapps/glide-data-grid";
-import type { DrawArgs } from "@glideapps/glide-data-grid/dist/ts/data-grid/cells/cell-types";
+import type {
+  CustomCell,
+  DrawArgs,
+  Rectangle,
+} from "@glideapps/glide-data-grid";
 
-import { CellPath, CursorPos, InteractablePosition } from "./types";
+import type {
+  CellPath,
+  ColumnHeaderDrawArgs,
+  ColumnHeaderPath,
+  CursorPos,
+  InteractablePosition,
+} from "./types";
 
-export const drawArgsToPath = (args: DrawArgs<CustomCell>): CellPath => {
+export const isPathCellPath = (
+  path: CellPath | ColumnHeaderPath,
+): path is CellPath => path.split("-").length === 3;
+
+export const drawArgsToCellPath = (args: DrawArgs<CustomCell>): CellPath => {
   const { tableId, col, row } = args;
   return `${tableId}-${col}-${row}`;
+};
+
+export const drawArgsToColumnHeaderPath = (
+  args: ColumnHeaderDrawArgs,
+): ColumnHeaderPath => {
+  const { tableId, columnIndex } = args;
+  return `${tableId}-${columnIndex}`;
 };
 
 export const splitPath = (path: CellPath) => {

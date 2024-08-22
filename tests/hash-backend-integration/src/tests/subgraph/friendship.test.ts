@@ -1,45 +1,47 @@
 import path from "node:path";
 
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
-import { getEntities } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
+import type { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
+import { getEntitySubgraph } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
 import {
   archiveDataType,
   getDataTypes,
+  getDataTypeSubgraph,
   unarchiveDataType,
 } from "@apps/hash-api/src/graph/ontology/primitive/data-type";
 import {
   archiveEntityType,
   getEntityTypeById,
   getEntityTypes,
+  getEntityTypeSubgraph,
   unarchiveEntityType,
 } from "@apps/hash-api/src/graph/ontology/primitive/entity-type";
 import {
   archivePropertyType,
   getPropertyTypes,
+  getPropertyTypeSubgraph,
   unarchivePropertyType,
 } from "@apps/hash-api/src/graph/ontology/primitive/property-type";
-import { VersionedUrl } from "@blockprotocol/type-system";
-import {
-  DataTypeStructuralQuery,
-  EntityStructuralQuery,
-  EntityTypeStructuralQuery,
-  PropertyTypeStructuralQuery,
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type {
+  GetDataTypesParams,
+  GetEntitySubgraphRequest,
+  GetEntityTypesParams,
+  GetPropertyTypesParams,
 } from "@local/hash-graph-client";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { AccountId } from "@local/hash-graph-types/account";
+import type {
+  BaseUrl,
+  EntityTypeWithMetadata,
+} from "@local/hash-graph-types/ontology";
+import type { Timestamp } from "@local/hash-graph-types/temporal-versioning";
 import {
   currentTimeInstantTemporalAxes,
   fullDecisionTimeAxis,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
-import {
-  AccountId,
-  BaseUrl,
-  Entity,
-  EntityTypeWithMetadata,
-  linkEntityTypeUrl,
-  OntologyTypeVertexId,
-  QueryTemporalAxesUnresolved,
-  Timestamp,
-} from "@local/hash-subgraph";
+import type { QueryTemporalAxesUnresolved } from "@local/hash-subgraph";
+import { linkEntityTypeUrl } from "@local/hash-subgraph";
 import {
   getEntityTypes as getEntityTypesFromSubgraph,
   getIncomingLinksForEntity,
@@ -49,11 +51,10 @@ import {
   getRightEntityForLinkEntity,
   getRoots,
 } from "@local/hash-subgraph/stdlib";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph, restoreSnapshot } from "../test-server";
 import { createTestImpureGraphContext } from "../util";
-
-jest.setTimeout(60000);
 
 export const temporalAxesForTimestamp = (
   decisionTime: Timestamp | null,
@@ -91,7 +92,7 @@ const personTypeBaseId =
 const friendshipTypeBaseId =
   "http://localhost:3000/@alice/types/entity-type/friendship/" as BaseUrl;
 
-const aliceFilter: EntityStructuralQuery["filter"] = {
+const aliceFilter: GetEntitySubgraphRequest["filter"] = {
   startsWith: [
     {
       path: ["properties", nameProperty],
@@ -102,7 +103,7 @@ const aliceFilter: EntityStructuralQuery["filter"] = {
   ],
 };
 
-const bobFilter: EntityStructuralQuery["filter"] = {
+const bobFilter: GetEntitySubgraphRequest["filter"] = {
   startsWith: [
     {
       path: ["properties", nameProperty],
@@ -113,7 +114,7 @@ const bobFilter: EntityStructuralQuery["filter"] = {
   ],
 };
 
-const friendshipFilter: EntityStructuralQuery["filter"] = {
+const friendshipFilter: GetEntitySubgraphRequest["filter"] = {
   startsWith: [
     {
       path: ["type", "baseUrl"],
@@ -124,7 +125,7 @@ const friendshipFilter: EntityStructuralQuery["filter"] = {
   ],
 };
 
-const linkFilter: EntityStructuralQuery["filter"] = {
+const linkFilter: GetEntitySubgraphRequest["filter"] = {
   startsWith: [
     {
       path: ["type", "inheritsFrom", "*", "versionedUrl"],
@@ -148,6 +149,7 @@ const authentication = {
 };
 
 beforeAll(async () => {
+  await resetGraph();
   await restoreSnapshot(path.join(__dirname, "pass", "friendship.jsonl"));
 
   graphContext = createTestImpureGraphContext();
@@ -156,13 +158,11 @@ beforeAll(async () => {
     entityTypeId: `${friendshipTypeBaseId}v/1`,
   });
 
-  aliceEntities = await getEntities(graphContext, authentication, {
-    query: {
-      filter: aliceFilter,
-      graphResolveDepths: zeroedGraphResolveDepths,
-      temporalAxes: fullDecisionTimeAxis,
-      includeDrafts: false,
-    },
+  aliceEntities = await getEntitySubgraph(graphContext, authentication, {
+    filter: aliceFilter,
+    temporalAxes: fullDecisionTimeAxis,
+    graphResolveDepths: zeroedGraphResolveDepths,
+    includeDrafts: false,
   })
     .then(getRoots)
     .then((entities) =>
@@ -173,13 +173,11 @@ beforeAll(async () => {
       ),
     );
 
-  bobEntities = await getEntities(graphContext, authentication, {
-    query: {
-      filter: bobFilter,
-      graphResolveDepths: zeroedGraphResolveDepths,
-      temporalAxes: fullDecisionTimeAxis,
-      includeDrafts: false,
-    },
+  bobEntities = await getEntitySubgraph(graphContext, authentication, {
+    filter: bobFilter,
+    temporalAxes: fullDecisionTimeAxis,
+    graphResolveDepths: zeroedGraphResolveDepths,
+    includeDrafts: false,
   })
     .then(getRoots)
     .then((entities) =>
@@ -190,13 +188,11 @@ beforeAll(async () => {
       ),
     );
 
-  linkEntities = await getEntities(graphContext, authentication, {
-    query: {
-      filter: linkFilter,
-      graphResolveDepths: zeroedGraphResolveDepths,
-      temporalAxes: fullDecisionTimeAxis,
-      includeDrafts: false,
-    },
+  linkEntities = await getEntitySubgraph(graphContext, authentication, {
+    filter: linkFilter,
+    temporalAxes: fullDecisionTimeAxis,
+    graphResolveDepths: zeroedGraphResolveDepths,
+    includeDrafts: false,
   })
     .then(getRoots)
     .then((entities) =>
@@ -224,14 +220,12 @@ describe("Ontology queries", () => {
       inheritsFrom: { outgoing: 255 },
     },
   ])("read data types %#", async (resolve_depths) => {
-    const subgraph = await getDataTypes(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: resolve_depths,
-        temporalAxes: fullDecisionTimeAxis,
+    const subgraph = await getDataTypeSubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: resolve_depths,
+      temporalAxes: fullDecisionTimeAxis,
     });
     expect(subgraph.roots.length).toEqual(3);
     expect(Object.keys(subgraph.edges).length).toEqual(0);
@@ -251,7 +245,7 @@ describe("Ontology queries", () => {
     const dataTypeId: VersionedUrl =
       "http://localhost:3000/@alice/types/data-type/number/v/1";
 
-    const query: DataTypeStructuralQuery = {
+    const request: GetDataTypesParams = {
       filter: {
         equal: [
           {
@@ -262,18 +256,19 @@ describe("Ontology queries", () => {
           },
         ],
       },
-      graphResolveDepths: zeroedGraphResolveDepths,
       temporalAxes: currentTimeInstantTemporalAxes,
       includeDrafts: false,
     };
 
-    const initialSubgraph = await getDataTypes(graphContext, authentication, {
-      query,
-    });
-    expect(initialSubgraph.roots.length).toEqual(1);
+    const initialDataTypes = await getDataTypes(
+      graphContext,
+      authentication,
+      request,
+    );
+    expect(initialDataTypes.length).toEqual(1);
 
     const actorId =
-      getRoots(initialSubgraph)[0]!.metadata.provenance.edition.createdById;
+      initialDataTypes[0]!.metadata.provenance.edition.createdById;
 
     await archiveDataType(
       graphContext,
@@ -283,10 +278,12 @@ describe("Ontology queries", () => {
       },
     );
 
-    const emptySubgraph = await getDataTypes(graphContext, authentication, {
-      query,
-    });
-    expect(emptySubgraph.roots.length).toEqual(0);
+    const emptyDataTypes = await getDataTypes(
+      graphContext,
+      authentication,
+      request,
+    );
+    expect(emptyDataTypes.length).toEqual(0);
 
     await unarchiveDataType(
       graphContext,
@@ -296,10 +293,12 @@ describe("Ontology queries", () => {
       },
     );
 
-    const nonEmptySubgraph = await getDataTypes(graphContext, authentication, {
-      query,
-    });
-    expect(nonEmptySubgraph.roots.length).toEqual(1);
+    const nonEmptyDataTypes = await getDataTypes(
+      graphContext,
+      authentication,
+      request,
+    );
+    expect(nonEmptyDataTypes.length).toEqual(1);
   });
 
   it.each([
@@ -318,15 +317,17 @@ describe("Ontology queries", () => {
       constrainsPropertiesOn: { outgoing: 255 },
     },
   ])("read property types %#", async (resolve_depths) => {
-    const subgraph = await getPropertyTypes(graphContext, authentication, {
-      query: {
+    const subgraph = await getPropertyTypeSubgraph(
+      graphContext,
+      authentication,
+      {
         filter: {
           all: [],
         },
         graphResolveDepths: resolve_depths,
         temporalAxes: fullDecisionTimeAxis,
       },
-    });
+    );
     expect(subgraph.roots.length).toEqual(2);
 
     expect(
@@ -343,7 +344,7 @@ describe("Ontology queries", () => {
     const propertyTypeId: VersionedUrl =
       "http://localhost:3000/@alice/types/property-type/name/v/1";
 
-    const query: PropertyTypeStructuralQuery = {
+    const request: GetPropertyTypesParams = {
       filter: {
         equal: [
           {
@@ -354,20 +355,19 @@ describe("Ontology queries", () => {
           },
         ],
       },
-      graphResolveDepths: zeroedGraphResolveDepths,
       temporalAxes: currentTimeInstantTemporalAxes,
       includeDrafts: false,
     };
 
-    const initialSubgraph = await getPropertyTypes(
+    const initialPropertyTypes = await getPropertyTypes(
       graphContext,
       authentication,
-      { query },
+      request,
     );
-    expect(initialSubgraph.roots.length).toEqual(1);
+    expect(initialPropertyTypes.length).toEqual(1);
 
     const actorId =
-      getRoots(initialSubgraph)[0]!.metadata.provenance.edition.createdById;
+      initialPropertyTypes[0]!.metadata.provenance.edition.createdById;
 
     await archivePropertyType(
       graphContext,
@@ -377,10 +377,12 @@ describe("Ontology queries", () => {
       },
     );
 
-    const emptySubgraph = await getPropertyTypes(graphContext, authentication, {
-      query,
-    });
-    expect(emptySubgraph.roots.length).toEqual(0);
+    const emptyPropertyTypes = await getPropertyTypes(
+      graphContext,
+      authentication,
+      request,
+    );
+    expect(emptyPropertyTypes.length).toEqual(0);
 
     await unarchivePropertyType(
       graphContext,
@@ -390,12 +392,12 @@ describe("Ontology queries", () => {
       },
     );
 
-    const nonEmptySubgraph = await getPropertyTypes(
+    const nonEmptyPropertyTypes = await getPropertyTypes(
       graphContext,
       authentication,
-      { query },
+      request,
     );
-    expect(nonEmptySubgraph.roots.length).toEqual(1);
+    expect(nonEmptyPropertyTypes.length).toEqual(1);
   });
 
   it.each([
@@ -424,14 +426,12 @@ describe("Ontology queries", () => {
       constrainsLinkDestinationsOn: { outgoing: 255 },
     },
   ])("read entity types %#", async (resolve_depths) => {
-    const subgraph = await getEntityTypes(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: resolve_depths,
-        temporalAxes: fullDecisionTimeAxis,
+    const subgraph = await getEntityTypeSubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: resolve_depths,
+      temporalAxes: fullDecisionTimeAxis,
     });
     expect(subgraph.roots.length).toEqual(4);
 
@@ -465,7 +465,7 @@ it("archives/unarchives entity types", async () => {
   const entityTypeId: VersionedUrl =
     "http://localhost:3000/@alice/types/entity-type/person/v/1";
 
-  const query: EntityTypeStructuralQuery = {
+  const request: GetEntityTypesParams = {
     filter: {
       equal: [
         {
@@ -476,18 +476,19 @@ it("archives/unarchives entity types", async () => {
         },
       ],
     },
-    graphResolveDepths: zeroedGraphResolveDepths,
     temporalAxes: currentTimeInstantTemporalAxes,
     includeDrafts: false,
   };
 
-  const initialSubgraph = await getEntityTypes(graphContext, authentication, {
-    query,
-  });
-  expect(initialSubgraph.roots.length).toEqual(1);
+  const initialEntityTypes = await getEntityTypes(
+    graphContext,
+    authentication,
+    request,
+  );
+  expect(initialEntityTypes.length).toEqual(1);
 
   const actorId =
-    getRoots(initialSubgraph)[0]!.metadata.provenance.edition.createdById;
+    initialEntityTypes[0]!.metadata.provenance.edition.createdById;
 
   await archiveEntityType(
     graphContext,
@@ -497,10 +498,12 @@ it("archives/unarchives entity types", async () => {
     },
   );
 
-  const emptySubgraph = await getEntityTypes(graphContext, authentication, {
-    query,
-  });
-  expect(emptySubgraph.roots.length).toEqual(0);
+  const emptyEntityTypes = await getEntityTypes(
+    graphContext,
+    authentication,
+    request,
+  );
+  expect(emptyEntityTypes.length).toEqual(0);
 
   await unarchiveEntityType(
     graphContext,
@@ -510,26 +513,26 @@ it("archives/unarchives entity types", async () => {
     },
   );
 
-  const nonEmptySubgraph = await getEntityTypes(graphContext, authentication, {
-    query,
-  });
-  expect(nonEmptySubgraph.roots.length).toEqual(1);
+  const nonEmptyEntityTypes = await getEntityTypes(
+    graphContext,
+    authentication,
+    request,
+  );
+  expect(nonEmptyEntityTypes.length).toEqual(1);
 });
 
 describe("Simple queries", () => {
   it("read all entities", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: fullDecisionTimeAxis,
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: fullDecisionTimeAxis,
+      includeDrafts: true,
     });
     expect(subgraph.roots.length).toEqual(5);
-    expect(Object.keys(subgraph.vertices).length).toEqual(3);
+    expect(Object.keys(subgraph.vertices).length).toEqual(4);
     expect(Object.keys(subgraph.edges).length).toEqual(0);
     const entities = getRoots(subgraph);
 
@@ -537,18 +540,16 @@ describe("Simple queries", () => {
   });
 
   it("read entities at 2000-01-01 as of now", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: temporalAxesForTimestamp(
-          "2000-01-01T00:00Z" as Timestamp,
-          null,
-        ),
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: temporalAxesForTimestamp(
+        "2000-01-01T00:00Z" as Timestamp,
+        null,
+      ),
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(0);
     expect(Object.keys(subgraph.vertices).length).toEqual(0);
@@ -559,18 +560,16 @@ describe("Simple queries", () => {
   });
 
   it("read entities at 2001-01-01 as of now", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: temporalAxesForTimestamp(
-          "2001-01-01T00:00Z" as Timestamp,
-          null,
-        ),
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: temporalAxesForTimestamp(
+        "2001-01-01T00:00Z" as Timestamp,
+        null,
+      ),
+      includeDrafts: true,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(1);
@@ -581,18 +580,16 @@ describe("Simple queries", () => {
   });
 
   it("read entities at 2001-01-01 as of 2001-01-01", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: temporalAxesForTimestamp(
-          "2001-01-01T00:00Z" as Timestamp,
-          "2001-01-01T00:00Z" as Timestamp,
-        ),
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: temporalAxesForTimestamp(
+        "2001-01-01T00:00Z" as Timestamp,
+        "2001-01-01T00:00Z" as Timestamp,
+      ),
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(0);
     expect(Object.keys(subgraph.vertices).length).toEqual(0);
@@ -603,18 +600,16 @@ describe("Simple queries", () => {
   });
 
   it("read entities at 2001-01-01 as of 2001-01-20", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: temporalAxesForTimestamp(
-          "2001-01-01T00:00Z" as Timestamp,
-          "2001-01-20T00:00Z" as Timestamp,
-        ),
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: temporalAxesForTimestamp(
+        "2001-01-01T00:00Z" as Timestamp,
+        "2001-01-20T00:00Z" as Timestamp,
+      ),
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(1);
@@ -625,18 +620,16 @@ describe("Simple queries", () => {
   });
 
   it("read entities at 2002-01-01 as of 2001-01-01", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: temporalAxesForTimestamp(
-          "2002-01-01T00:00Z" as Timestamp,
-          "2001-01-01T00:00Z" as Timestamp,
-        ),
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: temporalAxesForTimestamp(
+        "2002-01-01T00:00Z" as Timestamp,
+        "2001-01-01T00:00Z" as Timestamp,
+      ),
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(0);
     expect(Object.keys(subgraph.vertices).length).toEqual(0);
@@ -647,18 +640,16 @@ describe("Simple queries", () => {
   });
 
   it("read entities at 2002-02-01 as of now", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: {
-          all: [],
-        },
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: temporalAxesForTimestamp(
-          "2001-02-01T00:00Z" as Timestamp,
-          null,
-        ),
-        includeDrafts: false,
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: {
+        all: [],
       },
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: temporalAxesForTimestamp(
+        "2001-02-01T00:00Z" as Timestamp,
+        null,
+      ),
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(1);
@@ -673,13 +664,11 @@ describe("Simple queries", () => {
   });
 
   it("read latest alice entity", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: aliceFilter,
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
-      },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: aliceFilter,
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(1);
@@ -691,13 +680,11 @@ describe("Simple queries", () => {
   });
 
   it("read latest friendship entity", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: friendshipFilter,
-        graphResolveDepths: zeroedGraphResolveDepths,
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
-      },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: friendshipFilter,
+      graphResolveDepths: zeroedGraphResolveDepths,
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(1);
@@ -710,23 +697,21 @@ describe("Simple queries", () => {
 
 describe("non-zero, simple resolve depths", () => {
   it("read persons based on the friendship (as of now)", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: friendshipFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          hasLeftEntity: {
-            incoming: 0,
-            outgoing: 1,
-          },
-          hasRightEntity: {
-            incoming: 0,
-            outgoing: 1,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: friendshipFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        hasLeftEntity: {
+          incoming: 0,
+          outgoing: 1,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
+        hasRightEntity: {
+          incoming: 0,
+          outgoing: 1,
+        },
       },
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     // changed from 3 to 2 because the archived entity is filtered out in getEntities – check expectations after H-349 (proper archival)
@@ -764,23 +749,21 @@ describe("non-zero, simple resolve depths", () => {
   });
 
   it("read persons based on the friendship (all time)", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: friendshipFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          hasLeftEntity: {
-            incoming: 0,
-            outgoing: 1,
-          },
-          hasRightEntity: {
-            incoming: 0,
-            outgoing: 1,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: friendshipFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        hasLeftEntity: {
+          incoming: 0,
+          outgoing: 1,
         },
-        temporalAxes: fullDecisionTimeAxis,
-        includeDrafts: false,
+        hasRightEntity: {
+          incoming: 0,
+          outgoing: 1,
+        },
       },
+      temporalAxes: fullDecisionTimeAxis,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     // changed from 3 to 2 because the archived entity is filtered out in getEntities
@@ -843,18 +826,16 @@ describe("non-zero, simple resolve depths", () => {
   });
 
   it("read friendship type based on the friendship", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: friendshipFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          isOfType: {
-            outgoing: 1,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: friendshipFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        isOfType: {
+          outgoing: 1,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
       },
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(2);
@@ -869,19 +850,17 @@ describe("non-zero, simple resolve depths", () => {
   });
 
   it("read friendship from left entity (as of now)", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: aliceFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          hasLeftEntity: {
-            incoming: 1,
-            outgoing: 0,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: aliceFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        hasLeftEntity: {
+          incoming: 1,
+          outgoing: 0,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
       },
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(2);
@@ -910,19 +889,17 @@ describe("non-zero, simple resolve depths", () => {
   });
 
   it("read friendship from right entity", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: bobFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          hasRightEntity: {
-            incoming: 1,
-            outgoing: 0,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: bobFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        hasRightEntity: {
+          incoming: 1,
+          outgoing: 0,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
       },
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(2);
@@ -940,23 +917,21 @@ describe("non-zero, simple resolve depths", () => {
   });
 
   it("read person through a link", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: aliceFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          hasLeftEntity: {
-            incoming: 1,
-            outgoing: 0,
-          },
-          hasRightEntity: {
-            incoming: 0,
-            outgoing: 1,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: aliceFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        hasLeftEntity: {
+          incoming: 1,
+          outgoing: 0,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
+        hasRightEntity: {
+          incoming: 0,
+          outgoing: 1,
+        },
       },
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     // changed from 3 to 2 because the archived entity is filtered out in getEntities – check expectations after H-349 (proper archival)
@@ -983,22 +958,20 @@ describe("non-zero, simple resolve depths", () => {
 
 describe("complex resolve depths", () => {
   it("read persons based on the friendship (as of now)", async () => {
-    const subgraph = await getEntities(graphContext, authentication, {
-      query: {
-        filter: aliceFilter,
-        graphResolveDepths: {
-          ...zeroedGraphResolveDepths,
-          hasLeftEntity: {
-            incoming: 1,
-            outgoing: 0,
-          },
-          isOfType: {
-            outgoing: 1,
-          },
+    const subgraph = await getEntitySubgraph(graphContext, authentication, {
+      filter: aliceFilter,
+      graphResolveDepths: {
+        ...zeroedGraphResolveDepths,
+        hasLeftEntity: {
+          incoming: 1,
+          outgoing: 0,
         },
-        temporalAxes: currentTimeInstantTemporalAxes,
-        includeDrafts: false,
+        isOfType: {
+          outgoing: 1,
+        },
       },
+      temporalAxes: currentTimeInstantTemporalAxes,
+      includeDrafts: false,
     });
     expect(subgraph.roots.length).toEqual(1);
     expect(Object.keys(subgraph.vertices).length).toEqual(4);
@@ -1011,7 +984,7 @@ describe("complex resolve depths", () => {
     const personTypes = subgraph.edges[aliceEntity.metadata.recordId.entityId]![
       aliceEntity.metadata.temporalVersioning.decisionTime.start.limit
     ]!.filter((edge) => edge.kind === "IS_OF_TYPE").map(
-      (edge) => edge.rightEndpoint as OntologyTypeVertexId,
+      (edge) => edge.rightEndpoint,
     );
     expect(personTypes.length).toEqual(1);
     const personType = personTypes[0]!;
@@ -1031,7 +1004,7 @@ describe("complex resolve depths", () => {
     const linkTypes = subgraph.edges[link.metadata.recordId.entityId]![
       link.metadata.temporalVersioning.decisionTime.start.limit
     ]!.filter((edge) => edge.kind === "IS_OF_TYPE").map(
-      (edge) => edge.rightEndpoint as OntologyTypeVertexId,
+      (edge) => edge.rightEndpoint,
     );
     expect(linkTypes.length).toEqual(1);
     const linkType = linkTypes[0]!;

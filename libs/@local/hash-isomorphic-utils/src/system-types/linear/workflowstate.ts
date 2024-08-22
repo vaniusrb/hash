@@ -2,16 +2,18 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   WorkflowState,
   WorkflowStateOutgoingLinkAndTarget,
   WorkflowStateOutgoingLinksByLinkEntityTypeId,
   WorkflowStateProperties,
-} from "./shared";
+  WorkflowStatePropertiesWithMetadata,
+} from "./shared.js";
 
 export type {
   WorkflowState,
   WorkflowStateOutgoingLinkAndTarget,
   WorkflowStateOutgoingLinksByLinkEntityTypeId,
   WorkflowStateProperties,
+  WorkflowStatePropertiesWithMetadata,
 };

@@ -1,13 +1,16 @@
 import { faSearch } from "@fortawesome/free-solid-svg-icons";
-import {
-  Autocomplete as MUIAutocomplete,
+import type {
   AutocompleteProps as MUIAutocompleteProps,
   InputProps,
-  outlinedInputClasses,
   PaperProps,
   PopperProps,
 } from "@mui/material";
-import { Ref, useCallback, useMemo, useState } from "react";
+import {
+  Autocomplete as MUIAutocomplete,
+  outlinedInputClasses,
+} from "@mui/material";
+import type { Ref } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { AutocompleteDropdown } from "./autocomplete-dropdown";
 import { FontAwesomeIcon } from "./fontawesome-icon";
@@ -28,7 +31,7 @@ type AutocompleteProps<
   "renderInput"
 > & {
   inputHeight?: number | string;
-  inputRef?: Ref<any>;
+  inputRef?: Ref<Element>;
   inputLabel?: string;
   inputPlaceholder?: string;
   inputProps?: InputProps;
@@ -64,7 +67,7 @@ export const Autocomplete = <
   componentsProps,
   ...rest
 }: AutocompleteProps<
-  Multiple extends true ? (T extends any[] ? T[number] : T) : T,
+  Multiple extends true ? (T extends unknown[] ? T[number] : T) : T,
   Multiple,
   DisableClearable,
   FreeSolo

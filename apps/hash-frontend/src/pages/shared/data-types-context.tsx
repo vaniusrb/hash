@@ -1,25 +1,16 @@
 import { useQuery } from "@apollo/client";
-import { JsonValue } from "@blockprotocol/core";
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { JsonValue } from "@blockprotocol/core";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { typedValues } from "@local/advanced-types/typed-entries";
-import {
-  formatDataValue,
-  FormattedValuePart,
-} from "@local/hash-isomorphic-utils/data-types";
-import {
-  DataTypeWithMetadata,
-  OntologyTypeRevisionId,
-} from "@local/hash-subgraph";
+import type { DataTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { FormattedValuePart } from "@local/hash-isomorphic-utils/data-types";
+import { formatDataValue } from "@local/hash-isomorphic-utils/data-types";
+import type { OntologyTypeRevisionId } from "@local/hash-subgraph";
 import { componentsFromVersionedUrl } from "@local/hash-subgraph/type-system-patch";
-import {
-  createContext,
-  PropsWithChildren,
-  useCallback,
-  useContext,
-  useMemo,
-} from "react";
+import type { PropsWithChildren } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
-import {
+import type {
   QueryDataTypesQuery,
   QueryDataTypesQueryVariables,
 } from "../../graphql/api-types.gen";
@@ -68,7 +59,6 @@ export const DataTypesContextProvider = ({ children }: PropsWithChildren) => {
     ({ dataTypeId, value }: { dataTypeId: VersionedUrl; value: JsonValue }) => {
       const { baseUrl, version } = componentsFromVersionedUrl(dataTypeId);
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- false positive on unsafe index access
       const dataType = data?.queryDataTypes.vertices[baseUrl]?.[
         version as unknown as OntologyTypeRevisionId
       ]?.inner.schema as DataTypeWithMetadata["schema"] | undefined;

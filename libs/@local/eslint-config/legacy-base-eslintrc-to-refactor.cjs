@@ -6,7 +6,6 @@ module.exports = {
   plugins: [
     "@typescript-eslint",
     "canonical",
-    "jest",
     "react-hooks",
     "simple-import-sort",
     "unicorn",
@@ -28,6 +27,7 @@ module.exports = {
   reportUnusedDisableDirectives: true,
   rules: {
     "canonical/filename-no-index": "error",
+    "@typescript-eslint/consistent-type-imports": "error",
     // overridden airbnb rules (if you wish to add to this list, please outline your reasoning here: https://www.notion.so/hashintel/HASH-dev-eslint-configuration-60c52c127d13478fbce6bb5579a6b7be)
     "no-undef-init": "off",
     "no-underscore-dangle": "off",
@@ -58,6 +58,7 @@ module.exports = {
     camelcase: "off",
     "default-param-last": "off", // using @typescript-eslint/default-param-last instead
     "import/no-cycle": "error",
+    "import/named": "off", // redundant for TypeScript code, leads to false positives with @blockprotocol/type-system
     "import/prefer-default-export": "off",
     "no-await-in-loop": "off",
     "no-console": "error",
@@ -301,10 +302,8 @@ module.exports = {
         "**/__mocks__/**",
         "**/testUtils/**",
         "*.test.{j,t}s{x,}",
-        "jest.setup.ts",
       ],
       env: {
-        "jest/globals": true,
         node: true,
       },
       rules: {
@@ -340,7 +339,12 @@ module.exports = {
       ],
       rules: {
         "no-unused-vars": "off",
-        "@typescript-eslint/prefer-nullish-coalescing": ["error"],
+        "@typescript-eslint/prefer-nullish-coalescing": [
+          "error",
+          {
+            ignoreMixedLogicalExpressions: true,
+          },
+        ],
         "@typescript-eslint/no-meaningless-void-operator": "error",
         "@typescript-eslint/no-misused-promises": [
           "error", // https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/docs/rules/no-misused-promises.md#checksvoidreturn

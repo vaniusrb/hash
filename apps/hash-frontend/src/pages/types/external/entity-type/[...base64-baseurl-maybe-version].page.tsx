@@ -1,10 +1,8 @@
-import { BaseUrl } from "@local/hash-subgraph";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 import { useRouter } from "next/router";
 
-import {
-  getLayoutWithSidebar,
-  NextPageWithLayout,
-} from "../../../../shared/layout";
+import type { NextPageWithLayout } from "../../../../shared/layout";
+import { getLayoutWithSidebar } from "../../../../shared/layout";
 import { EntityTypePage } from "../../../shared/entity-type-page";
 
 const Page: NextPageWithLayout = () => {
@@ -24,7 +22,6 @@ const Page: NextPageWithLayout = () => {
     <EntityTypePage
       entityTypeBaseUrl={entityTypeBaseUrl}
       requestedVersion={requestedVersion}
-      readonly
     />
   );
 };

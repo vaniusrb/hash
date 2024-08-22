@@ -1,35 +1,42 @@
 import { useMutation, useQuery } from "@apollo/client";
 import { IconButton } from "@hashintel/design-system";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { getBlockCollectionResolveDepth } from "@local/hash-isomorphic-utils/block-collection";
 import { isHashTextBlock } from "@local/hash-isomorphic-utils/blocks";
+import type { BlockCollectionContentItem } from "@local/hash-isomorphic-utils/entity";
 import { zeroedGraphResolveDepths } from "@local/hash-isomorphic-utils/graph-queries";
 import { getEntityQuery } from "@local/hash-isomorphic-utils/graphql/queries/entity.queries";
 import {
   blockProtocolPropertyTypes,
   systemEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { QuickNoteProperties } from "@local/hash-isomorphic-utils/system-types/quicknote";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import {
-  BaseUrl,
-  EntityRootType,
-  extractEntityUuidFromEntityId,
-  OwnedById,
-  Subgraph,
-} from "@local/hash-subgraph";
+import { deserializeSubgraph } from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type {
+  ArchivedPropertyValueWithMetadata,
+  QuickNoteProperties,
+} from "@local/hash-isomorphic-utils/system-types/quicknote";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
+import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
 import { Box, Fade, Skeleton, Tooltip, Typography } from "@mui/material";
-import { FunctionComponent, useCallback, useMemo, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { useBlockProtocolUpdateEntity } from "../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-update-entity";
 import { useAccountPages } from "../../components/hooks/use-account-pages";
-import {
+import type {
   ArchiveEntityMutation,
   ArchiveEntityMutationVariables,
-  BlockCollectionContentItem,
   GetEntityQuery,
   GetEntityQueryVariables,
+  UpdateEntityMutation,
+  UpdateEntityMutationVariables,
 } from "../../graphql/api-types.gen";
-import { archiveEntityMutation } from "../../graphql/queries/knowledge/entity.queries";
+import {
+  archiveEntityMutation,
+  updateEntityMutation,
+} from "../../graphql/queries/knowledge/entity.queries";
 import { constructPageRelativeUrl } from "../../lib/routes";
 import { ArchiveRegularIcon } from "../../shared/icons/achive-regular-icon";
 import { ArrowUpRightRegularIcon } from "../../shared/icons/arrow-up-right-regular-icon";
@@ -40,11 +47,8 @@ import { Link } from "../../shared/ui";
 import { useAuthenticatedUser } from "../shared/auth-info-context";
 import { BlockCollection } from "../shared/block-collection/block-collection";
 import { getBlockCollectionContents } from "../shared/block-collection-contents";
-import {
-  ConvertQuickNoteToPageModal,
-  PageWithParentLink,
-} from "./convert-quick-note-to-page-modal";
-import { QuickNoteEntityWithCreatedAt } from "./types";
+import type { PageWithParentLink } from "./convert-quick-note-to-page-modal";
+import { ConvertQuickNoteToPageModal } from "./convert-quick-note-to-page-modal";
 
 const Statistic: FunctionComponent<{ amount?: number; unit: string }> = ({
   amount,
@@ -68,7 +72,7 @@ const parseTextFromTextBlock = ({
   rightEntity,
 }: BlockCollectionContentItem) => {
   const textTokens = rightEntity.blockChildEntity.properties[
-    blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl as BaseUrl
+    blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl
   ] as TextToken[] | undefined;
 
   return (
@@ -83,14 +87,14 @@ const parseTextFromTextBlock = ({
 export const EditableQuickNote: FunctionComponent<{
   displayLabel?: boolean;
   displayActionButtons?: boolean;
-  quickNoteEntityWithCreatedAt: QuickNoteEntityWithCreatedAt;
+  quickNoteEntity: Entity;
   quickNoteSubgraph?: Subgraph<EntityRootType>;
   refetchQuickNotes?: () => Promise<void>;
   autoFocus?: boolean;
 }> = ({
   displayLabel = true,
   displayActionButtons = true,
-  quickNoteEntityWithCreatedAt,
+  quickNoteEntity,
   quickNoteSubgraph,
   refetchQuickNotes,
   autoFocus = false,
@@ -105,7 +109,10 @@ export const EditableQuickNote: FunctionComponent<{
   const [convertedPage, setConvertedPage] = useState<PageWithParentLink>();
   const [isConvertingPage, setIsConvertingPage] = useState(false);
 
-  const { updateEntity } = useBlockProtocolUpdateEntity();
+  const [updateEntity] = useMutation<
+    UpdateEntityMutation,
+    UpdateEntityMutationVariables
+  >(updateEntityMutation);
 
   const [isConvertToPageModalOpen, setIsConvertToPageModalOpen] =
     useState(false);
@@ -113,8 +120,6 @@ export const EditableQuickNote: FunctionComponent<{
   const { refetch: refetchPageTree } = useAccountPages(
     authenticatedUser.accountId as OwnedById,
   );
-
-  const { quickNoteEntity } = quickNoteEntityWithCreatedAt;
 
   const blockCollectionEntityId = quickNoteEntity.metadata.recordId.entityId;
 
@@ -136,8 +141,9 @@ export const EditableQuickNote: FunctionComponent<{
       data?.getEntity
         ? getBlockCollectionContents({
             blockCollectionEntityId,
-            blockCollectionSubgraph: data.getEntity
-              .subgraph as Subgraph<EntityRootType>,
+            blockCollectionSubgraph: deserializeSubgraph(
+              data.getEntity.subgraph,
+            ),
           })
         : undefined,
     [blockCollectionEntityId, data],
@@ -198,13 +204,26 @@ export const EditableQuickNote: FunctionComponent<{
 
   const handleArchive = useCallback(async () => {
     await updateEntity({
-      data: {
-        entityId: quickNoteEntity.metadata.recordId.entityId,
-        entityTypeId: systemEntityTypes.quickNote.entityTypeId,
-        properties: {
-          ...quickNoteEntity.properties,
-          "https://hash.ai/@hash/types/property-type/archived/": true,
-        } as QuickNoteProperties,
+      variables: {
+        entityUpdate: {
+          entityId: quickNoteEntity.metadata.recordId.entityId,
+          entityTypeId: systemEntityTypes.quickNote.entityTypeId,
+          propertyPatches: [
+            {
+              op: "add",
+              path: [
+                "https://hash.ai/@hash/types/property-type/archived/" satisfies keyof QuickNoteProperties as BaseUrl,
+              ],
+              property: {
+                value: true,
+                metadata: {
+                  dataTypeId:
+                    "https://blockprotocol.org/@blockprotocol/types/data-type/boolean/v/1",
+                },
+              } satisfies ArchivedPropertyValueWithMetadata,
+            },
+          ],
+        },
       },
     });
     await refetchQuickNotes?.();
@@ -225,10 +244,12 @@ export const EditableQuickNote: FunctionComponent<{
     }
 
     await updateEntity({
-      data: {
-        entityId: blockCollectionEntityId,
-        entityTypeId: systemEntityTypes.quickNote.entityTypeId,
-        properties: {},
+      variables: {
+        entityUpdate: {
+          entityId: blockCollectionEntityId,
+          entityTypeId: systemEntityTypes.quickNote.entityTypeId,
+          propertyPatches: [],
+        },
       },
     });
 
@@ -345,7 +366,7 @@ export const EditableQuickNote: FunctionComponent<{
                 </Tooltip>
                 <ConvertQuickNoteToPageModal
                   open={isConvertToPageModalOpen}
-                  quickNoteEntityWithCreatedAt={quickNoteEntityWithCreatedAt}
+                  quickNoteEntity={quickNoteEntity}
                   onConvertedToPage={handleConvertedToPage}
                   onClose={() => setIsConvertToPageModalOpen(false)}
                 />

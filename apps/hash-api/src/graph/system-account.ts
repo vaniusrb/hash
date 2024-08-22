@@ -1,10 +1,11 @@
-import { Logger } from "@local/hash-backend-utils/logger";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import { publicUserAccountId } from "@local/hash-backend-utils/public-user-account-id";
+import type { AccountId } from "@local/hash-graph-types/account";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { AccountId } from "@local/hash-subgraph";
+import { versionedUrlFromComponents } from "@local/hash-subgraph/type-system-patch";
 
-import { publicUserAccountId } from "../auth/public-user-account-id";
 import { createAccount } from "./account-permission-management";
-import { ImpureGraphContext } from "./context-types";
+import type { ImpureGraphContext } from "./context-types";
 import { getEntityTypeById } from "./ontology/primitive/entity-type";
 
 // eslint-disable-next-line import/no-mutable-exports
@@ -25,7 +26,15 @@ export const ensureHashSystemAccountExists = async (params: {
   try {
     // The system account is the creator of the HASH system types
     const orgEntityType = await getEntityTypeById(context, authentication, {
-      entityTypeId: systemEntityTypes.organization.entityTypeId,
+      /**
+       * We want to use the first version of the `Organization` entity type,
+       * so that the system account can be determined in early migration
+       * steps where only the first version is available.
+       */
+      entityTypeId: versionedUrlFromComponents(
+        systemEntityTypes.organization.entityTypeBaseUrl,
+        1,
+      ),
     });
 
     systemAccountId = orgEntityType.metadata.provenance.edition.createdById;

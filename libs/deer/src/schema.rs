@@ -1,7 +1,9 @@
 // NOTE: this is still a prototype, and might be deleted at any stage, this minimally expands on the
 // existing schema things, but instead allows for deeply nested values.
 
-use alloc::{boxed::Box, collections::BTreeMap, format, string::String};
+use alloc::collections::BTreeMap;
+#[cfg_attr(feature = "std", allow(unused_imports))]
+use alloc::{boxed::Box, format, string::String};
 use core::any::{type_name, TypeId};
 
 use serde::{ser::SerializeMap, Serialize, Serializer};
@@ -159,6 +161,7 @@ impl Serialize for SerializeDefinitions<'_> {
     }
 }
 
+#[expect(clippy::field_scoped_visibility_modifiers)]
 pub struct Document {
     pub(crate) id: TypeId,
     schemas: BTreeMap<TypeId, Schema>,
@@ -259,6 +262,7 @@ pub(crate) mod visitor {
     use crate::{schema::Reflection, Document, Schema};
 
     // TODO: below here these are temporary until stdlib is implemented
+    #[expect(dead_code)]
     pub(crate) struct BoolSchema;
     impl Reflection for BoolSchema {
         fn schema(_: &mut Document) -> Schema {
@@ -266,6 +270,7 @@ pub(crate) mod visitor {
         }
     }
 
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) struct StringSchema;
     impl Reflection for StringSchema {
         fn schema(_: &mut Document) -> Schema {
@@ -298,7 +303,9 @@ pub(crate) mod visitor {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
+    use alloc::collections::BTreeMap;
+    #[cfg_attr(feature = "std", allow(unused_imports))]
+    use alloc::{boxed::Box, vec::Vec};
 
     use serde_json::{json, to_value};
     use similar_asserts::assert_serde_eq;
@@ -337,7 +344,7 @@ mod tests {
 
     // test for self referential
     // Reason: we don't actually use them, but it is easier to visualize the schema that way
-    #[allow(unused)]
+    #[expect(unused)]
     struct Node {
         child: Box<Node>,
     }
@@ -380,7 +387,7 @@ mod tests {
 
     // test for multi self referential
     // Reason: we don't actually use them, but it is easier to visualize the schema that way
-    #[allow(unused)]
+    #[expect(unused)]
     struct Tree {
         left: Box<Node>,
         right: Box<Node>,
@@ -436,7 +443,7 @@ mod tests {
     }
 
     // types are only here for illustration
-    #[allow(unused)]
+    #[expect(unused)]
     struct Vertex {
         a: u8,
         b: u16,
@@ -462,7 +469,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::std_instead_of_alloc)] // Reason: `assert_serde_eq!` uses `std`
     fn integration() {
         // patented sanity integration test™
         let document = Vertex::document();

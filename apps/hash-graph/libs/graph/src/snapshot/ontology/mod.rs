@@ -3,7 +3,6 @@ mod entity_type;
 mod metadata;
 mod property_type;
 mod record;
-mod table;
 
 pub use self::{
     data_type::{data_type_channel, DataTypeRowBatch, DataTypeSender},
@@ -13,8 +12,8 @@ pub use self::{
     },
     property_type::{property_type_channel, PropertyTypeRowBatch, PropertyTypeSender},
     record::{
-        DataTypeSnapshotRecord, EntityTypeSnapshotRecord, OntologyTypeSnapshotRecord,
+        DataTypeEmbeddingRecord, DataTypeSnapshotRecord, EntityTypeEmbeddingRecord,
+        EntityTypeSnapshotRecord, OntologyTypeSnapshotRecord, PropertyTypeEmbeddingRecord,
         PropertyTypeSnapshotRecord,
     },
-    table::{OntologyExternalMetadataRow, OntologyIdRow, OntologyOwnedMetadataRow},
 };

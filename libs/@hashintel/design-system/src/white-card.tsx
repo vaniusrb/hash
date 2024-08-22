@@ -1,14 +1,16 @@
-import {
-  Card,
-  CardActionArea,
-  cardActionAreaClasses,
+import type {
   CardActionAreaProps,
-  CardContent,
   CardContentProps,
   SxProps,
   Theme,
 } from "@mui/material";
-import { ElementType } from "react";
+import {
+  Card,
+  CardActionArea,
+  cardActionAreaClasses,
+  CardContent,
+} from "@mui/material";
+import type { ElementType } from "react";
 
 export const WhiteCard = ({
   onClick,
@@ -58,13 +60,12 @@ export const WhiteCard = ({
       ]}
     >
       {/**
-       * @todo: refactor this to use `next/link` when a relative URL is passed
+       * @todo refactor this to use `next/link` when a relative URL is passed
        * into as the `href`, to avoid a flashing white screen when the user
        * clicks on the entity's type.
-       *
-       * @see https://app.asana.com/0/1203179076056209/1203468350364504/f
+       * @see https://linear.app/hash/issue/H-3023
        */}
-      {onClick || href ? (
+      {(onClick ?? href) ? (
         <CardActionArea
           {...(onClick ? { onClick } : { href })}
           LinkComponent={LinkComponent}

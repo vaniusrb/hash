@@ -1,4 +1,4 @@
-import { DataSource } from "apollo-datasource";
+import type { DataSource } from "apollo-datasource";
 
 export interface CacheAdapter extends DataSource {
   /**
@@ -25,5 +25,5 @@ export interface CacheAdapter extends DataSource {
    * Push one or more values onto the end of a list.
    * @returns the new length of the list.
    * */
-  rpush(key: string, ...values: string[]): Promise<number>;
+  rpush(key: string, values: string[]): Promise<number>;
 }

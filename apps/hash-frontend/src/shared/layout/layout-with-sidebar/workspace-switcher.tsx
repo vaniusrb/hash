@@ -1,6 +1,6 @@
 import { faChevronDown } from "@fortawesome/free-solid-svg-icons";
 import { Avatar, FontAwesomeIcon } from "@hashintel/design-system";
-import { OwnedById } from "@local/hash-subgraph";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   Box,
   Divider,
@@ -15,19 +15,15 @@ import {
   bindTrigger,
   usePopupState,
 } from "material-ui-popup-state/hooks";
-import { FunctionComponent, useMemo } from "react";
+import { useMemo } from "react";
 
 import { useLogoutFlow } from "../../../components/hooks/use-logout-flow";
 import { useAuthenticatedUser } from "../../../pages/shared/auth-info-context";
-import { getImageUrlFromEntityProperties } from "../../../pages/shared/get-image-url-from-properties";
+import { getImageUrlFromEntityProperties } from "../../../pages/shared/get-file-properties";
 import { useActiveWorkspace } from "../../../pages/shared/workspace-context";
 import { Button, MenuItem } from "../../ui";
 
-type WorkspaceSwitcherProps = {};
-
-export const WorkspaceSwitcher: FunctionComponent<
-  WorkspaceSwitcherProps
-> = () => {
+export const WorkspaceSwitcher = () => {
   const popupState = usePopupState({
     variant: "popover",
     popupId: "workspace-switcher-menu",
@@ -40,8 +36,8 @@ export const WorkspaceSwitcher: FunctionComponent<
   const activeWorkspace = useMemo<{ name: string; avatarSrc?: string }>(() => {
     if (activeWorkspaceOwnedById === authenticatedUser.accountId) {
       return {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- @todo how to handle empty preferredName
-        name: authenticatedUser.preferredName || authenticatedUser.shortname!,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- @todo how to handle empty displayName
+        name: authenticatedUser.displayName || authenticatedUser.shortname!,
         avatarSrc: authenticatedUser.hasAvatar
           ? getImageUrlFromEntityProperties(
               authenticatedUser.hasAvatar.imageEntity.properties,
@@ -76,7 +72,7 @@ export const WorkspaceSwitcher: FunctionComponent<
         ownedById: authenticatedUser.accountId as OwnedById,
         title: "My personal workspace",
         subText: `@${authenticatedUser.shortname ?? "user"}`,
-        avatarTitle: authenticatedUser.preferredName ?? "U",
+        avatarTitle: authenticatedUser.displayName ?? "U",
         avatarSrc: authenticatedUser.hasAvatar
           ? getImageUrlFromEntityProperties(
               authenticatedUser.hasAvatar.imageEntity.properties,
@@ -163,7 +159,7 @@ export const WorkspaceSwitcher: FunctionComponent<
                 size={34}
                 title={
                   ownedById === authenticatedUser.accountId
-                    ? authenticatedUser.preferredName
+                    ? authenticatedUser.displayName
                     : title
                 }
               />

@@ -1,14 +1,15 @@
-import { Logger } from "@local/hash-backend-utils/logger";
-import { SearchAdapter } from "@local/hash-backend-utils/search/adapter";
+import type { UploadableStorageProvider } from "@local/hash-backend-utils/file-storage";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import type { SearchAdapter } from "@local/hash-backend-utils/search/adapter";
+import type { TemporalClient } from "@local/hash-backend-utils/temporal";
+import type { VaultClient } from "@local/hash-backend-utils/vault";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import type { EnforcedEntityEditionProvenance } from "@local/hash-graph-sdk/entity";
 
-import { CacheAdapter } from "../cache";
-import { EmailTransporter } from "../email/transporters";
-import { GraphApi } from "../graph/context-types";
-import { User } from "../graph/knowledge/system-types/user";
-import { UploadableStorageProvider } from "../storage/storage-provider";
-import { TemporalClient } from "../temporal";
-import { VaultClient } from "../vault";
-import { AuthenticationContext } from "./authentication-context";
+import type { CacheAdapter } from "../cache";
+import type { EmailTransporter } from "../email/transporters";
+import type { GraphApi } from "../graph/context-types";
+import type { User } from "../graph/knowledge/system-types/user";
 
 /**
  * Apollo context object with dataSources. For details see:
@@ -25,7 +26,8 @@ export interface GraphQLContext {
   logger: Logger;
   authentication: AuthenticationContext;
   user?: User;
-  temporal?: TemporalClient;
+  provenance: EnforcedEntityEditionProvenance;
+  temporal: TemporalClient;
   vault?: VaultClient;
 }
 

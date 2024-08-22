@@ -1,49 +1,33 @@
 import { useMutation } from "@apollo/client";
-import {
-  AsteriskRegularIcon,
-  IconButton,
-  Modal,
-} from "@hashintel/design-system";
+import { AsteriskRegularIcon, IconButton } from "@hashintel/design-system";
+import { mergePropertiesAndMetadata } from "@local/hash-graph-sdk/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemPropertyTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { EntityTypeWithMetadata, OwnedById } from "@local/hash-subgraph";
-import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
-import {
-  Box,
-  Divider,
-  ModalProps,
-  Typography,
-  typographyClasses,
-} from "@mui/material";
-import {
-  FunctionComponent,
-  ReactElement,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  DragDropContext,
-  Draggable,
+import type { ModalProps } from "@mui/material";
+import { Box, Typography, typographyClasses } from "@mui/material";
+import type { FunctionComponent, ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
   DraggableProvided,
   DraggingStyle,
-  Droppable,
   NotDraggingStyle,
   OnDragEndResponder,
 } from "react-beautiful-dnd";
+import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { createPortal } from "react-dom";
 import { useFieldArray, useForm } from "react-hook-form";
 
 import { useBlockProtocolCreateEntityType } from "../../components/hooks/block-protocol-functions/ontology/use-block-protocol-create-entity-type";
-import {
+import type {
   UpdateEntityMutation,
   UpdateEntityMutationVariables,
 } from "../../graphql/api-types.gen";
 import { updateEntityMutation } from "../../graphql/queries/knowledge/entity.queries";
-import { Org, User } from "../../lib/user-and-org";
+import type { Org, User } from "../../lib/user-and-org";
 import { useLatestEntityTypesOptional } from "../../shared/entity-types-context/hooks";
 import { generateLinkParameters } from "../../shared/generate-link-parameters";
 import { ArrowUpRightRegularIcon } from "../../shared/icons/arrow-up-right-regular-icon";
@@ -51,7 +35,7 @@ import { CustomLinkIcon } from "../../shared/icons/custom-link-icon";
 import { GripDotsVerticalRegularIcon } from "../../shared/icons/grip-dots-vertical-regular-icon";
 import { PlusRegularIcon } from "../../shared/icons/plus-regular";
 import { XMarkRegularIcon } from "../../shared/icons/x-mark-regular-icon";
-import { Button, Link } from "../../shared/ui";
+import { Button, Link, Modal } from "../../shared/ui";
 import { entityTypeIcons } from "../../shared/use-entity-icon";
 import { ProfileSectionHeading } from "../[shortname]/shared/profile-section-heading";
 import { useAuthenticatedUser } from "../shared/auth-info-context";
@@ -155,13 +139,21 @@ export const EditPinnedEntityTypesModal: FunctionComponent<
 
     await updateEntity({
       variables: {
-        entityId: profile.entity.metadata.recordId.entityId,
-        entityTypeId: profile.entity.metadata.entityTypeId,
-        updatedProperties: {
-          ...profile.entity.properties,
-          [extractBaseUrl(
-            systemPropertyTypes.pinnedEntityTypeBaseUrl.propertyTypeId,
-          )]: updatedPinnedEntityTypeBaseUrls,
+        entityUpdate: {
+          entityId: profile.entity.metadata.recordId.entityId,
+          entityTypeId: profile.entity.metadata.entityTypeId,
+          propertyPatches: [
+            {
+              op: "add",
+              path: [
+                systemPropertyTypes.pinnedEntityTypeBaseUrl.propertyTypeBaseUrl,
+              ],
+              property: mergePropertiesAndMetadata(
+                updatedPinnedEntityTypeBaseUrls,
+                undefined,
+              ),
+            },
+          ],
         },
       },
     });
@@ -242,43 +234,14 @@ export const EditPinnedEntityTypesModal: FunctionComponent<
           padding: 0,
         },
       }}
+      header={{
+        title: "Pinned types",
+        subtitle:
+          "Choose up to 5 types to appear in the top-bar of your profile",
+      }}
       onClose={onClose}
     >
       <Box>
-        <Box
-          paddingX={3}
-          paddingBottom={1.5}
-          paddingTop={2}
-          display="flex"
-          justifyContent="space-between"
-        >
-          <Box>
-            <Typography
-              gutterBottom
-              sx={{
-                fontSize: 16,
-                fontWeight: 500,
-                color: ({ palette }) => palette.gray[80],
-              }}
-            >
-              Pinned types
-            </Typography>
-            <Typography
-              sx={{ fontSize: 14, color: ({ palette }) => palette.gray[80] }}
-            >
-              Choose up to 5 types to appear in the top-bar of your profile
-            </Typography>
-          </Box>
-          <Box>
-            <IconButton
-              onClick={onClose}
-              sx={{ marginRight: -2, marginTop: -1 }}
-            >
-              <XMarkRegularIcon />
-            </IconButton>
-          </Box>
-        </Box>
-        <Divider />
         <Box
           id="test-pinned-entity-types"
           component="form"
@@ -370,11 +333,11 @@ export const EditPinnedEntityTypesModal: FunctionComponent<
                                       }}
                                     />
                                   ) : (
-                                    entityTypeIcons[field.schema.$id] ?? (
+                                    (entityTypeIcons[field.schema.$id] ?? (
                                       <AsteriskRegularIcon
                                         sx={{ fontSize: 12 }}
                                       />
-                                    )
+                                    ))
                                   ))}
                               </Box>
                               <Typography

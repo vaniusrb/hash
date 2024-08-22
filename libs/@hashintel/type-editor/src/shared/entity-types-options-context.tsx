@@ -1,9 +1,17 @@
-import { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
-import { createContext, PropsWithChildren, useContext, useMemo } from "react";
+import type { EntityTypeWithMetadata } from "@blockprotocol/graph";
+import type {
+  EntityTypeReference,
+  VersionedUrl,
+} from "@blockprotocol/type-system/slim";
+import type { PropsWithChildren } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 import { linkEntityTypeUrl } from "./urls";
 
-export type EntityTypesByVersionedUrl = Record<VersionedUrl, EntityType>;
+export type EntityTypesByVersionedUrl = Record<
+  VersionedUrl,
+  EntityTypeWithMetadata
+>;
 export type EntityTypesContextValue = {
   entityTypes: EntityTypesByVersionedUrl;
   linkTypes: EntityTypesByVersionedUrl;
@@ -13,7 +21,7 @@ export const EntityTypesOptionsContext =
   createContext<EntityTypesContextValue | null>(null);
 
 export const useEntityTypesOptionsContextValue = (
-  entityTypes: Record<VersionedUrl, EntityType>,
+  entityTypes: Record<VersionedUrl, EntityTypeWithMetadata>,
 ): EntityTypesContextValue => {
   return useMemo(() => {
     const linkEntityTypesRecord: EntityTypesByVersionedUrl = {};
@@ -21,27 +29,31 @@ export const useEntityTypesOptionsContextValue = (
 
     for (const entityType of Object.values(entityTypes)) {
       let targetRecord =
-        entityType.$id === linkEntityTypeUrl
+        entityType.schema.$id === linkEntityTypeUrl
           ? linkEntityTypesRecord
           : nonLinkEntityTypesRecord;
-      let parentRefObjects = entityType.allOf ?? [];
+
+      let parentRefObjects: EntityTypeReference[] =
+        entityType.schema.allOf ?? [];
+
       while (parentRefObjects.length) {
         if (parentRefObjects.find(({ $ref }) => $ref === linkEntityTypeUrl)) {
           targetRecord = linkEntityTypesRecord;
           break;
         }
+
         parentRefObjects = parentRefObjects.flatMap(({ $ref }) => {
           const parentEntityType = entityTypes[$ref];
           if (!parentEntityType) {
             throw new Error(
-              `Entity type ${$ref} not found when looking up ancestors of ${entityType.$id}`,
+              `Entity type ${$ref} not found when looking up ancestors of ${entityType.schema.$id}`,
             );
           }
-          return parentEntityType.allOf ?? [];
+          return parentEntityType.schema.allOf ?? [];
         });
       }
 
-      targetRecord[entityType.$id] = entityType;
+      targetRecord[entityType.schema.$id] = entityType;
     }
 
     return {
@@ -55,7 +67,7 @@ export const EntityTypesOptionsContextProvider = ({
   children,
   entityTypeOptions,
 }: PropsWithChildren<{
-  entityTypeOptions: Record<VersionedUrl, EntityType>;
+  entityTypeOptions: Record<VersionedUrl, EntityTypeWithMetadata>;
 }>) => {
   const value = useEntityTypesOptionsContextValue(entityTypeOptions);
 

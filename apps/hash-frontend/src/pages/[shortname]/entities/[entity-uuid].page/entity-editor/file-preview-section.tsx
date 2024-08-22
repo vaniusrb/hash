@@ -7,7 +7,7 @@ import {
 } from "@hashintel/design-system";
 import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { FileProperties } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { FileProperties } from "@local/hash-isomorphic-utils/system-types/shared";
 import { extractOwnedByIdFromEntityId } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
 import {
@@ -17,7 +17,8 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { PropsWithChildren, useState } from "react";
+import type { PropsWithChildren } from "react";
+import { useState } from "react";
 
 import {
   useFileUploads,
@@ -25,7 +26,7 @@ import {
 } from "../../../../../shared/file-upload-context";
 import { FileUploadDropzone } from "../../../../settings/shared/file-upload-dropzone";
 import { useAuthInfo } from "../../../../shared/auth-info-context";
-import { getFileUrlFromFileProperties } from "../../../../shared/get-image-url-from-properties";
+import { getFileProperties } from "../../../../shared/get-file-properties";
 import { GrayToBlueIconButton } from "../../../../shared/gray-to-blue-icon-button";
 import { SectionWrapper } from "../../../shared/section-wrapper";
 import { useEntityEditor } from "./entity-editor-context";
@@ -57,7 +58,7 @@ const ReplaceFile = ({
   isImage: boolean;
   close: () => void;
 }) => {
-  const { entitySubgraph, replaceWithLatestDbVersion } = useEntityEditor();
+  const { entitySubgraph, onEntityUpdated } = useEntityEditor();
   const { refetch: refetchUser } = useAuthInfo();
   const [fileBeingUploaded, setFileBeingUploaded] = useState<File | null>(null);
 
@@ -79,7 +80,7 @@ const ReplaceFile = ({
   const onFileProvided = async (file: File) => {
     setFileBeingUploaded(file);
     try {
-      await uploadFile({
+      const response = await uploadFile({
         fileData: {
           file,
           description,
@@ -93,7 +94,13 @@ const ReplaceFile = ({
           entity.metadata.recordId.entityId,
         ),
       });
-      await replaceWithLatestDbVersion();
+
+      if (response.status === "complete") {
+        const {
+          createdEntities: { fileEntity },
+        } = response;
+        onEntityUpdated?.(fileEntity);
+      }
     } finally {
       setFileBeingUploaded(null);
     }
@@ -157,9 +164,9 @@ export const FilePreviewSection = () => {
 
   const entity = getRoots(entitySubgraph)[0]!;
 
-  const { isImage, url } = getFileUrlFromFileProperties(entity.properties);
+  const { isImage, fileUrl } = getFileProperties(entity.properties);
 
-  if (!url) {
+  if (!fileUrl) {
     return null;
   }
 
@@ -213,7 +220,7 @@ export const FilePreviewSection = () => {
               <Tooltip placement="top" title="Download">
                 <Box
                   component="a"
-                  href={url}
+                  href={fileUrl}
                   target="_blank"
                   rel="nofollow noopener noreferrer"
                 >
@@ -226,7 +233,7 @@ export const FilePreviewSection = () => {
             {isImage ? (
               <ImageWithCheckedBackground
                 alt={alt}
-                src={url}
+                src={fileUrl}
                 sx={{ height: previewHeight }}
               />
             ) : (

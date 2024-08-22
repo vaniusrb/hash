@@ -1,10 +1,7 @@
 import { faCircle } from "@fortawesome/free-solid-svg-icons";
-import {
-  Chip as MuiChip,
-  chipClasses,
-  ChipProps as MuiChipProps,
-} from "@mui/material";
-import { forwardRef, FunctionComponent } from "react";
+import type { ChipProps as MuiChipProps } from "@mui/material";
+import { Chip as MuiChip, chipClasses } from "@mui/material";
+import { forwardRef } from "react";
 
 import { FontAwesomeIcon } from "./fontawesome-icon";
 
@@ -20,7 +17,7 @@ export type ChipProps = {
 // is passed in
 // @see https://github.com/mui/material-ui/blob/master/packages/mui-material/src/Chip/Chip.js#L444-L448
 
-export const Chip: FunctionComponent<ChipProps> = forwardRef(
+export const Chip = forwardRef<HTMLDivElement, ChipProps>(
   (
     {
       sx = [],
@@ -48,6 +45,7 @@ export const Chip: FunctionComponent<ChipProps> = forwardRef(
                 color: palette[color][50],
               },
             }),
+            py: 0.1,
           }),
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}

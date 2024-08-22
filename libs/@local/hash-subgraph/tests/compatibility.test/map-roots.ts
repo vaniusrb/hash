@@ -1,11 +1,12 @@
-import { Subgraph as SubgraphGraphApi } from "@local/hash-graph-client";
-import {
+import type { Subgraph as SubgraphGraphApi } from "@local/hash-graph-client";
+import { isBaseUrl } from "@local/hash-graph-types/ontology";
+
+import type {
   EntityRevisionId,
   OntologyTypeRevisionId,
   Subgraph,
-} from "@local/hash-subgraph";
-
-import { isBaseUrl, isEntityId } from "../../src/types/shared/branded";
+} from "../../src/main.js";
+import { isEntityId } from "../../src/types/shared/branded.js";
 
 export const mapRoots = (
   roots: SubgraphGraphApi["roots"],

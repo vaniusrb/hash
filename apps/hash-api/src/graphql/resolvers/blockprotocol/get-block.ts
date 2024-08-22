@@ -1,15 +1,14 @@
 import { blockProtocolHubOrigin } from "@local/hash-isomorphic-utils/blocks";
 import { ApolloError, ForbiddenError } from "apollo-server-express";
-import fetch from "node-fetch";
 
-import { BlockProtocolBlock, ResolverFn } from "../../api-types.gen";
-import { GraphQLContext } from "../../context";
+import type { BlockProtocolBlock, ResolverFn } from "../../api-types.gen";
+import type { GraphQLContext } from "../../context";
 
 export const getBlockProtocolBlocksResolver: ResolverFn<
   BlockProtocolBlock[],
-  {},
+  Record<string, never>,
   GraphQLContext,
-  {}
+  Record<string, never>
 > = async () => {
   const apiKey = process.env.BLOCK_PROTOCOL_API_KEY;
 
@@ -31,7 +30,9 @@ export const getBlockProtocolBlocksResolver: ResolverFn<
     );
   }
 
-  const { results } = await res.json();
+  const { results } = await (res.json() as Promise<{
+    results: BlockProtocolBlock[];
+  }>);
 
-  return results as BlockProtocolBlock[];
+  return results;
 };

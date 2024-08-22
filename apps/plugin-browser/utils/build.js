@@ -1,12 +1,18 @@
-process.env.BABEL_ENV = "production";
-process.env.NODE_ENV = "production";
-process.env.ASSET_PATH = "/";
+import fs from "node:fs";
+import path, { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const webpack = require("webpack");
-const path = require("node:path");
-const fs = require("node:fs");
-const ZipPlugin = require("zip-webpack-plugin");
-const config = require("../webpack.config");
+import webpack from "webpack";
+import ZipPlugin from "zip-webpack-plugin";
+
+// eslint-disable-next-line import/extensions
+import config from "../webpack.config.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+process.env.BABEL_ENV = "production";
+process.env.ASSET_PATH = "/";
 
 delete config.custom;
 
@@ -18,7 +24,7 @@ const filenameSuffix = process.env.BROWSER;
 
 config.plugins = (config.plugins || []).concat(
   new ZipPlugin({
-    filename: `${packageInfo.name}-${packageInfo.version}${
+    filename: `${packageInfo.name}${
       filenameSuffix ? `-${filenameSuffix}` : ""
     }.zip`,
     exclude: [/\.map$/],

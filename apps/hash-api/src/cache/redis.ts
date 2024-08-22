@@ -1,8 +1,9 @@
-import { Logger } from "@local/hash-backend-utils/logger";
-import { AsyncRedisClient, RedisConfig } from "@local/hash-backend-utils/redis";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import type { RedisSocketConfig } from "@local/hash-backend-utils/redis";
+import { AsyncRedisClient } from "@local/hash-backend-utils/redis";
 import { DataSource } from "apollo-datasource";
 
-import { CacheAdapter } from "./adapter";
+import type { CacheAdapter } from "./adapter";
 
 export class RedisCache extends DataSource implements CacheAdapter {
   private client: AsyncRedisClient;
@@ -14,9 +15,9 @@ export class RedisCache extends DataSource implements CacheAdapter {
     expiresInSeconds: number,
   ) => Promise<void>;
 
-  rpush: (key: string, ...values: string[]) => Promise<number>;
+  rpush: (key: string, values: string[]) => Promise<number>;
 
-  constructor(logger: Logger, cfg: RedisConfig) {
+  constructor(logger: Logger, cfg: RedisSocketConfig) {
     super();
     this.client = new AsyncRedisClient(logger, cfg);
     this.get = this.client.get;

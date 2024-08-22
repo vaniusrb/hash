@@ -1,3 +1,4 @@
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { paragraphBlockComponentId } from "@local/hash-isomorphic-utils/blocks";
 import {
   blockProtocolPropertyTypes,
@@ -5,9 +6,7 @@ import {
   systemLinkEntityTypes,
   systemPropertyTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { BlockCollectionProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import { OwnedById } from "@local/hash-subgraph";
-import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
+import type { BlockCollectionProperties } from "@local/hash-isomorphic-utils/system-types/shared";
 import { generateKeyBetween } from "fractional-indexing";
 import { useCallback } from "react";
 
@@ -39,9 +38,8 @@ export const useCreateBlockCollection = (props: { ownedById: OwnedById }) => {
             data: {
               entityTypeId: systemEntityTypes.block.entityTypeId,
               properties: {
-                [extractBaseUrl(
-                  systemPropertyTypes.componentId.propertyTypeId,
-                )]: paragraphBlockComponentId,
+                [systemPropertyTypes.componentId.propertyTypeBaseUrl]:
+                  paragraphBlockComponentId,
               },
             },
           }).then(({ data }) => {
@@ -55,9 +53,8 @@ export const useCreateBlockCollection = (props: { ownedById: OwnedById }) => {
             data: {
               entityTypeId: systemEntityTypes.text.entityTypeId,
               properties: {
-                [extractBaseUrl(
-                  blockProtocolPropertyTypes.textualContent.propertyTypeId,
-                )]: [],
+                [blockProtocolPropertyTypes.textualContent.propertyTypeBaseUrl]:
+                  [],
               },
             },
           }).then(({ data }) => {
@@ -79,9 +76,8 @@ export const useCreateBlockCollection = (props: { ownedById: OwnedById }) => {
               rightEntityId: blockEntity.metadata.recordId.entityId,
             },
             properties: {
-              [extractBaseUrl(
-                systemPropertyTypes.fractionalIndex.propertyTypeId,
-              )]: generateKeyBetween(null, null),
+              [systemPropertyTypes.fractionalIndex.propertyTypeBaseUrl]:
+                generateKeyBetween(null, null),
             },
           },
         }),

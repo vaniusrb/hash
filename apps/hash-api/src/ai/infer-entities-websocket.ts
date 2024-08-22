@@ -1,109 +1,105 @@
-import http from "node:http";
+import type http from "node:http";
 
-import { Logger } from "@local/hash-backend-utils/logger";
+import type { DistributiveOmit } from "@local/advanced-types/distribute";
 import {
-  inferenceModelNames,
-  InferEntitiesCallerParams,
-  InferEntitiesRequestMessage,
-  InferEntitiesResponseMessage,
-  InferEntitiesReturn,
-  inferEntitiesUserArgumentKeys,
+  getFlowRunEntityById,
+  getFlowRuns,
+} from "@local/hash-backend-utils/flows";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import type { EntityUuid } from "@local/hash-graph-types/entity";
+import type {
+  ExternalInputWebsocketRequestMessage,
+  InferenceWebsocketClientMessage,
 } from "@local/hash-isomorphic-utils/ai-inference-types";
-import { StatusCode } from "@local/status";
-import { ApplicationFailure, Client } from "@temporalio/client";
-import { WorkflowFailedError } from "@temporalio/client/src/errors";
-import { WebSocket, WebSocketServer } from "ws";
+import { externalInputResponseSignal } from "@local/hash-isomorphic-utils/flows/signals";
+import type { ExternalInputResponseSignal } from "@local/hash-isomorphic-utils/flows/types";
+import type { Client } from "@temporalio/client";
+import type { WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 
 import { getUserAndSession } from "../auth/create-auth-handlers";
-import { ImpureGraphContext } from "../graph/context-types";
-import { User } from "../graph/knowledge/system-types/user";
-import { genId } from "../util";
+import type { GraphApi, ImpureGraphContext } from "../graph/context-types";
+import type { User } from "../graph/knowledge/system-types/user";
+import { FlowRunStatus } from "../graphql/api-types.gen";
+import { handleCancelInferEntitiesRequest } from "./infer-entities-websocket/handle-cancel-infer-entities-request";
+import { handleInferEntitiesRequest } from "./infer-entities-websocket/handle-infer-entities-request";
 
 const inferEntitiesMessageHandler = async ({
   socket,
+  graphApiClient,
   temporalClient,
   message,
   user,
 }: {
+  graphApiClient: GraphApi;
   socket: WebSocket;
   temporalClient: Client;
-  message: Omit<InferEntitiesRequestMessage, "cookie">;
+  message: DistributiveOmit<InferenceWebsocketClientMessage, "cookie">;
   user: User;
 }) => {
-  const { requestUuid, payload: userArguments } = message;
-
-  const sendResponse = (payload: InferEntitiesReturn) => {
-    const responseMessage: InferEntitiesResponseMessage = {
-      payload,
-      requestUuid,
-      type: "inference-response",
-    };
-    socket.send(JSON.stringify(responseMessage));
-  };
-
-  if (inferEntitiesUserArgumentKeys.some((key) => !(key in userArguments))) {
-    sendResponse({
-      code: StatusCode.InvalidArgument,
-      contents: [],
-      message: `Invalid request body – expected an object containing all of ${inferEntitiesUserArgumentKeys.join(
-        ", ",
-      )}`,
-    });
-    return;
-  }
-
-  if (!inferenceModelNames.includes(userArguments.model)) {
-    sendResponse({
-      code: StatusCode.InvalidArgument,
-      contents: [],
-      message: `Invalid request body – expected 'model' to be one of ${inferenceModelNames.join(
-        ", ",
-      )}`,
-    });
-    return;
-  }
-
-  try {
-    const status = await temporalClient.workflow.execute<
-      (params: InferEntitiesCallerParams) => Promise<InferEntitiesReturn>
-    >("inferEntities", {
-      taskQueue: "ai",
-      args: [
-        {
-          authentication: { actorId: user.accountId },
-          userArguments,
-        },
-      ],
-      workflowId: `inferEntities-${genId()}`,
-      retry: {
-        maximumAttempts: 1,
-      },
-    });
-
-    sendResponse(status);
-  } catch (err) {
-    const errorCause = (err as WorkflowFailedError).cause?.cause as
-      | ApplicationFailure
-      | undefined;
-
-    const errorDetails = errorCause?.details?.[0] as
-      | InferEntitiesReturn
-      | undefined;
-
-    if (!errorDetails) {
-      sendResponse({
-        code: StatusCode.Internal,
-        contents: [],
-        message: `Unexpected error from Infer Entities workflow: ${
-          (err as Error).message
-        }`,
+  switch (message.type) {
+    case "automatic-inference-request":
+    case "manual-inference-request":
+      await handleInferEntitiesRequest({
+        graphApiClient,
+        temporalClient,
+        message,
+        user,
+      });
+      return;
+    case "cancel-inference-request":
+      await handleCancelInferEntitiesRequest({
+        graphApiClient,
+        temporalClient,
+        message,
+        user,
+      });
+      return;
+    case "check-for-external-input-requests": {
+      const openFlowRuns = await getFlowRuns({
+        authentication: { actorId: user.accountId },
+        filters: { executionStatus: FlowRunStatus.Running },
+        graphApiClient,
+        includeDetails: true,
+        temporalClient,
       });
 
+      for (const flowRun of openFlowRuns) {
+        for (const inputRequest of flowRun.inputRequests) {
+          if (!inputRequest.resolvedAt) {
+            const requestMessage: ExternalInputWebsocketRequestMessage = {
+              workflowId: flowRun.flowRunId,
+              payload: inputRequest,
+              type: "external-input-request",
+            };
+            socket.send(JSON.stringify(requestMessage));
+          }
+        }
+      }
       return;
     }
+    case "external-input-response": {
+      const { workflowId, payload } = message;
 
-    sendResponse(errorDetails);
+      const flow = await getFlowRunEntityById({
+        userAuthentication: { actorId: user.accountId },
+        flowRunId: workflowId as EntityUuid,
+        graphApiClient,
+      });
+
+      if (!flow) {
+        return;
+      }
+
+      const handle = temporalClient.workflow.getHandle(workflowId);
+      await handle.signal<[ExternalInputResponseSignal]>(
+        externalInputResponseSignal,
+        { ...payload, resolvedBy: user.accountId },
+      );
+      return;
+    }
   }
+  socket.send(`Unrecognized message '${JSON.stringify(message)}'`);
 };
 
 export const openInferEntitiesWebSocket = ({
@@ -126,13 +122,15 @@ export const openInferEntitiesWebSocket = ({
       "message",
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       async (rawMessage) => {
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string -- doesn't matter for comparison
         if (rawMessage.toString() === "ping") {
           return;
         }
 
         const parsedMessage = JSON.parse(
+          // eslint-disable-next-line @typescript-eslint/no-base-to-string -- doesn't matter for comparison
           rawMessage.toString(),
-        ) as InferEntitiesRequestMessage; // @todo validate this
+        ) as InferenceWebsocketClientMessage; // @todo validate this
 
         const { cookie, ...message } = parsedMessage;
 
@@ -151,6 +149,7 @@ export const openInferEntitiesWebSocket = ({
         }
 
         void inferEntitiesMessageHandler({
+          graphApiClient: context.graphApi,
           socket,
           temporalClient,
           message,

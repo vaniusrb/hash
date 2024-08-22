@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { AsyncRedisClient } from "../redis";
-import { sleep } from "../utils";
-import { QueueExclusiveConsumer, QueueProducer } from "./adapter";
+import type { AsyncRedisClient } from "../redis.js";
+import { sleep } from "../utils.js";
+import type { QueueExclusiveConsumer, QueueProducer } from "./adapter.js";
 
 // The interval on which a consumer which owns the queue will re-affirm their ownership.
 const QUEUE_CONSUMER_OWNERSHIP_HEARTBEAT_MS = 3_000;
@@ -22,7 +22,7 @@ export class RedisQueueProducer implements QueueProducer {
   }
 
   push(name: string, ...items: string[]): Promise<number> {
-    return this.client.lpush(name, ...items);
+    return this.client.lpush(name, items);
   }
 }
 
@@ -39,7 +39,7 @@ export class RedisQueueExclusiveConsumer implements QueueExclusiveConsumer {
   private queueOwned?: {
     name: string;
     lastUpdated: number;
-    interval: NodeJS.Timer;
+    interval: NodeJS.Timeout;
   };
 
   constructor(client: AsyncRedisClient) {

@@ -1,15 +1,17 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { Logger } from "@local/hash-backend-utils/logger";
-import { OwnedById } from "@local/hash-subgraph";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import type { OwnedById } from "@local/hash-graph-types/web";
 
-import { ImpureGraphContext } from "../graph/context-types";
+import type { ImpureGraphContext } from "../graph/context-types";
+import type { Org } from "../graph/knowledge/system-types/org";
 import {
   createOrg,
   getOrgByShortname,
-  Org,
 } from "../graph/knowledge/system-types/org";
-import { joinOrg, User } from "../graph/knowledge/system-types/user";
-import { PageDefinition, seedPages } from "./seed-pages";
+import type { User } from "../graph/knowledge/system-types/user";
+import { joinOrg } from "../graph/knowledge/system-types/user";
+import type { PageDefinition } from "./seed-pages";
+import { seedPages } from "./seed-pages";
 import { ensureUsersAreSeeded } from "./seed-users";
 
 export const CACHED_DATA_TYPE_SCHEMAS: Record<VersionedUrl, string> = {
@@ -69,7 +71,7 @@ export const CACHED_ENTITY_TYPE_SCHEMAS: Record<VersionedUrl, string> = {
 // Seed Org with some pages.
 const seedOrg = async (params: {
   logger: Logger;
-  context: ImpureGraphContext;
+  context: ImpureGraphContext<false, true>;
   owner: User;
 }): Promise<Org> => {
   const authentication = { actorId: params.owner.accountId };
@@ -123,7 +125,7 @@ const seedOrg = async (params: {
 
 export const seedOrgsAndUsers = async (params: {
   logger: Logger;
-  context: ImpureGraphContext;
+  context: ImpureGraphContext<false, true>;
 }): Promise<void> => {
   const { logger, context } = params;
 

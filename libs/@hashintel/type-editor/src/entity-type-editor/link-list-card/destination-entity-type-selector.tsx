@@ -1,4 +1,4 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import {
   EntityTypeIcon,
   popperPlacementInputNoRadius,
@@ -8,14 +8,16 @@ import {
   setPopperPlacementAttribute,
   TYPE_SELECTOR_HEIGHT,
 } from "@hashintel/design-system";
-import { Box, PopperPlacementType } from "@mui/material";
-import { MouseEvent, useRef, useState } from "react";
+import type { PopperPlacementType } from "@mui/material";
+import { Box } from "@mui/material";
+import type { MouseEvent } from "react";
+import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useFormContext, useWatch } from "react-hook-form";
 import { useResizeObserverRef } from "rooks";
 
 import { useEntityTypesOptions } from "../../shared/entity-types-options-context";
-import { EntityTypeEditorFormData } from "../../shared/form-types";
+import type { EntityTypeEditorFormData } from "../../shared/form-types";
 import { useIsReadonly } from "../../shared/read-only-context";
 import { useFilterTypeOptions } from "../shared/use-filter-type-options";
 import { AnythingChip } from "./anything-chip";
@@ -63,8 +65,10 @@ export const DestinationEntityTypeSelector = ({
     name: `links.${linkIndex}.entityTypes`,
   });
 
-  const entityTypesArray = Object.values(entityTypes);
-  const chosenEntityTypes = entityTypesArray.filter((type) =>
+  const entityTypesArray = Object.values(entityTypes).map(
+    (type) => type.schema,
+  );
+  const chosenEntityTypeSchemas = entityTypesArray.filter((type) =>
     chosenEntityTypeIds.includes(type.$id),
   );
 
@@ -141,7 +145,7 @@ export const DestinationEntityTypeSelector = ({
             return (
               <DestinationEntityType
                 key={entityTypeId}
-                entityType={entityType}
+                entityTypeSchema={entityType.schema}
                 updateVersion={(newVersion: VersionedUrl) =>
                   setValue(
                     `links.${linkIndex}.entityTypes`,
@@ -267,7 +271,7 @@ export const DestinationEntityTypeSelector = ({
             joined
             // We render our tags manually, so we don't want MUI doing it for us
             renderTags={() => <Box />}
-            value={chosenEntityTypes}
+            value={chosenEntityTypeSchemas}
             modifiers={[
               /**
                * We need to respond to whether the popup is above or below using
@@ -293,7 +297,7 @@ export const DestinationEntityTypeSelector = ({
                 setEntityTypeSelectorPopupOpen(false);
               }
             }}
-            onBlur={() => {
+            onClickAway={() => {
               setEntityTypeSelectorPopupOpen(false);
             }}
           />

@@ -1,14 +1,16 @@
 import { useMutation } from "@apollo/client";
 import { faRotateRight } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@hashintel/design-system";
-import { Entity, EntityTypeWithMetadata } from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
 import { Box, Container, Typography } from "@mui/material";
 import { formatDistance } from "date-fns";
-import { FunctionComponent, useCallback, useMemo } from "react";
+import type { FunctionComponent } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useArchivePage } from "../../../components/hooks/use-archive-page";
 import { useUsers } from "../../../components/hooks/use-users";
-import {
+import type {
   UnarchiveEntityTypeMutation,
   UnarchiveEntityTypeMutationVariables,
 } from "../../../graphql/api-types.gen";
@@ -156,7 +158,7 @@ export const ArchivedItemBanner: FunctionComponent<ArchivedItemBannerProps> = ({
                     marginRight: 0.75,
                   }}
                 />
-                {archivedByUser.preferredName}
+                {archivedByUser.displayName}
               </Link>
             </>
           ) : null}

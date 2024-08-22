@@ -1,8 +1,8 @@
-import { UniqueIdentifier } from "@dnd-kit/core";
+import type { UniqueIdentifier } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { EntityId } from "@local/hash-subgraph";
+import type { EntityId } from "@local/hash-graph-types/entity";
 
-import { SimplePage } from "../../../../components/hooks/use-account-pages";
+import type { SimplePage } from "../../../../components/hooks/use-account-pages";
 
 export interface TreeItem {
   page: SimplePage;
@@ -130,8 +130,8 @@ export const getProjection = (
     const newParent = newItems
       .slice(0, overItemIndex)
       .reverse()
-      .find((item) => item.depth === depth)?.page.parentPage?.metadata.recordId
-      .entityId;
+      .find((item) => item.depth === depth)?.page.parentPage?.metadata
+      .recordId.entityId;
 
     return newParent ?? null;
   };

@@ -1,7 +1,7 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { DocumentNode } from "graphql";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type { DocumentNode } from "graphql";
 
-import {
+import type {
   GetDataTypeQueryVariables,
   GetEntityTypeQueryVariables,
   GetPropertyTypeQueryVariables,
@@ -44,6 +44,7 @@ export const generateQueryArgs = (
         variables: {
           dataTypeId: versionedUrl,
           constrainsValuesOn: zeroDepth,
+          includeArchived: true,
         },
       };
     case "entity-type":
@@ -56,6 +57,7 @@ export const generateQueryArgs = (
           constrainsPropertiesOn: zeroDepth,
           constrainsValuesOn: zeroDepth,
           inheritsFrom: zeroDepth,
+          includeArchived: true,
         },
       };
     case "property-type":
@@ -65,6 +67,7 @@ export const generateQueryArgs = (
           constrainsValuesOn: zeroDepth,
           constrainsPropertiesOn: zeroDepth,
           propertyTypeId: versionedUrl,
+          includeArchived: true,
         },
       };
   }

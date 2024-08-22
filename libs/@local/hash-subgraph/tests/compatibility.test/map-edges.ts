@@ -1,5 +1,5 @@
 import { validateBaseUrl } from "@blockprotocol/type-system";
-import {
+import type {
   Edges as EdgesGraphApi,
   EntityIdWithInterval as EntityIdWithIntervalGraphApi,
   ExclusiveBound as ExclusiveBoundGraphApi,
@@ -7,17 +7,20 @@ import {
   OntologyOutwardEdge as OntologyOutwardEdgeGraphApi,
   OntologyTypeVertexId as OntologyTypeVertexIdGraphApi,
 } from "@local/hash-graph-client";
-import {
-  BaseUrl,
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { Timestamp } from "@local/hash-graph-types/temporal-versioning";
+
+import type {
   Edges,
-  EntityId,
+  OntologyTypeRevisionId,
+  OutwardEdge,
+} from "../../src/main.js";
+import {
   isEntityId,
   isKnowledgeGraphOutwardEdge,
   isOntologyOutwardEdge,
-  OntologyTypeRevisionId,
-  OutwardEdge,
-  Timestamp,
-} from "@local/hash-subgraph";
+} from "../../src/main.js";
 
 export const mapOutwardEdge = (
   outwardEdge: OntologyOutwardEdgeGraphApi | KnowledgeGraphOutwardEdgeGraphApi,

@@ -1,24 +1,19 @@
-import {
-  Entity as BpEntity,
-  EntityRootType as BpEntityRootType,
-  Subgraph as BpSubgraph,
-} from "@blockprotocol/graph";
-import {
-  CustomCell,
-  GridCellKind,
-  Item,
-  TextCell,
-} from "@glideapps/glide-data-grid";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { CustomCell, Item, TextCell } from "@glideapps/glide-data-grid";
+import { GridCellKind } from "@glideapps/glide-data-grid";
 import { EntitiesGraphChart } from "@hashintel/block-design-system";
 import { ListRegularIcon } from "@hashintel/design-system";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import { gridRowHeight } from "@local/hash-isomorphic-utils/data-grid";
+import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { isPageEntityTypeId } from "@local/hash-isomorphic-utils/page-entity-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { PageProperties } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { PageProperties } from "@local/hash-isomorphic-utils/system-types/shared";
 import {
-  Entity,
-  EntityId,
+  type EntityRootType,
   extractEntityUuidFromEntityId,
   extractOwnedByIdFromEntityId,
+  type Subgraph,
 } from "@local/hash-subgraph";
 import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
 import {
@@ -30,47 +25,78 @@ import {
   useTheme,
 } from "@mui/material";
 import { useRouter } from "next/router";
-import {
-  FunctionComponent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import type { FunctionComponent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { GridProps } from "../../components/grid/grid";
 import {
   Grid,
   gridHeaderHeightWithBorder,
   gridHorizontalScrollbarHeight,
-  gridRowHeight,
 } from "../../components/grid/grid";
-import { BlankCell, blankCell } from "../../components/grid/utils";
-import { useGetOwnerForEntity } from "../../components/hooks/use-get-owner-for-entity";
+import type { BlankCell } from "../../components/grid/utils";
+import { blankCell } from "../../components/grid/utils";
+import type { CustomIcon } from "../../components/grid/utils/custom-grid-icons";
+import type { ColumnFilter } from "../../components/grid/utils/filtering";
 import { useEntityTypeEntitiesContext } from "../../shared/entity-type-entities-context";
+import { useEntityTypesContextRequired } from "../../shared/entity-types-context/hooks/use-entity-types-context-required";
 import { ChartNetworkRegularIcon } from "../../shared/icons/chart-network-regular-icon";
+import { GridSolidIcon } from "../../shared/icons/grid-solid-icon";
 import { HEADER_HEIGHT } from "../../shared/layout/layout-with-header/page-header";
-import {
-  FilterState,
-  TableHeader,
-  tableHeaderHeight,
-} from "../../shared/table-header";
+import type { FilterState } from "../../shared/table-header";
+import { TableHeader, tableHeaderHeight } from "../../shared/table-header";
+import type { MinimalActor } from "../../shared/use-actors";
+import { isAiMachineActor } from "../../shared/use-actors";
 import { useEntityTypeEntities } from "../../shared/use-entity-type-entities";
+import { EditEntitySlideOver } from "../[shortname]/entities/[entity-uuid].page/edit-entity-slide-over";
 import { useAuthenticatedUser } from "./auth-info-context";
 import { renderChipCell } from "./chip-cell";
-import {
-  createRenderTextIconCell,
-  TextIconCell,
-} from "./entities-table/text-icon-cell";
-import {
-  TypeEntitiesRow,
-  useEntitiesTable,
-} from "./entities-table/use-entities-table";
+import { GridView } from "./entities-table/grid-view";
+import type { TextIconCell } from "./entities-table/text-icon-cell";
+import { createRenderTextIconCell } from "./entities-table/text-icon-cell";
+import type { TypeEntitiesRow } from "./entities-table/use-entities-table";
+import { useEntitiesTable } from "./entities-table/use-entities-table";
+import { useGetEntitiesTableAdditionalCsvData } from "./entities-table/use-get-entities-table-additional-csv-data";
+import { TypeSlideOverStack } from "./entity-type-page/type-slide-over-stack";
+import { generateEntityRootedSubgraph } from "./subgraphs";
 import { TOP_CONTEXT_BAR_HEIGHT } from "./top-context-bar";
+
+/**
+ * @todo: avoid having to maintain this list, potentially by
+ * adding an `isFile` boolean to the generated ontology IDs file.
+ */
+const allFileEntityTypeOntologyIds = [
+  systemEntityTypes.file,
+  systemEntityTypes.image,
+  systemEntityTypes.documentFile,
+  systemEntityTypes.docxDocument,
+  systemEntityTypes.pdfDocument,
+  systemEntityTypes.presentationFile,
+  systemEntityTypes.pptxPresentation,
+];
+
+const allFileEntityTypeIds = allFileEntityTypeOntologyIds.map(
+  ({ entityTypeId }) => entityTypeId,
+) as VersionedUrl[];
+
+const allFileEntityTypeBaseUrl = allFileEntityTypeOntologyIds.map(
+  ({ entityTypeBaseUrl }) => entityTypeBaseUrl,
+);
+
+const entitiesTableViews = ["Table", "Graph", "Grid"] as const;
+
+type EntityTableView = (typeof entitiesTableViews)[number];
+
+const entitiesTableViewIcons: Record<EntityTableView, ReactNode> = {
+  Table: <ListRegularIcon sx={{ fontSize: 18 }} />,
+  Graph: <ChartNetworkRegularIcon sx={{ fontSize: 18 }} />,
+  Grid: <GridSolidIcon sx={{ fontSize: 14 }} />,
+};
 
 export const EntitiesTable: FunctionComponent<{
   hideEntityTypeVersionColumn?: boolean;
   hidePropertiesColumns?: boolean;
-}> = ({ hideEntityTypeVersionColumn, hidePropertiesColumns }) => {
+}> = ({ hideEntityTypeVersionColumn, hidePropertiesColumns = false }) => {
   const router = useRouter();
 
   const { authenticatedUser } = useAuthenticatedUser();
@@ -80,7 +106,8 @@ export const EntitiesTable: FunctionComponent<{
   });
   const [showSearch, setShowSearch] = useState<boolean>(false);
 
-  const [view, setView] = useState<"table" | "graph">("table");
+  const [selectedEntityTypeId, setSelectedEntityTypeId] =
+    useState<VersionedUrl | null>(null);
 
   const {
     entityTypeBaseUrl,
@@ -92,6 +119,42 @@ export const EntitiesTable: FunctionComponent<{
     propertyTypes,
     subgraph: subgraphWithoutLinkedEntities,
   } = useEntityTypeEntitiesContext();
+
+  const { isSpecialEntityTypeLookup } = useEntityTypesContextRequired();
+
+  const isDisplayingFilesOnly = useMemo(
+    () =>
+      /**
+       * To allow the `Grid` view to come into view on first render where
+       * possible, we check whether `entityTypeId` or `entityTypeBaseUrl`
+       * matches a `File` entity type from a statically defined list.
+       */
+      (entityTypeId && allFileEntityTypeIds.includes(entityTypeId)) ||
+      (entityTypeBaseUrl &&
+        allFileEntityTypeBaseUrl.includes(entityTypeBaseUrl)) ||
+      /**
+       * Otherwise we check the fetched `entityTypes` as a fallback.
+       */
+      (entityTypes?.length &&
+        entityTypes.every(
+          ({ $id }) => isSpecialEntityTypeLookup?.[$id]?.isFile,
+        )),
+    [entityTypeBaseUrl, entityTypeId, entityTypes, isSpecialEntityTypeLookup],
+  );
+
+  const supportGridView = isDisplayingFilesOnly;
+
+  const [view, setView] = useState<EntityTableView>(
+    isDisplayingFilesOnly ? "Grid" : "Table",
+  );
+
+  useEffect(() => {
+    if (isDisplayingFilesOnly) {
+      setView("Grid");
+    } else {
+      setView("Table");
+    }
+  }, [isDisplayingFilesOnly]);
 
   const { subgraph: subgraphWithLinkedEntities } = useEntityTypeEntities({
     entityTypeBaseUrl,
@@ -121,7 +184,8 @@ export const EntitiesTable: FunctionComponent<{
 
   const isViewingPages = useMemo(
     () =>
-      entities?.every(({ metadata }) =>
+      !!entities?.length &&
+      entities.every(({ metadata }) =>
         isPageEntityTypeId(metadata.entityTypeId),
       ),
     [entities],
@@ -164,12 +228,33 @@ export const EntitiesTable: FunctionComponent<{
     entityTypes,
     propertyTypes,
     subgraph,
+    hidePageArchivedColumn: !filterState.includeArchived,
     hideEntityTypeVersionColumn,
     hidePropertiesColumns,
     isViewingPages,
   });
 
   const [selectedRows, setSelectedRows] = useState<TypeEntitiesRow[]>([]);
+
+  const [selectedEntitySubgraph, setSelectedEntitySubgraph] =
+    useState<Subgraph<EntityRootType> | null>(null);
+
+  const handleEntityClick = useCallback(
+    (entityId: EntityId) => {
+      if (subgraph) {
+        const entitySubgraph = generateEntityRootedSubgraph(entityId, subgraph);
+
+        if (!entitySubgraph) {
+          throw new Error(
+            `Could not find entity with id ${entityId} in subgraph`,
+          );
+        }
+
+        setSelectedEntitySubgraph(entitySubgraph);
+      }
+    },
+    [subgraph],
+  );
 
   const createGetCellContent = useCallback(
     (entityRows: TypeEntitiesRow[]) =>
@@ -183,42 +268,66 @@ export const EntitiesTable: FunctionComponent<{
           const row = entityRows[rowIndex];
 
           if (!row) {
-            throw new Error("row not found");
+            /**
+             * This can occur when `createGetCellContent` is called
+             * for a row that has just been filtered out, so we handle
+             * this by briefly not displaying anything in the cell.
+             */
+            return {
+              kind: GridCellKind.Text,
+              allowOverlay: false,
+              readonly: true,
+              displayData: String("Not Found"),
+              data: "Not Found",
+            };
           }
 
-          if (columnId === "entity") {
+          if (columnId === "entityLabel") {
             return {
               kind: GridCellKind.Custom,
               allowOverlay: false,
               readonly: true,
-              copyData: row.entity,
+              copyData: row.entityLabel,
               cursor: "pointer",
               data: {
                 kind: "text-icon-cell",
                 icon: "bpAsterisk",
-                value: row.entity,
-                onClick: () =>
-                  router.push(
-                    isViewingPages
-                      ? `/${row.namespace}/${extractEntityUuidFromEntityId(
-                          row.entityId,
-                        )}`
-                      : `/${
-                          row.namespace
-                        }/entities/${extractEntityUuidFromEntityId(
-                          row.entityId,
-                        )}`,
-                  ),
+                value: row.entityLabel,
+                onClick: () => {
+                  if (isViewingPages) {
+                    void router.push(
+                      `/${row.web}/${extractEntityUuidFromEntityId(
+                        row.entityId,
+                      )}`,
+                    );
+                  } else {
+                    handleEntityClick(row.entityId);
+                  }
+                },
               },
             };
-          } else if (["namespace", "entityTypeVersion"].includes(columnId)) {
+          } else if (["web", "entityTypeVersion"].includes(columnId)) {
             const cellValue = row[columnId];
+            const stringValue = String(cellValue);
+
             return {
-              kind: GridCellKind.Text,
-              allowOverlay: true,
+              kind: GridCellKind.Custom,
+              allowOverlay: false,
               readonly: true,
-              displayData: String(cellValue),
-              data: cellValue,
+              cursor: "pointer",
+              copyData: stringValue,
+              data: {
+                kind: "text-icon-cell",
+                icon: null,
+                value: stringValue,
+                onClick: () => {
+                  if (columnId === "web") {
+                    void router.push(`/${cellValue}`);
+                  } else {
+                    setSelectedEntityTypeId(row.entityTypeId);
+                  }
+                },
+              },
             };
           } else if (columnId === "archived") {
             const value = row.archived ? "Yes" : "No";
@@ -237,24 +346,50 @@ export const EntitiesTable: FunctionComponent<{
               displayData: String(row.lastEdited),
               data: row.lastEdited,
             };
-          } else if (columnId === "lastEditedBy") {
-            const lastEditedBy = row.lastEditedBy?.preferredName;
+          } else if (columnId === "created") {
+            return {
+              kind: GridCellKind.Text,
+              readonly: true,
+              allowOverlay: false,
+              displayData: String(row.created),
+              data: row.lastEdited,
+            };
+          } else if (columnId === "lastEditedBy" || columnId === "createdBy") {
+            const actor =
+              columnId === "lastEditedBy" ? row.lastEditedBy : row.createdBy;
+
+            const actorName = actor ? actor.displayName : undefined;
+
+            const actorIcon = actor
+              ? ((actor.kind === "machine"
+                  ? isAiMachineActor(actor)
+                    ? "wandMagicSparklesRegular"
+                    : "hashSolid"
+                  : "userRegular") satisfies CustomIcon)
+              : undefined;
+
             return {
               kind: GridCellKind.Custom,
               readonly: true,
               allowOverlay: false,
-              copyData: String(lastEditedBy),
+              copyData: String(actorName),
               data: {
                 kind: "chip-cell",
-                chips: lastEditedBy ? [{ text: lastEditedBy }] : [],
+                chips: actorName
+                  ? [
+                      {
+                        text: actorName,
+                        icon: actorIcon,
+                      },
+                    ]
+                  : [],
                 color: "gray",
                 variant: "filled",
               },
             };
           }
 
-          const propertyCellValue =
-            columnId && row.properties && row.properties[columnId];
+          const propertyCellValue = columnId && row[columnId];
 
           if (propertyCellValue) {
             return {
@@ -269,148 +404,383 @@ export const EntitiesTable: FunctionComponent<{
 
         return blankCell;
       },
-    [columns, router, isViewingPages],
+    [columns, handleEntityClick, router, isViewingPages],
   );
 
   const theme = useTheme();
 
-  const getOwnerForEntity = useGetOwnerForEntity();
-
-  const handleEntityClick = useCallback(
-    (entity: BpEntity) => {
-      const { shortname: entityNamespace } = getOwnerForEntity(
-        entity as Entity,
-      );
-
-      if (entityNamespace === "") {
-        return;
-      }
-
-      void router.push(
-        `/@${entityNamespace}/entities/${extractEntityUuidFromEntityId(
-          entity.metadata.recordId.entityId as EntityId,
-        )}`,
-      );
-    },
-    [router, getOwnerForEntity],
+  const webs = useMemo(
+    () =>
+      rows
+        ?.map(({ web }) => web)
+        .filter((web, index, all) => all.indexOf(web) === index) ?? [],
+    [rows],
   );
 
+  const [selectedWebs, setSelectedWebs] = useState<string[]>(webs);
+
+  useEffect(() => {
+    setSelectedWebs(webs);
+  }, [webs]);
+
+  const sortRows = useCallback<
+    NonNullable<GridProps<TypeEntitiesRow>["sortRows"]>
+  >((unsortedRows, sort, previousSort) => {
+    return unsortedRows.toSorted((a, b) => {
+      const isActorSort = ["lastEditedBy", "createdBy"].includes(
+        sort.columnKey,
+      );
+
+      const value1: string = isActorSort
+        ? a[sort.columnKey].displayName
+        : String(a[sort.columnKey]);
+
+      const value2: string = isActorSort
+        ? b[sort.columnKey].displayName
+        : String(b[sort.columnKey]);
+
+      const previousSortWasActorSort =
+        previousSort &&
+        ["lastEditedBy", "createdBy"].includes(previousSort.columnKey);
+
+      const previousValue1: string = previousSort?.columnKey
+        ? previousSortWasActorSort
+          ? a[previousSort.columnKey].displayName
+          : String(a[previousSort.columnKey])
+        : undefined;
+
+      const previousValue2: string = previousSort?.columnKey
+        ? previousSortWasActorSort
+          ? b[previousSort.columnKey].displayName
+          : String(b[previousSort.columnKey])
+        : undefined;
+
+      let comparison = value1.localeCompare(value2);
+
+      if (comparison === 0 && previousValue1 && previousValue2) {
+        // if the two keys are equal, we sort by the previous sort
+        comparison = previousValue1.localeCompare(previousValue2);
+      }
+
+      if (sort.direction === "desc") {
+        // reverse if descending
+        comparison = -comparison;
+      }
+
+      return comparison;
+    });
+  }, []);
+
+  const entityTypeVersions = useMemo(
+    () =>
+      rows
+        ?.map(({ entityTypeVersion }) => entityTypeVersion)
+        .filter(
+          (entityTypeVersion, index, all) =>
+            all.indexOf(entityTypeVersion) === index,
+        ) ?? [],
+    [rows],
+  );
+
+  const [selectedEntityTypeVersions, setSelectedEntityTypeVersions] =
+    useState<string[]>(entityTypeVersions);
+
+  useEffect(() => {
+    setSelectedEntityTypeVersions(entityTypeVersions);
+  }, [entityTypeVersions]);
+
+  const [selectedArchivedStatus, setSelectedArchivedStatus] = useState<
+    ("archived" | "not-archived")[]
+  >(["archived", "not-archived"]);
+
+  const { createdByActors, lastEditedByActors } = useMemo(() => {
+    const lastEditedBySet = new Set<MinimalActor>();
+    const createdBySet = new Set<MinimalActor>();
+    for (const row of rows ?? []) {
+      if (row.lastEditedBy) {
+        lastEditedBySet.add(row.lastEditedBy);
+      }
+      if (row.createdBy) {
+        createdBySet.add(row.createdBy);
+      }
+    }
+    return {
+      lastEditedByActors: [...lastEditedBySet],
+      createdByActors: [...createdBySet],
+    };
+  }, [rows]);
+
+  const [selectedLastEditedByAccountIds, setSelectedLastEditedByAccountIds] =
+    useState<string[]>(lastEditedByActors.map(({ accountId }) => accountId));
+
+  const [selectedCreatedByAccountIds, setSelectedCreatedByAccountIds] =
+    useState<string[]>(createdByActors.map(({ accountId }) => accountId));
+
+  useEffect(() => {
+    setSelectedLastEditedByAccountIds(
+      lastEditedByActors.map(({ accountId }) => accountId),
+    );
+  }, [lastEditedByActors]);
+
+  useEffect(() => {
+    setSelectedCreatedByAccountIds(
+      createdByActors.map(({ accountId }) => accountId),
+    );
+  }, [createdByActors]);
+
+  const columnFilters = useMemo<ColumnFilter<string, TypeEntitiesRow>[]>(
+    () => [
+      {
+        columnKey: "web",
+        filterItems: webs.map((web) => ({
+          id: web,
+          label: web,
+        })),
+        selectedFilterItemIds: selectedWebs,
+        setSelectedFilterItemIds: setSelectedWebs,
+        isRowFiltered: (row) => !selectedWebs.includes(row.web),
+      },
+      {
+        columnKey: "entityTypeVersion",
+        filterItems: entityTypeVersions.map((entityTypeVersion) => ({
+          id: entityTypeVersion,
+          label: entityTypeVersion,
+        })),
+        selectedFilterItemIds: selectedEntityTypeVersions,
+        setSelectedFilterItemIds: setSelectedEntityTypeVersions,
+        isRowFiltered: (row) =>
+          !selectedEntityTypeVersions.includes(row.entityTypeVersion),
+      },
+      {
+        columnKey: "archived",
+        filterItems: [
+          {
+            id: "archived",
+            label: "Archived",
+          },
+          {
+            id: "not-archived",
+            label: "Not Archived",
+          },
+        ],
+        selectedFilterItemIds: selectedArchivedStatus,
+        setSelectedFilterItemIds: (filterItemIds) =>
+          setSelectedArchivedStatus(
+            filterItemIds as ("archived" | "not-archived")[],
+          ),
+        isRowFiltered: (row) =>
+          row.archived
+            ? !selectedArchivedStatus.includes("archived")
+            : !selectedArchivedStatus.includes("not-archived"),
+      },
+      {
+        columnKey: "lastEditedBy",
+        filterItems: lastEditedByActors.map((actor) => ({
+          id: actor.accountId,
+          label: actor.displayName ?? "Unknown Actor",
+        })),
+        selectedFilterItemIds: selectedLastEditedByAccountIds,
+        setSelectedFilterItemIds: setSelectedLastEditedByAccountIds,
+        isRowFiltered: (row) =>
+          row.lastEditedBy
+            ? !selectedLastEditedByAccountIds.includes(
+                row.lastEditedBy.accountId,
+              )
+            : false,
+      },
+      {
+        columnKey: "createdBy",
+        filterItems: createdByActors.map((actor) => ({
+          id: actor.accountId,
+          label: actor.displayName ?? "Unknown Actor",
+        })),
+        selectedFilterItemIds: selectedCreatedByAccountIds,
+        setSelectedFilterItemIds: setSelectedCreatedByAccountIds,
+        isRowFiltered: (row) =>
+          row.createdBy
+            ? !selectedCreatedByAccountIds.includes(row.createdBy.accountId)
+            : false,
+      },
+    ],
+    [
+      createdByActors,
+      webs,
+      selectedWebs,
+      entityTypeVersions,
+      selectedEntityTypeVersions,
+      lastEditedByActors,
+      selectedCreatedByAccountIds,
+      selectedLastEditedByAccountIds,
+      selectedArchivedStatus,
+    ],
+  );
+
+  const currentlyDisplayedRowsRef = useRef<TypeEntitiesRow[] | null>(null);
+
+  const { getEntitiesTableAdditionalCsvData } =
+    useGetEntitiesTableAdditionalCsvData({
+      currentlyDisplayedRowsRef,
+      propertyTypes,
+      /**
+       * If the properties columns are hidden, we want to add
+       * them to the CSV file.
+       */
+      addPropertiesColumns: hidePropertiesColumns,
+    });
+
   return (
-    <Box>
-      <TableHeader
-        internalWebIds={internalWebIds}
-        itemLabelPlural={isViewingPages ? "pages" : "entities"}
-        items={entities}
-        selectedItems={
-          entities?.filter((entity) =>
-            selectedRows.some(
-              ({ entityId }) => entity.metadata.recordId.entityId === entityId,
-            ),
-          ) ?? []
-        }
-        endAdornment={
-          <ToggleButtonGroup
-            value={view}
-            exclusive
-            onChange={(_, updatedView) => {
-              if (updatedView) {
-                setView(updatedView);
-              }
-            }}
-            aria-label="view"
-            size="small"
-            sx={{
-              [`.${toggleButtonClasses.root}`]: {
-                backgroundColor: ({ palette }) => palette.common.white,
-                "&:not(:last-of-type)": {
-                  borderRightColor: ({ palette }) => palette.gray[20],
-                  borderRightStyle: "solid",
-                  borderRightWidth: 2,
-                },
-                "&:hover": {
-                  backgroundColor: ({ palette }) => palette.common.white,
-                  svg: {
-                    color: ({ palette }) => palette.gray[80],
-                  },
-                },
-                [`&.${toggleButtonClasses.selected}`]: {
-                  backgroundColor: ({ palette }) => palette.common.white,
-                  svg: {
-                    color: ({ palette }) => palette.gray[90],
-                  },
-                },
-                svg: {
-                  transition: ({ transitions }) => transitions.create("color"),
-                  color: ({ palette }) => palette.gray[50],
-                  fontSize: 18,
-                },
-              },
-            }}
-          >
-            <ToggleButton disableRipple value="table" aria-label="table">
-              <Tooltip title="Table view" placement="top">
-                <Box sx={{ lineHeight: 0 }}>
-                  <ListRegularIcon />
-                </Box>
-              </Tooltip>
-            </ToggleButton>
-            <ToggleButton disableRipple value="graph" aria-label="graph">
-              <Tooltip title="Graph view" placement="top">
-                <Box sx={{ lineHeight: 0 }}>
-                  <ChartNetworkRegularIcon />
-                </Box>
-              </Tooltip>
-            </ToggleButton>
-          </ToggleButtonGroup>
-        }
-        filterState={filterState}
-        setFilterState={setFilterState}
-        toggleSearch={view === "table" ? () => setShowSearch(true) : undefined}
-        onBulkActionCompleted={() => setSelectedRows([])}
-      />
-      {view === "graph" ? (
-        <EntitiesGraphChart
-          isPrimaryEntity={(entity) =>
-            entityTypeBaseUrl
-              ? extractBaseUrl(entity.metadata.entityTypeId) ===
-                entityTypeBaseUrl
-              : entityTypeId
-                ? entityTypeId === entity.metadata.entityTypeId
-                : true
-          }
-          filterEntity={(entity) =>
-            filterState.includeGlobal
-              ? true
-              : internalWebIds.includes(
-                  extractOwnedByIdFromEntityId(
-                    entity.metadata.recordId.entityId as EntityId,
-                  ),
-                )
-          }
-          onEntityClick={handleEntityClick}
-          sx={{
-            background: ({ palette }) => palette.common.white,
-            height: `calc(100vh - (${
-              HEADER_HEIGHT + TOP_CONTEXT_BAR_HEIGHT + 179 + tableHeaderHeight
-            }px + ${theme.spacing(5)} + ${theme.spacing(5)}))`,
-            borderBottomRightRadius: 6,
-            borderBottomLeftRadius: 6,
-          }}
-          subgraph={subgraph as unknown as BpSubgraph<BpEntityRootType>}
+    <>
+      {selectedEntityTypeId && (
+        <TypeSlideOverStack
+          rootTypeId={selectedEntityTypeId}
+          onClose={() => setSelectedEntityTypeId(null)}
         />
-      ) : (
-        <Grid
-          showSearch={showSearch}
-          onSearchClose={() => setShowSearch(false)}
-          columns={columns}
-          rows={rows}
-          enableCheckboxSelection
-          selectedRows={selectedRows}
-          onSelectedRowsChange={(updatedSelectedRows) =>
-            setSelectedRows(updatedSelectedRows)
+      )}
+      {selectedEntitySubgraph ? (
+        <EditEntitySlideOver
+          open
+          entitySubgraph={selectedEntitySubgraph}
+          onClose={() => setSelectedEntitySubgraph(null)}
+          readonly
+          onSubmit={() => {
+            throw new Error(`Editing not yet supported from this screen`);
+          }}
+        />
+      ) : null}
+      <Box>
+        <TableHeader
+          internalWebIds={internalWebIds}
+          itemLabelPlural={isViewingPages ? "pages" : "entities"}
+          items={entities}
+          selectedItems={
+            entities?.filter((entity) =>
+              selectedRows.some(
+                ({ entityId }) =>
+                  entity.metadata.recordId.entityId === entityId,
+              ),
+            ) ?? []
           }
-          firstColumnLeftPadding={16}
-          height={`
+          title="Entities"
+          columns={columns}
+          currentlyDisplayedRowsRef={currentlyDisplayedRowsRef}
+          getAdditionalCsvData={getEntitiesTableAdditionalCsvData}
+          endAdornment={
+            <ToggleButtonGroup
+              value={view}
+              exclusive
+              onChange={(_, updatedView) => {
+                if (updatedView) {
+                  setView(updatedView);
+                }
+              }}
+              aria-label="view"
+              size="small"
+              sx={{
+                [`.${toggleButtonClasses.root}`]: {
+                  backgroundColor: ({ palette }) => palette.common.white,
+                  "&:not(:last-of-type)": {
+                    borderRightColor: ({ palette }) => palette.gray[20],
+                    borderRightStyle: "solid",
+                    borderRightWidth: 2,
+                  },
+                  "&:hover": {
+                    backgroundColor: ({ palette }) => palette.common.white,
+                    svg: {
+                      color: ({ palette }) => palette.gray[80],
+                    },
+                  },
+                  [`&.${toggleButtonClasses.selected}`]: {
+                    backgroundColor: ({ palette }) => palette.common.white,
+                    svg: {
+                      color: ({ palette }) => palette.gray[90],
+                    },
+                  },
+                  svg: {
+                    transition: ({ transitions }) =>
+                      transitions.create("color"),
+                    color: ({ palette }) => palette.gray[50],
+                  },
+                },
+              }}
+            >
+              {(
+                [
+                  "Table",
+                  ...(supportGridView ? (["Grid"] as const) : []),
+                  "Graph",
+                ] satisfies EntityTableView[]
+              ).map((viewName) => (
+                <ToggleButton
+                  key={viewName}
+                  disableRipple
+                  value={viewName}
+                  aria-label={viewName}
+                >
+                  <Tooltip title={`${viewName} view`} placement="top">
+                    <Box sx={{ lineHeight: 0 }}>
+                      {entitiesTableViewIcons[viewName]}
+                    </Box>
+                  </Tooltip>
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          }
+          filterState={filterState}
+          setFilterState={setFilterState}
+          toggleSearch={
+            view === "Table" ? () => setShowSearch(true) : undefined
+          }
+          onBulkActionCompleted={() => setSelectedRows([])}
+        />
+        {view === "Graph" && subgraph ? (
+          <EntitiesGraphChart
+            entities={entities}
+            isPrimaryEntity={(entity) =>
+              entityTypeBaseUrl
+                ? extractBaseUrl(entity.metadata.entityTypeId) ===
+                  entityTypeBaseUrl
+                : entityTypeId
+                  ? entityTypeId === entity.metadata.entityTypeId
+                  : true
+            }
+            filterEntity={(entity) =>
+              filterState.includeGlobal
+                ? true
+                : internalWebIds.includes(
+                    extractOwnedByIdFromEntityId(
+                      entity.metadata.recordId.entityId,
+                    ),
+                  )
+            }
+            onEntityClick={handleEntityClick}
+            sx={{
+              background: ({ palette }) => palette.common.white,
+              height: `calc(100vh - (${
+                HEADER_HEIGHT + TOP_CONTEXT_BAR_HEIGHT + 179 + tableHeaderHeight
+              }px + ${theme.spacing(5)} + ${theme.spacing(5)}))`,
+              borderBottomRightRadius: 6,
+              borderBottomLeftRadius: 6,
+            }}
+            subgraphWithTypes={subgraph}
+          />
+        ) : view === "Grid" ? (
+          <GridView entities={entities} />
+        ) : (
+          <Grid
+            showSearch={showSearch}
+            onSearchClose={() => setShowSearch(false)}
+            columns={columns}
+            columnFilters={columnFilters}
+            dataLoading={loading}
+            rows={rows}
+            enableCheckboxSelection
+            selectedRows={selectedRows}
+            onSelectedRowsChange={(updatedSelectedRows) =>
+              setSelectedRows(updatedSelectedRows)
+            }
+            sortRows={sortRows}
+            firstColumnLeftPadding={16}
+            height={`
                min(
                  calc(100vh - (${
                    HEADER_HEIGHT +
@@ -420,17 +790,19 @@ export const EntitiesTable: FunctionComponent<{
                  }px + ${theme.spacing(5)} + ${theme.spacing(5)})),
                 calc(
                  ${gridHeaderHeightWithBorder}px +
-                 (${rows ? rows.length : 1} * ${gridRowHeight}px) +
+                 (${rows?.length ? rows.length : 1} * ${gridRowHeight}px) +
                  ${gridHorizontalScrollbarHeight}px)
                )`}
-          createGetCellContent={createGetCellContent}
-          customRenderers={[
-            createRenderTextIconCell({ firstColumnLeftPadding: 16 }),
-            renderChipCell,
-          ]}
-          freezeColumns={1}
-        />
-      )}
-    </Box>
+            createGetCellContent={createGetCellContent}
+            customRenderers={[
+              createRenderTextIconCell({ firstColumnLeftPadding: 16 }),
+              renderChipCell,
+            ]}
+            freezeColumns={1}
+            currentlyDisplayedRowsRef={currentlyDisplayedRowsRef}
+          />
+        )}
+      </Box>
+    </>
   );
 };

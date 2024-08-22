@@ -1,18 +1,17 @@
+import type { EntityId } from "@local/hash-graph-types/entity";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { UserProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import { TextToken } from "@local/hash-isomorphic-utils/types";
-import {
-  AccountEntityId,
-  EntityId,
-  extractAccountId,
-} from "@local/hash-subgraph";
+import type { UserProperties } from "@local/hash-isomorphic-utils/system-types/user";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
+import type { AccountEntityId } from "@local/hash-subgraph";
+import { extractAccountId } from "@local/hash-subgraph";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Box, buttonClasses, Collapse } from "@mui/material";
-import { FunctionComponent, useMemo, useRef, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useCreateComment } from "../../../../components/hooks/use-create-comment";
-import { PageThread } from "../../../../components/hooks/use-page-comments";
+import type { PageThread } from "../../../../components/hooks/use-page-comments";
 import { Button } from "../../../../shared/ui";
 import { useAuthenticatedUser } from "../../auth-info-context";
 import { CommentActionButtons } from "./comment-action-buttons";
@@ -58,7 +57,7 @@ export const CommentThread: FunctionComponent<CommentThreadProps> = ({
   };
 
   const [collapsedReplies, uncollapsibleReplies] = useMemo(() => {
-    const replies = [...comment.replies].sort((replyA, replyB) =>
+    const replies = comment.replies.toSorted((replyA, replyB) =>
       replyA.metadata.temporalVersioning.decisionTime.start.limit.localeCompare(
         replyB.metadata.temporalVersioning.decisionTime.start.limit,
       ),
@@ -70,10 +69,10 @@ export const CommentThread: FunctionComponent<CommentThreadProps> = ({
     return [replies, lastItems];
   }, [comment]);
 
-  const preferredName = useMemo(
+  const displayName = useMemo(
     () =>
       simplifyProperties(comment.author.properties as UserProperties)
-        .preferredName,
+        .displayName,
     [comment.author.properties],
   );
 
@@ -105,8 +104,10 @@ export const CommentThread: FunctionComponent<CommentThreadProps> = ({
         pageId={pageId}
         comment={comment}
         resolvable={
-          // TODO: The provenance fields shouldn't be used for this
-          //   see https://app.asana.com/0/1201095311341924/1203466351235289/f
+          /**
+           * @todo The provenance fields shouldn't be used for this
+           * @see https://linear.app/hash/issue/H-3003
+           */
           authenticatedUser.accountId === authorId ||
           authenticatedUser.accountId ===
             comment.parent.metadata.provenance.edition.createdById
@@ -182,7 +183,7 @@ export const CommentThread: FunctionComponent<CommentThreadProps> = ({
           >
             <CommentTextField
               value={inputValue}
-              placeholder={`Reply to ${preferredName}`}
+              placeholder={`Reply to ${displayName}`}
               onClose={cancelSubmit}
               onSubmit={handleReplySubmit}
               editable={!loading}

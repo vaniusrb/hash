@@ -1,4 +1,5 @@
 import { useQuery } from "@apollo/client";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 import {
   currentTimeInstantTemporalAxes,
   generateVersionedUrlMatchingFilter,
@@ -7,7 +8,7 @@ import {
 } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { pluralize } from "@local/hash-isomorphic-utils/pluralize";
-import { BaseUrl, EntityRootType } from "@local/hash-subgraph";
+import type { EntityRootType } from "@local/hash-subgraph";
 import {
   getEntityTypeAndDescendantsById,
   getRoots,
@@ -17,26 +18,26 @@ import { Container, Typography } from "@mui/material";
 import { useRouter } from "next/router";
 import { useCallback, useMemo, useState } from "react";
 
-import {
-  StructuralQueryEntitiesQuery,
-  StructuralQueryEntitiesQueryVariables,
+import type {
+  GetEntitySubgraphQuery,
+  GetEntitySubgraphQueryVariables,
 } from "../graphql/api-types.gen";
-import { structuralQueryEntitiesQuery } from "../graphql/queries/knowledge/entity.queries";
+import { getEntitySubgraphQuery } from "../graphql/queries/knowledge/entity.queries";
 import {
   constructOrg,
   constructUser,
   isEntityUserEntity,
 } from "../lib/user-and-org";
 import { useLatestEntityTypesOptional } from "../shared/entity-types-context/hooks";
-import { getLayoutWithSidebar, NextPageWithLayout } from "../shared/layout";
+import type { NextPageWithLayout } from "../shared/layout";
+import { getLayoutWithSidebar } from "../shared/layout";
 import { useUserOrOrg } from "../shared/use-user-or-org";
 import { EditUserProfileInfoModal } from "./[shortname].page/edit-user-profile-info-modal";
 import { ProfilePageContent } from "./[shortname].page/profile-page-content";
 import { ProfilePageHeader } from "./[shortname].page/profile-page-header";
-import {
-  parseProfilePageUrlQueryParams,
-  ProfilePageTab,
-} from "./[shortname].page/util";
+import type { ProfilePageTab } from "./[shortname].page/util";
+import { parseProfilePageUrlQueryParams } from "./[shortname].page/util";
+import { useEnabledFeatureFlags } from "./shared/use-enabled-feature-flags";
 
 const ProfilePage: NextPageWithLayout = () => {
   const router = useRouter();
@@ -58,17 +59,7 @@ const ProfilePage: NextPageWithLayout = () => {
         hasRightEntity: { incoming: 1, outgoing: 1 },
       },
       includePermissions: true,
-      /**
-       * We need to obtain all revisions of the user or org entity
-       * to determine when the user joined or the org was created.
-       */
-      temporalAxes: {
-        pinned: { axis: "transactionTime", timestamp: null },
-        variable: {
-          axis: "decisionTime",
-          interval: { start: { kind: "unbounded" }, end: null },
-        },
-      },
+      temporalAxes: currentTimeInstantTemporalAxes,
     });
 
   const profile = useMemo(() => {
@@ -91,12 +82,17 @@ const ProfilePage: NextPageWithLayout = () => {
 
   const profileNotFound = !profile && !loading;
 
+  const enabledFeatureFlags = useEnabledFeatureFlags();
+
   const pinnedEntityTypeBaseUrls = useMemo<BaseUrl[]>(
-    () => [
-      systemEntityTypes.page.entityTypeBaseUrl as BaseUrl,
-      ...(profile?.pinnedEntityTypeBaseUrls ?? []),
-    ],
-    [profile],
+    () =>
+      [
+        enabledFeatureFlags.pages
+          ? systemEntityTypes.page.entityTypeBaseUrl
+          : [],
+        ...(profile?.pinnedEntityTypeBaseUrls ?? []),
+      ].flat(),
+    [profile, enabledFeatureFlags],
   );
 
   const baseTabs = useMemo<ProfilePageTab[]>(
@@ -128,12 +124,12 @@ const ProfilePage: NextPageWithLayout = () => {
   );
 
   const { data: pinnedEntityTypesData } = useQuery<
-    StructuralQueryEntitiesQuery,
-    StructuralQueryEntitiesQueryVariables
-  >(structuralQueryEntitiesQuery, {
+    GetEntitySubgraphQuery,
+    GetEntitySubgraphQueryVariables
+  >(getEntitySubgraphQuery, {
     variables: {
       includePermissions: false,
-      query: {
+      request: {
         filter: {
           all: [
             {
@@ -176,7 +172,7 @@ const ProfilePage: NextPageWithLayout = () => {
 
   const entitiesSubgraph = pinnedEntityTypesData
     ? mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
-        pinnedEntityTypesData.structuralQueryEntities.subgraph,
+        pinnedEntityTypesData.getEntitySubgraph.subgraph,
       )
     : undefined;
 

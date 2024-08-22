@@ -10,29 +10,29 @@ import browser from "webextension-polyfill";
  *
  * You must update the extension if you amend this file, from the extensions manager page in the browser.
  */
-import { GetSiteContentReturn, Message } from "../shared/messages";
+import type { GetTabContentReturn, Message } from "../shared/messages";
 
-browser.runtime.onMessage.addListener(
-  (message: Message, _sender, sendResponse) => {
-    if (message.type === "get-site-content") {
-      const docContent =
-        document.querySelector("main") || document.querySelector("body");
+// Promise based API (see: https://github.com/mozilla/webextension-polyfill/?tab=readme-ov-file#using-the-promise-based-apis)
+// eslint-disable-next-line @typescript-eslint/require-await
+browser.runtime.onMessage.addListener(async (message: Message, _sender) => {
+  if (message.type === "get-tab-content") {
+    const docContent =
+      document.querySelector("main") ?? document.querySelector("body");
 
-      /**
-       * Take the URL without any anchor hash on the assumption that it does not affect page content.
-       * Helps avoid making duplicate requests for the same page.
-       */
-      const urlObject = new URL(window.location.href);
-      const pageUrl = urlObject.href.replace(urlObject.hash, "");
+    /**
+     * Take the URL without any anchor hash on the assumption that it does not affect page content.
+     * Helps avoid making duplicate requests for the same page.
+     */
+    const urlObject = new URL(window.location.href);
+    const pageUrl = urlObject.href.replace(urlObject.hash, "");
 
-      sendResponse({
-        innerText: docContent?.innerText ?? "",
-        pageTitle: document.title,
-        pageUrl,
-      } satisfies GetSiteContentReturn);
-      return;
-    }
+    return {
+      htmlContent: docContent?.innerHTML ?? "",
+      innerText: docContent?.innerText ?? "",
+      title: document.title,
+      url: pageUrl,
+    } satisfies GetTabContentReturn;
+  }
 
-    sendResponse(`Unrecognised message type ${message.type}`);
-  },
-);
+  return `Unrecognised message type ${message.type}`;
+});

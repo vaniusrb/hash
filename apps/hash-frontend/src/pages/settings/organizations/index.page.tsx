@@ -1,17 +1,18 @@
 import { faPlus } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@hashintel/design-system";
-import { TableBody, TableHead, TableRow } from "@mui/material";
+import { Box, TableBody, TableHead, TableRow, Typography } from "@mui/material";
 import { useRouter } from "next/router";
 import { NextSeo } from "next-seo";
 import { useRef } from "react";
 
-import { NextPageWithLayout } from "../../../shared/layout";
+import { PeopleGroupIcon } from "../../../shared/icons/people-group-icon";
+import type { NextPageWithLayout } from "../../../shared/layout";
 import { Button } from "../../../shared/ui/button";
 import { useAuthenticatedUser } from "../../shared/auth-info-context";
-import { getSettingsLayout } from "../shared/settings-layout";
+import { getSettingsLayout } from "../../shared/settings-layout";
+import { SettingsPageContainer } from "../shared/settings-page-container";
 import { OrgRow } from "./index.page/org-row";
 import { Cell } from "./shared/cell";
-import { OrgSettingsContainer } from "./shared/org-settings-container";
 import { OrgTable } from "./shared/org-table";
 
 const OrganizationListPage: NextPageWithLayout = () => {
@@ -30,7 +31,7 @@ const OrganizationListPage: NextPageWithLayout = () => {
     <>
       <NextSeo title="Organizations" />
 
-      <OrgSettingsContainer
+      <SettingsPageContainer
         topRightElement={
           <Button
             href="/settings/organizations/new"
@@ -44,26 +45,45 @@ const OrganizationListPage: NextPageWithLayout = () => {
             />
           </Button>
         }
-        header={<>Organizations</>}
+        heading={<>Organizations</>}
         ref={topRef}
       >
-        <OrgTable>
-          <TableHead>
-            <TableRow>
-              <Cell width="100%">Organization</Cell>
-              <Cell>Namespace</Cell>
-              <Cell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {authenticatedUser.memberOf
-              .sort(({ org: a }, { org: b }) => a.name.localeCompare(b.name))
-              .map(({ org }) => (
-                <OrgRow key={org.accountGroupId} org={org} />
-              ))}
-          </TableBody>
-        </OrgTable>
-      </OrgSettingsContainer>
+        {authenticatedUser.memberOf.length > 0 ? (
+          <OrgTable>
+            <TableHead>
+              <TableRow>
+                <Cell width="100%">Organization</Cell>
+                <Cell>Namespace</Cell>
+                <Cell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {authenticatedUser.memberOf
+                .sort(({ org: a }, { org: b }) => a.name.localeCompare(b.name))
+                .map(({ org }) => (
+                  <OrgRow key={org.accountGroupId} org={org} />
+                ))}
+            </TableBody>
+          </OrgTable>
+        ) : (
+          <Box
+            display="flex"
+            alignItems="center"
+            flexDirection="column"
+            paddingY={10}
+          >
+            <PeopleGroupIcon
+              sx={{
+                color: ({ palette }) => palette.gray[30],
+                fontSize: 48,
+              }}
+            />
+            <Typography sx={{ color: ({ palette }) => palette.gray[50] }}>
+              Not currently a member of any shared webs
+            </Typography>
+          </Box>
+        )}
+      </SettingsPageContainer>
     </>
   );
 };

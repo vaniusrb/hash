@@ -31,9 +31,9 @@ jobs:
         run: |
           # Only apply the prod environment on merge to main or manual dispatch
           if [[ "$DISPATCH_ENV" == "prod" || "$GITHUB_REF_NAME" == "main" ]]; then
-            echo "matrix=[\"prod\"]" >> $GITHUB_OUTPUT
+            echo "matrix=[\"prod\"]" | tee -a $GITHUB_OUTPUT
           else
-            echo "matrix=[]" >> $GITHUB_OUTPUT
+            echo "matrix=[]" | tee -a $GITHUB_OUTPUT
           fi
 
   terraform:
@@ -49,7 +49,7 @@ jobs:
       matrix:
         env: ${{ fromJson(needs.matrix-eval.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Prepare SSH key
         run: |
@@ -63,11 +63,11 @@ jobs:
           env: ${{ matrix.env }}
 
       - name: Notify Slack on failure
-        uses: rtCamp/action-slack-notify@b24d75fe0e728a4bf9fc42ee217caa686d141ee8
+        uses: rtCamp/action-slack-notify@4c6d89edb6a46b698c3c9c6fd890946d510d0b7b
         if: ${{ failure() }}
         env:
           SLACK_LINK_NAMES: true
-          SLACK_MESSAGE: "Error applying Terraform configuration <@U0143NL4GMP> <@U027NPY8Y3X> <@U02NLJY0FGX>"
+          SLACK_MESSAGE: "Error applying Terraform configuration <@U0143NL4GMP> <@U027NPY8Y3X> <@U02NLJY0FGX>" # Notifies C & T
           SLACK_TITLE: Terraform apply failed
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_USERNAME: GitHub

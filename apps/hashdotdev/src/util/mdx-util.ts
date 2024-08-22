@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { readdir, readdirSync, readFile } from "fs-extra";
+import { readdirSync, readFile } from "fs-extra";
 import matter from "gray-matter";
-import { MDXRemoteSerializeResult } from "next-mdx-remote";
+import type { MDXRemoteSerializeResult } from "next-mdx-remote";
 import { serialize } from "next-mdx-remote/serialize";
 import remarkMdx from "remark-mdx";
 import remarkMdxDisableExplicitJsx from "remark-mdx-disable-explicit-jsx";
@@ -69,9 +69,7 @@ const mapTalkSlidesToImages = (talkSlides: TalkSlide[]): Image[] => {
     return undefined;
   };
 
-  return talkSlides
-    .map(map)
-    .filter((value) => typeof value !== "undefined") as Image[];
+  return talkSlides.map(map).filter((value) => typeof value !== "undefined");
 };
 
 // Recursively returns all the images in an MDX AST
@@ -83,13 +81,16 @@ const getImagesFromParent = (parent: Parent): Image[] => [
     .flatMap((child) => getImagesFromParent(child)),
 ];
 
+const getFileNames = (folderName: string) =>
+  readdirSync(path.join(process.cwd(), `src/_pages/${folderName}`)).filter(
+    (filename) => !filename.toLowerCase().startsWith("wip_"),
+  );
+
 // Gets all hrefs corresponding to the MDX files in a directory
 export const getAllPageHrefs = (params: { folderName: string }): string[] => {
   const { folderName } = params;
 
-  const fileNames = readdirSync(
-    path.join(process.cwd(), `src/_pages/${folderName}`),
-  );
+  const fileNames = getFileNames(folderName);
 
   return fileNames.map((fileName) => {
     const name = parseNameFromFileName(fileName);
@@ -112,9 +113,7 @@ export const getSerializedPage = async (params: {
 > => {
   const { pathToDirectory, fileNameWithoutIndex } = params;
 
-  const fileNames = await readdir(
-    path.join(process.cwd(), `src/_pages/${pathToDirectory}`),
-  );
+  const fileNames = getFileNames(pathToDirectory);
 
   const fileName = fileNames.find((fullFileName) =>
     fullFileName.endsWith(`${fileNameWithoutIndex}.mdx`),
@@ -142,12 +141,12 @@ export const getSerializedPage = async (params: {
   return [serializedMdx, data, images];
 };
 
-export type Page<DataType extends {}> = {
+export type Page<DataType extends Record<string, unknown>> = {
   fileName: string;
   data: DataType;
 };
 
-export const getPage = <DataType extends {}>(params: {
+export const getPage = <DataType extends Record<string, unknown>>(params: {
   pathToDirectory: string;
   fileName: string;
 }): Page<DataType> => {
@@ -163,12 +162,10 @@ export const getPage = <DataType extends {}>(params: {
   };
 };
 
-export const getAllPages = <DataType extends {}>(
+export const getAllPages = <DataType extends Record<string, unknown>>(
   pathToDirectory: string,
 ): Page<DataType>[] => {
-  const fileNames = readdirSync(
-    path.join(process.cwd(), `src/_pages/${pathToDirectory}`),
-  );
+  const fileNames = getFileNames(pathToDirectory);
 
   return fileNames.map((fileName) =>
     getPage({

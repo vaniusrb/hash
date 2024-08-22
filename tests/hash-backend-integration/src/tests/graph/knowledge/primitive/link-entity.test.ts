@@ -1,12 +1,8 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
+import type { EntityTypeDefinition } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized/migrate-ontology-types/util";
+import { generateSystemEntityTypeSchema } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized/migrate-ontology-types/util";
 import {
-  EntityTypeDefinition,
-  generateSystemEntityTypeSchema,
-} from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized/migrate-ontology-types/util";
-import {
-  archiveEntity,
   createEntity,
   getEntityOutgoingLinks,
 } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
@@ -15,32 +11,27 @@ import {
   getLinkEntityLeftEntity,
   getLinkEntityRightEntity,
 } from "@apps/hash-api/src/graph/knowledge/primitive/link-entity";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { createEntityType } from "@apps/hash-api/src/graph/ontology/primitive/entity-type";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { Entity, LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { createDefaultAuthorizationRelationships } from "@local/hash-isomorphic-utils/graph-queries";
 import { generateTypeId } from "@local/hash-isomorphic-utils/ontology-types";
-import {
-  Entity,
-  EntityTypeWithMetadata,
-  linkEntityTypeUrl,
-  OwnedById,
-} from "@local/hash-subgraph";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
+import { linkEntityTypeUrl } from "@local/hash-subgraph";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import { createTestImpureGraphContext, createTestUser } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("Link entity", () => {
   let webShortname: string;
@@ -92,7 +83,6 @@ describe("Link entity", () => {
   };
 
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "linktest", logger);
@@ -162,12 +152,10 @@ describe("Link entity", () => {
         {
           linkEntityType: friendLinkEntityType,
           destinationEntityTypes: ["SELF_REFERENCE"],
-          ordered: false,
         },
         {
           linkEntityType: acquaintanceLinkEntityType,
           destinationEntityTypes: ["SELF_REFERENCE"],
-          ordered: false,
         },
       ],
     });
@@ -176,7 +164,7 @@ describe("Link entity", () => {
       createEntity(graphContext, authentication, {
         ownedById: testUser.accountId as OwnedById,
         entityTypeId: testEntityType.schema.$id,
-        properties: {},
+        properties: { value: {} },
         relationships: createDefaultAuthorizationRelationships(authentication),
       }).then((entity) => {
         leftEntity = entity;
@@ -184,7 +172,7 @@ describe("Link entity", () => {
       createEntity(graphContext, authentication, {
         ownedById: testUser.accountId as OwnedById,
         entityTypeId: testEntityType.schema.$id,
-        properties: {},
+        properties: { value: {} },
         relationships: createDefaultAuthorizationRelationships(authentication),
       }).then((entity) => {
         friendRightEntity = entity;
@@ -192,20 +180,20 @@ describe("Link entity", () => {
       createEntity(graphContext, authentication, {
         ownedById: testUser.accountId as OwnedById,
         entityTypeId: testEntityType.schema.$id,
-        properties: {},
+        properties: { value: {} },
         relationships: createDefaultAuthorizationRelationships(authentication),
       }).then((entity) => {
         acquaintanceRightEntity = entity;
       }),
     ]);
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   let linkEntityFriend: LinkEntity;
@@ -216,9 +204,12 @@ describe("Link entity", () => {
 
     linkEntityFriend = await createLinkEntity(graphContext, authentication, {
       ownedById: testUser.accountId as OwnedById,
-      leftEntityId: leftEntity.metadata.recordId.entityId,
-      linkEntityTypeId: friendLinkEntityType.schema.$id,
-      rightEntityId: friendRightEntity.metadata.recordId.entityId,
+      properties: { value: {} },
+      linkData: {
+        leftEntityId: leftEntity.metadata.recordId.entityId,
+        rightEntityId: friendRightEntity.metadata.recordId.entityId,
+      },
+      entityTypeId: friendLinkEntityType.schema.$id,
       relationships: createDefaultAuthorizationRelationships(authentication),
     });
 
@@ -227,9 +218,12 @@ describe("Link entity", () => {
       authentication,
       {
         ownedById: testUser.accountId as OwnedById,
-        leftEntityId: leftEntity.metadata.recordId.entityId,
-        linkEntityTypeId: acquaintanceLinkEntityType.schema.$id,
-        rightEntityId: acquaintanceRightEntity.metadata.recordId.entityId,
+        properties: { value: {} },
+        linkData: {
+          leftEntityId: leftEntity.metadata.recordId.entityId,
+          rightEntityId: acquaintanceRightEntity.metadata.recordId.entityId,
+        },
+        entityTypeId: acquaintanceLinkEntityType.schema.$id,
         relationships: createDefaultAuthorizationRelationships(authentication),
       },
     );
@@ -279,9 +273,7 @@ describe("Link entity", () => {
   it("can archive a link", async () => {
     const authentication = { actorId: testUser.accountId };
 
-    await archiveEntity(graphContext, authentication, {
-      entity: linkEntityAcquaintance,
-    });
+    await linkEntityAcquaintance.archive(graphContext.graphApi, authentication);
 
     const links = await getEntityOutgoingLinks(graphContext, authentication, {
       entityId: leftEntity.metadata.recordId.entityId,

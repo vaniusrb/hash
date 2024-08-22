@@ -1,18 +1,21 @@
 import { getRequiredEnv } from "@local/hash-backend-utils/environment";
 import { getHashInstance } from "@local/hash-backend-utils/hash-instance";
-import { Logger } from "@local/hash-backend-utils/logger";
-import { Session } from "@ory/client";
-import { AxiosError } from "axios";
-import { Express, Request, RequestHandler } from "express";
+import type { Logger } from "@local/hash-backend-utils/logger";
+import { publicUserAccountId } from "@local/hash-backend-utils/public-user-account-id";
+import type { Session } from "@ory/client";
+import type { AxiosError } from "axios";
+import type { Express, Request, RequestHandler } from "express";
 
-import { ImpureGraphContext } from "../graph/context-types";
+import type { ImpureGraphContext } from "../graph/context-types";
+import type { User } from "../graph/knowledge/system-types/user";
 import {
   createUser,
   getUserByKratosIdentityId,
-  User,
 } from "../graph/knowledge/system-types/user";
 import { systemAccountId } from "../graph/system-account";
-import { kratosFrontendApi, KratosUserIdentity } from "./ory-kratos";
+import { hydraAdmin } from "./ory-hydra";
+import type { KratosUserIdentity } from "./ory-kratos";
+import { kratosFrontendApi } from "./ory-kratos";
 
 const KRATOS_API_KEY = getRequiredEnv("KRATOS_API_KEY");
 
@@ -22,7 +25,11 @@ const requestHeaderContainsValidKratosApiKey = (req: Request): boolean =>
 const kratosAfterRegistrationHookHandler =
   (
     context: ImpureGraphContext,
-  ): RequestHandler<{}, {}, { identity: KratosUserIdentity }> =>
+  ): RequestHandler<
+    Record<string, never>,
+    string,
+    { identity: KratosUserIdentity }
+  > =>
   (req, res) => {
     const {
       body: {
@@ -119,8 +126,9 @@ export const getUserAndSession = async ({
         /** @todo: figure out if this should be handled here, or in the next.js app (when implementing 2FA) */
       }
       logger.debug(
-        `Kratos response error: Could not fetch session, got: [${err.response
-          ?.status}] ${JSON.stringify(err.response?.data)}`,
+        `Kratos response error: Could not fetch session, got: [${
+          err.response?.status
+        }] ${JSON.stringify(err.response?.data)}`,
       );
       return undefined;
     });
@@ -157,22 +165,43 @@ export const createAuthMiddleware = (params: {
     const authHeader = req.header("authorization");
     const hasAuthHeader = authHeader?.startsWith("Bearer ") ?? false;
 
-    const sessionToken =
+    const accessOrSessionToken =
       hasAuthHeader && typeof authHeader === "string"
         ? authHeader.slice(7, authHeader.length)
         : undefined;
+
+    /** Check if the Bearer token is a valid OAuth2 token */
+    if (accessOrSessionToken) {
+      const introspectionResult = await hydraAdmin.introspectOAuth2Token({
+        token: accessOrSessionToken,
+      });
+      if (introspectionResult.data.active && introspectionResult.data.sub) {
+        const user = await getUserByKratosIdentityId(
+          context,
+          { actorId: publicUserAccountId },
+          {
+            kratosIdentityId: introspectionResult.data.sub,
+          },
+        );
+        if (user) {
+          req.user = user;
+          next();
+          return;
+        }
+      }
+    }
 
     const { session, user } = await getUserAndSession({
       context,
       cookie: req.header("cookie"),
       logger,
-      sessionToken,
+      sessionToken: accessOrSessionToken,
     });
 
     const kratosSession = await kratosFrontendApi
       .toSession({
         cookie: req.header("cookie"),
-        xSessionToken: sessionToken,
+        xSessionToken: accessOrSessionToken,
       })
       .then(({ data }) => data)
       .catch((err: AxiosError) => {
@@ -181,8 +210,9 @@ export const createAuthMiddleware = (params: {
           /** @todo: figure out if this should be handled here, or in the next.js app (when implementing 2FA) */
         }
         logger.debug(
-          `Kratos response error: Could not fetch session, got: [${err.response
-            ?.status}] ${JSON.stringify(err.response?.data)}`,
+          `Kratos response error: Could not fetch session, got: [${
+            err.response?.status
+          }] ${JSON.stringify(err.response?.data)}`,
         );
         return undefined;
       });

@@ -4,7 +4,8 @@ FROM node:20-alpine3.18 AS base
 
 WORKDIR /app
 
-RUN yarn global add turbo && apk add --no-cache yq
+COPY package.json .
+RUN apk add --no-cache jq yq && yarn global add "turbo@$(jq -r '.devDependencies.turbo' < package.json)"
 COPY . .
 # `turbo prune` does not include Cargo workspaces, so we create dummy projects for each workspace member
 RUN turbo prune --scope='@apps/hash-graph' --docker && \
@@ -15,10 +16,10 @@ RUN turbo prune --scope='@apps/hash-graph' --docker && \
         echo > "/app/out/full/$(dirname "$1")/src/lib.rs" &&  \
         echo -e "[package]\nname = \"$(yq ".package.name" -p toml -oy $1)\"" > "/app/out/full/$1" \
       )' _ {} \; && \
-    cp Cargo.toml /app/out/full/
+    cp Cargo.toml Cargo.lock /app/out/full/
 
 
-FROM node:18.15-alpine AS rust
+FROM node:20.13-alpine AS rust
 
 WORKDIR /usr/local/
 
@@ -27,7 +28,7 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=:$PATH:/usr/local/cargo/bin
 
 COPY rust-toolchain.toml .
-RUN apk add --no-cache gcc musl-dev bash && \
+RUN apk add --no-cache gcc musl-dev bash protobuf-dev && \
     wget -q -O- https://sh.rustup.rs | sh -s -- -y --default-toolchain none --profile minimal && \
     rustup show
 

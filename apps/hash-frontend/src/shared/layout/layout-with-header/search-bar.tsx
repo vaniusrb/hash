@@ -1,50 +1,63 @@
-// import { useQuery } from "@apollo/client";
-// import { PageSearchResult } from "../../../../../graphql/api-types.gen";
-import { IconButton } from "@hashintel/design-system";
-import { Box, SxProps, Theme, useMediaQuery, useTheme } from "@mui/material";
-import { escapeRegExp } from "lodash";
+import { useQuery } from "@apollo/client";
+import type { EntityType } from "@blockprotocol/type-system";
+import { Chip, IconButton } from "@hashintel/design-system";
+import type { Filter } from "@local/hash-graph-client";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
 import {
-  FunctionComponent,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+  currentTimeInstantTemporalAxes,
+  zeroedGraphResolveDepths,
+} from "@local/hash-isomorphic-utils/graph-queries";
+import { deserializeSubgraph } from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type {
+  EntityRootType,
+  EntityTypeRootType,
+  Subgraph,
+} from "@local/hash-subgraph";
+import {
+  extractEntityUuidFromEntityId,
+  extractOwnedByIdFromEntityId,
+} from "@local/hash-subgraph";
+import {
+  getEntityTypeById,
+  getRoots,
+  isEntityRootedSubgraph,
+} from "@local/hash-subgraph/stdlib";
+import type { SxProps, Theme } from "@mui/material";
+import { Box, useMediaQuery, useTheme } from "@mui/material";
+import type { FunctionComponent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDebounce, useKey, useOutsideClickRef } from "rooks";
 
-import { HASH_OPENSEARCH_ENABLED } from "../../../lib/public-env";
-import { useAuthenticatedUser } from "../../../pages/shared/auth-info-context";
-import { getBlockDomId } from "../../get-block-dom-id";
+import { useUserOrOrgShortnameByOwnedById } from "../../../components/hooks/use-user-or-org-shortname-by-owned-by-id";
+import type {
+  GetEntitySubgraphQuery,
+  GetEntitySubgraphQueryVariables,
+  QueryEntityTypesQuery,
+  QueryEntityTypesQueryVariables,
+} from "../../../graphql/api-types.gen";
+import { getEntitySubgraphQuery } from "../../../graphql/queries/knowledge/entity.queries";
+import { queryEntityTypesQuery } from "../../../graphql/queries/ontology/entity-type.queries";
+import { generateLinkParameters } from "../../generate-link-parameters";
 import { SearchIcon } from "../../icons";
 import { Button, Link } from "../../ui";
 import { SearchInput } from "./search-bar/search-input";
 
-/** finds the query's words in the result and chops it into parts at the words' boundaries */
-const splitByMatches = (result: string, query: string) => {
-  const separator = query
-    .split(/\s+/g)
-    .sort((a, b) => b.length - a.length) // match longer words first
-    .map(escapeRegExp)
-    .join("|");
-
-  /** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split#splitting_with_a_regexp_to_include_parts_of_the_separator_in_the_result */
-  return result.split(new RegExp(`(${separator})`, "gi"));
-};
-
-const toBlockUrl = (searchPage: any): string => {
-  const segments = [
-    "/",
-    searchPage.page.accountId,
-    "/",
-    searchPage.page.entityId,
-  ];
-
-  if (searchPage.block) {
-    segments.push("#", getBlockDomId(searchPage.block.entityId));
-  }
-
-  return segments.join("");
-};
+/**
+ * finds the query's words in the result and chops it into parts at the words' boundaries
+ * @todo reintroduce this for entities with textual-content – H-2258
+ *    bear in mind that text may not contain the search term, given that it's semantic search
+ */
+// const splitByMatches = (result: string, query: string) => {
+//   const separator = query
+//     .split(/\s+/g)
+//     .sort((a, b) => b.length - a.length) // match longer words first
+//     .map(escapeRegExp)
+//     .join("|");
+//
+//   /** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split#splitting_with_a_regexp_to_include_parts_of_the_separator_in_the_result */
+//   return result.split(new RegExp(`(${separator})`, "gi"));
+// };
 
 const ResultList: FunctionComponent<{
   isMobile: boolean;
@@ -55,7 +68,7 @@ const ResultList: FunctionComponent<{
     sx={(theme) => ({
       position: !isMobile ? "absolute" : "unset",
       top: !isMobile ? "calc(100% + 1px)" : "unset",
-      zIndex: 10,
+      zIndex: 10_000,
       width: "100%",
       maxHeight: "15rem",
       overflow: "auto",
@@ -97,6 +110,58 @@ const ResultItem: FunctionComponent<{
   );
 };
 
+const chipStyles = { cursor: "pointer !important", ml: 1 };
+
+const EntityResult: FunctionComponent<{
+  entity: Entity;
+  onClick: () => void;
+  subgraph: Subgraph<EntityRootType>;
+}> = ({ entity, onClick, subgraph }) => {
+  const entityId = entity.metadata.recordId.entityId;
+
+  const ownedById = extractOwnedByIdFromEntityId(entityId);
+  const { shortname: entityOwningShortname } = useUserOrOrgShortnameByOwnedById(
+    { ownedById },
+  );
+
+  const entityType = getEntityTypeById(subgraph, entity.metadata.entityTypeId);
+
+  return (
+    <Link
+      onClick={onClick}
+      noLinkStyle
+      href={`/@${entityOwningShortname}/entities/${extractEntityUuidFromEntityId(
+        entityId,
+      )}`}
+    >
+      <ResultItem>
+        {generateEntityLabel(subgraph, entity)}
+        {entityType && (
+          <Chip color="teal" label={entityType.schema.title} sx={chipStyles} />
+        )}
+      </ResultItem>
+    </Link>
+  );
+};
+
+const EntityTypeResult: FunctionComponent<{
+  entityType: EntityType;
+  onClick: () => void;
+}> = ({ entityType, onClick }) => {
+  return (
+    <Link
+      onClick={onClick}
+      noLinkStyle
+      href={generateLinkParameters(entityType.$id)}
+    >
+      <ResultItem>
+        {entityType.title}
+        <Chip color="aqua" label="Entity Type" sx={chipStyles} />
+      </ResultItem>
+    </Link>
+  );
+};
+
 /** extends react's useState by returning an additional value updated after a short delay (debounce) */
 const useQueryText = (): [string, string, (queryText: string) => void] => {
   const [displayedQuery, setDisplayedQuery] = useState("");
@@ -123,7 +188,7 @@ const getSearchBarResponsiveStyles = (
       return {
         position: "absolute",
         width: "100%",
-        zIndex: 1,
+        zIndex: ({ zIndex }) => zIndex.drawer + 5,
         left: 0,
         top: "12px",
         px: 2,
@@ -138,7 +203,12 @@ const getSearchBarResponsiveStyles = (
   return {};
 };
 
-const SearchBarWhenSearchIsEnabled: FunctionComponent = () => {
+/**
+ * The maximum distance between the search query and an entity's embedding for it to appear in results
+ */
+const maximumSemanticDistance = 0.7;
+
+export const SearchBar: FunctionComponent = () => {
   const theme = useTheme();
 
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -154,32 +224,82 @@ const SearchBarWhenSearchIsEnabled: FunctionComponent = () => {
     }
   }, [displayedQuery, displaySearchInput]);
 
-  const { authenticatedUser: _ } = useAuthenticatedUser();
+  const queryFilter: Filter = useMemo(
+    () => ({
+      cosineDistance: [
+        { path: ["embedding"] },
+        {
+          parameter: submittedQuery,
+        },
+        { parameter: maximumSemanticDistance },
+      ],
+    }),
+    [submittedQuery],
+  );
 
-  const data: any = [];
-  const loading = false;
-  /**
-   * @todo: We currently do not support search, see https://app.asana.com/0/1201095311341924/1202681411010022/f
-   */
-  // const { data, loading } = useQuery<
-  //   SearchPagesQuery,
-  //   SearchPagesQueryVariables
-  // >(searchPages, {
-  //   variables: {
-  //     accountId: authenticatedUser!.entityId,
-  //     query: submittedQuery,
-  //   },
-  //   skip: !authenticatedUser?.entityId || !submittedQuery,
-  //   fetchPolicy: "network-only",
-  // });
+  const { data: entityResultData, loading: entitiesLoading } = useQuery<
+    GetEntitySubgraphQuery,
+    GetEntitySubgraphQueryVariables
+  >(getEntitySubgraphQuery, {
+    variables: {
+      request: {
+        filter: queryFilter,
+        temporalAxes: currentTimeInstantTemporalAxes,
+        graphResolveDepths: {
+          ...zeroedGraphResolveDepths,
+          inheritsFrom: { outgoing: 255 },
+          isOfType: { outgoing: 1 },
+        },
+        includeDrafts: false,
+      },
+      includePermissions: false,
+    },
+    skip: !submittedQuery,
+  });
+
+  const { data: entityTypeResultData, loading: entityTypesLoading } = useQuery<
+    QueryEntityTypesQuery,
+    QueryEntityTypesQueryVariables
+  >(queryEntityTypesQuery, {
+    variables: {
+      filter: queryFilter,
+      latestOnly: true,
+      ...zeroedGraphResolveDepths,
+    },
+    skip: !submittedQuery,
+  });
+
+  const deserializedEntitySubgraph = entityResultData
+    ? deserializeSubgraph(entityResultData.getEntitySubgraph.subgraph)
+    : undefined;
+  const entitySubgraph =
+    deserializedEntitySubgraph &&
+    isEntityRootedSubgraph(deserializedEntitySubgraph)
+      ? deserializedEntitySubgraph
+      : undefined;
+  const entityResults = entitySubgraph ? getRoots(entitySubgraph) : [];
+
+  const entityTypeSubgraph =
+    entityTypeResultData &&
+    /**
+     * Ideally we would use {@link isEntityTypeRootedSubgraph} here, but we cannot because one of the checks it makes
+     * is that the root's revisionId is a stringified integer. In HASH, the revisionId for a type root is a number.
+     * Either the types in @blockprotocol/graph or the value delivered by HASH needs to change
+     * H-2489
+     */
+    deserializeSubgraph<EntityTypeRootType>(
+      entityTypeResultData.queryEntityTypes,
+    );
+
+  const entityTypeResults = entityTypeSubgraph
+    ? getRoots(entityTypeSubgraph)
+    : [];
 
   useKey(["Escape"], () => setResultListVisible(false));
 
   const [rootRef] = useOutsideClickRef(() => setResultListVisible(false));
 
-  // present loading screen while waiting for the user to stop typing
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- @todo improve logic or types to remove this comment
-  const isLoading = loading || displayedQuery !== submittedQuery;
+  const isLoading = entityTypesLoading || entitiesLoading;
 
   return (
     <Box
@@ -206,7 +326,6 @@ const SearchBarWhenSearchIsEnabled: FunctionComponent = () => {
             alignItems: "center",
             width: "100%",
             background: "white",
-            zIndex: 1,
           }}
         >
           <SearchInput
@@ -234,43 +353,39 @@ const SearchBarWhenSearchIsEnabled: FunctionComponent = () => {
 
       {isResultListVisible && displayedQuery && (
         <ResultList isMobile={isMobile}>
-          {isLoading ? (
+          {submittedQuery !== displayedQuery ? null : isLoading ? (
             <ResultItem sx={{ display: "block" }}>
               Loading results for&nbsp;<b>{submittedQuery}</b>.
             </ResultItem>
-          ) : !data?.searchPages.length ? (
+          ) : !entityResults.length && !entityTypeResults.length ? (
             <ResultItem sx={{ display: "block" }}>
               No results found for&nbsp;<b>{submittedQuery}</b>.
             </ResultItem>
           ) : (
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            data.searchPages.map((searchPage: any) => (
-              <ResultItem
-                key={searchPage.block?.entityId ?? searchPage.page.entityId}
-              >
-                <Link noLinkStyle href={toBlockUrl(searchPage)}>
-                  <a>
-                    {splitByMatches(searchPage.content, submittedQuery).map(
-                      // eslint-disable-next-line react/no-array-index-key
-                      (str, i) => (i % 2 === 1 ? <b key={i}>{str}</b> : str),
-                    )}
-                  </a>
-                </Link>
-              </ResultItem>
-            ))
+            <>
+              {entityTypeResults.map((entityType) => {
+                return (
+                  <EntityTypeResult
+                    onClick={() => setResultListVisible(false)}
+                    entityType={entityType.schema}
+                    key={entityType.schema.$id}
+                  />
+                );
+              })}
+              {entityResults.map((entity) => {
+                return (
+                  <EntityResult
+                    onClick={() => setResultListVisible(false)}
+                    key={entity.metadata.recordId.entityId}
+                    entity={entity}
+                    subgraph={entitySubgraph!}
+                  />
+                );
+              })}
+            </>
           )}
         </ResultList>
       )}
     </Box>
   );
 };
-
-const SearchBarWhenSearchIsDisabled: FunctionComponent = () => {
-  return <div />;
-};
-
-// Note: This component becomes empty is opensearch is disabled
-export const SearchBar =
-  HASH_OPENSEARCH_ENABLED === "true"
-    ? SearchBarWhenSearchIsEnabled
-    : SearchBarWhenSearchIsDisabled;

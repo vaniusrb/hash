@@ -2,24 +2,34 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   ConnectionSourceNamePropertyValue,
+  ConnectionSourceNamePropertyValueWithMetadata,
   ExpiredAtPropertyValue,
+  ExpiredAtPropertyValueWithMetadata,
   TextDataType,
+  TextDataTypeWithMetadata,
   UserSecret,
   UserSecretOutgoingLinkAndTarget,
   UserSecretOutgoingLinksByLinkEntityTypeId,
   UserSecretProperties,
+  UserSecretPropertiesWithMetadata,
   VaultPathPropertyValue,
-} from "./shared";
+  VaultPathPropertyValueWithMetadata,
+} from "./shared.js";
 
 export type {
   ConnectionSourceNamePropertyValue,
+  ConnectionSourceNamePropertyValueWithMetadata,
   ExpiredAtPropertyValue,
+  ExpiredAtPropertyValueWithMetadata,
   TextDataType,
+  TextDataTypeWithMetadata,
   UserSecret,
   UserSecretOutgoingLinkAndTarget,
   UserSecretOutgoingLinksByLinkEntityTypeId,
   UserSecretProperties,
+  UserSecretPropertiesWithMetadata,
   VaultPathPropertyValue,
+  VaultPathPropertyValueWithMetadata,
 };

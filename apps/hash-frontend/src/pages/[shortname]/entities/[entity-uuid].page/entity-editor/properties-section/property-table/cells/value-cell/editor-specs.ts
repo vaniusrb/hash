@@ -1,19 +1,23 @@
-import { IconDefinition } from "@fortawesome/free-solid-svg-icons";
-import type { CustomIcon } from "@glideapps/glide-data-grid/dist/ts/data-grid/data-grid-sprites";
+import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
 import {
   fa100,
   faAsterisk,
   faAtRegular,
   faBracketsCurly,
   faBracketsSquare,
+  faCalendarClockRegular,
+  faCalendarRegular,
+  faClockRegular,
   faEmptySet,
   faInputPipeRegular,
   faRulerRegular,
   faSquareCheck,
   faText,
 } from "@hashintel/design-system";
+import type { CustomDataType } from "@local/hash-graph-types/ontology";
 
-import { EditorType } from "./types";
+import type { CustomIcon } from "../../../../../../../../../components/grid/utils/custom-grid-icons";
+import type { EditorType } from "./types";
 
 interface EditorSpec {
   icon: IconDefinition["icon"];
@@ -83,13 +87,13 @@ const identifierTypeTitles = ["URL", "URI"];
 
 export const getEditorSpecs = (
   editorType: EditorType,
-  dataTypeTitle?: string,
+  dataType?: CustomDataType,
 ): EditorSpec => {
   switch (editorType) {
     case "boolean":
       return editorSpecs.boolean;
     case "number":
-      if (dataTypeTitle && measurementTypeTitles.includes(dataTypeTitle)) {
+      if (dataType?.title && measurementTypeTitles.includes(dataType.title)) {
         return {
           ...editorSpecs.number,
           icon: faRulerRegular,
@@ -98,14 +102,48 @@ export const getEditorSpecs = (
       }
       return editorSpecs.number;
     case "string":
-      if (dataTypeTitle === "Email") {
+      if (dataType && "format" in dataType) {
+        switch (dataType.format) {
+          case "uri":
+            return {
+              ...editorSpecs.string,
+              icon: faInputPipeRegular,
+              gridIcon: "inputPipeRegular",
+            };
+          case "email":
+            return {
+              ...editorSpecs.string,
+              icon: faAtRegular,
+              gridIcon: "atRegular",
+            };
+          case "date":
+            return {
+              ...editorSpecs.string,
+              icon: faCalendarRegular,
+              gridIcon: "calendarRegular",
+            };
+          case "time":
+            return {
+              ...editorSpecs.string,
+              icon: faClockRegular,
+              gridIcon: "clockRegular",
+            };
+          case "date-time":
+            return {
+              ...editorSpecs.string,
+              icon: faCalendarClockRegular,
+              gridIcon: "calendarClockRegular",
+            };
+        }
+      }
+      if (dataType?.title === "Email") {
         return {
           ...editorSpecs.string,
           icon: faAtRegular,
           gridIcon: "atRegular",
         };
       }
-      if (dataTypeTitle && identifierTypeTitles.includes(dataTypeTitle)) {
+      if (dataType?.title && identifierTypeTitles.includes(dataType.title)) {
         return {
           ...editorSpecs.string,
           icon: faInputPipeRegular,

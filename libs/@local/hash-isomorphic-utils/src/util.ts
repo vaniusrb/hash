@@ -1,10 +1,9 @@
-// @todo this should be defined elsewhere
-import { uniq } from "lodash";
+import { uniq } from "lodash-es";
 
 /**
  * This behaves differently from the type `{}`, and will error if you set more properties on it.
  */
-export type EmptyObject = Record<any, never>;
+export type EmptyObject = Record<string, never>;
 
 /**
  * @see https://github.com/microsoft/TypeScript/issues/25720#issuecomment-533438205
@@ -17,7 +16,7 @@ export const isUnknownObject = (
 /**
  * This allows you to collect calls to a function to run at the end of a tick
  */
-export const collect = <P extends Array<any>>(
+export const collect = <P extends Array<unknown>>(
   handler: (calls: P[]) => void,
 ): ((...args: P) => void) => {
   let id: ReturnType<typeof setImmediate> | null = null;
@@ -93,7 +92,7 @@ export const topologicalSort = <T>(edges: [T, T][]) => {
     sort.push(node);
     const nodeOutgoing = outgoingEdges.get(node);
     for (const child of Array.from(nodeOutgoing.values())) {
-      const childIncoming = incomingEdges.get(child)!;
+      const childIncoming = incomingEdges.get(child);
       // Remove the (node, child) edge from the graph
       nodeOutgoing.delete(child);
       childIncoming.delete(node);
@@ -117,10 +116,12 @@ export const topologicalSort = <T>(edges: [T, T][]) => {
  * Restructure a list of elements with parent references into a tree
  * This will ignore elements with missing parent entities and add them at the root level
  * This can be used for recreating a page tree structure from the list of an account's pages
- * @param elements is the list of elements that should contain an id and optionally reference to a parent and a list of children
+ * @param elements is the list of elements that should contain an id and optionally reference to a parent and a list of
+ *   children
  * @param key is the name of the id property on the element, used to strongly type the code
  * @param reference is the name of the parent reference property on the element
- * @param recursive is the name of the property that deals with children of an element. This will be populated with the tree structure.
+ * @param recursive is the name of the property that deals with children of an element. This will be populated with the
+ *   tree structure.
  */
 export const treeFromParentReferences = <
   Element extends {
@@ -172,7 +173,6 @@ export const treeFromParentReferences = <
      *  }
      * */
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- @todo improve logic or types to remove this comment
     if (existingParent[recursive]) {
       existingParent[recursive].push(current);
     } else {
@@ -214,10 +214,3 @@ export const flatMapTree = <T>(graph: object, fn: (a: unknown) => T[]) => {
 
   return result;
 };
-
-/**
- * Use to check if current browser is Safari or not
- */
-export const isSafariBrowser = () =>
-  navigator.userAgent.indexOf("Safari") > -1 &&
-  navigator.userAgent.indexOf("Chrome") <= -1;

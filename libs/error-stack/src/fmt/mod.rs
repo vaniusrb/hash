@@ -42,7 +42,7 @@
 //! ```rust
 //! # // we only test with nightly, which means that `render()` is unused on earlier version
 //! # #![cfg_attr(not(nightly), allow(dead_code, unused_variables, unused_imports))]
-//! use std::fmt::{Display, Formatter};
+//! use core::fmt::{Display, Formatter};
 //! use std::io::{Error, ErrorKind};
 //! use error_stack::Report;
 //!
@@ -299,9 +299,10 @@ mod hook;
 mod location;
 mod r#override;
 
+use alloc::collections::VecDeque;
+#[cfg_attr(feature = "std", allow(unused_imports))]
 use alloc::{
     borrow::ToOwned,
-    collections::VecDeque,
     format,
     string::{String, ToString},
     vec,

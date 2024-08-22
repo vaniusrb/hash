@@ -1,7 +1,9 @@
-import { BlockVariant } from "@blockprotocol/core";
-import { HashBlockMeta } from "@local/hash-isomorphic-utils/blocks";
-import { Box, SxProps, Theme, Typography } from "@mui/material";
-import { FunctionComponent, useMemo } from "react";
+import type { BlockVariant } from "@blockprotocol/core";
+import type { HashBlockMeta } from "@local/hash-isomorphic-utils/blocks";
+import type { SxProps, Theme } from "@mui/material";
+import { Box, Typography } from "@mui/material";
+import type { FunctionComponent } from "react";
+import { useMemo } from "react";
 
 import { useUserBlocks } from "../../../../blocks/user-blocks";
 import { WarnIcon } from "../../../../shared/icons";
@@ -52,7 +54,6 @@ export const BlockSuggester: FunctionComponent<BlockSuggesterProps> = ({
                   width: "1.5rem",
                 }}
                 alt={option.variant.name}
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- improve logic or types to remove this comment
                 src={option.variant.icon ?? "/format-font.svg"}
               />
             )}

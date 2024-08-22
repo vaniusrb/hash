@@ -1,7 +1,6 @@
-use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap},
-    hash::Hash,
-};
+use alloc::collections::BTreeMap;
+use core::hash::Hash;
+use std::collections::{hash_map::Entry, HashMap};
 
 use graph::subgraph::{
     edges::{KnowledgeGraphEdgeKind, OntologyEdgeKind, OutwardEdge, SharedEdgeKind},
@@ -10,10 +9,10 @@ use graph::subgraph::{
     },
     temporal_axes::VariableAxis,
 };
-use graph_types::{knowledge::entity::EntityId, ontology::OntologyTypeVersion};
+use graph_types::knowledge::entity::EntityId;
 use serde::Serialize;
 use temporal_versioning::Timestamp;
-use type_system::url::BaseUrl;
+use type_system::url::{BaseUrl, OntologyTypeVersion};
 use utoipa::{
     openapi::{schema::AdditionalProperties, ObjectBuilder, OneOfBuilder, Ref, RefOr, Schema},
     ToSchema,
@@ -136,21 +135,21 @@ impl ToSchema<'_> for KnowledgeGraphOutwardEdge {
 #[derive(Default, Debug, Serialize)]
 #[serde(transparent)]
 pub(crate) struct KnowledgeGraphRootedEdges(
-    pub(crate) HashMap<EntityId, BTreeMap<Timestamp<VariableAxis>, Vec<KnowledgeGraphOutwardEdge>>>,
+    HashMap<EntityId, BTreeMap<Timestamp<VariableAxis>, Vec<KnowledgeGraphOutwardEdge>>>,
 );
 
 #[derive(Default, Debug, Serialize)]
 #[serde(transparent)]
 pub(crate) struct OntologyRootedEdges(
-    pub(crate) HashMap<BaseUrl, BTreeMap<OntologyTypeVersion, Vec<OntologyOutwardEdge>>>,
+    HashMap<BaseUrl, BTreeMap<OntologyTypeVersion, Vec<OntologyOutwardEdge>>>,
 );
 
 #[derive(Serialize)]
 pub(crate) struct Edges {
     #[serde(flatten)]
-    pub(crate) ontology: OntologyRootedEdges,
+    ontology: OntologyRootedEdges,
     #[serde(flatten)]
-    pub(crate) knowledge_graph: KnowledgeGraphRootedEdges,
+    knowledge_graph: KnowledgeGraphRootedEdges,
 }
 
 fn collect_merge<T: Hash + Eq, U: Ord, V>(
@@ -245,13 +244,12 @@ mod tests {
     };
     use graph_types::{
         knowledge::entity::{EntityId, EntityUuid},
-        ontology::OntologyTypeVersion,
         owned_by_id::OwnedById,
     };
     use temporal_versioning::{
         ClosedTemporalBound, LeftClosedTemporalInterval, OpenTemporalBound, Timestamp,
     };
-    use type_system::url::BaseUrl;
+    use type_system::url::{BaseUrl, OntologyTypeVersion};
     use uuid::Uuid;
 
     use crate::rest::utoipa_typedef::subgraph::Edges;
@@ -262,6 +260,7 @@ mod tests {
             base_id: EntityId {
                 owned_by_id: OwnedById::new(Uuid::new_v4()),
                 entity_uuid: EntityUuid::new(Uuid::new_v4()),
+                draft_id: None,
             },
             revision_id: Timestamp::now(),
         };
@@ -277,6 +276,7 @@ mod tests {
                 entity_id: EntityId {
                     owned_by_id: OwnedById::new(Uuid::new_v4()),
                     entity_uuid: EntityUuid::new(Uuid::new_v4()),
+                    draft_id: None,
                 },
                 interval: LeftClosedTemporalInterval::new(
                     ClosedTemporalBound::Inclusive(Timestamp::now()),

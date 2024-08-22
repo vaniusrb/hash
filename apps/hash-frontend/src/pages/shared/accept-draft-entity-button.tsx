@@ -1,13 +1,16 @@
 import { useMutation } from "@apollo/client";
 import { AlertModal, FeatherRegularIcon } from "@hashintel/design-system";
+import { Entity, LinkEntity } from "@local/hash-graph-sdk/entity";
 import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
-import { Entity, EntityRootType, Subgraph } from "@local/hash-subgraph/.";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
+import { extractDraftIdFromEntityId } from "@local/hash-subgraph";
 import { getEntityRevision } from "@local/hash-subgraph/stdlib";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
-import { BoxProps, Typography } from "@mui/material";
-import { FunctionComponent, useCallback, useMemo, useState } from "react";
+import type { BoxProps } from "@mui/material";
+import { Typography } from "@mui/material";
+import type { FunctionComponent } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import {
+import type {
   UpdateEntityMutation,
   UpdateEntityMutationVariables,
 } from "../../graphql/api-types.gen";
@@ -15,7 +18,8 @@ import { updateEntityMutation } from "../../graphql/queries/knowledge/entity.que
 import { useDraftEntities } from "../../shared/draft-entities-context";
 import { CheckRegularIcon } from "../../shared/icons/check-regular-icon";
 import { useNotificationEntities } from "../../shared/notification-entities-context";
-import { Button, ButtonProps } from "../../shared/ui";
+import type { ButtonProps } from "../../shared/ui";
+import { Button } from "../../shared/ui";
 import { LinkLabelWithSourceAndDestination } from "./link-label-with-source-and-destination";
 import { useNotificationsWithLinks } from "./notifications-with-links-context";
 
@@ -35,6 +39,8 @@ const LeftOrRightEntityEndAdornment: FunctionComponent<{
         position: "relative",
         top: 1,
       },
+      textTransform: "uppercase",
+      flexShrink: 0,
     }}
   >
     {isDraft ? (
@@ -67,7 +73,7 @@ export const AcceptDraftEntityButton: FunctionComponent<
   {
     draftEntity: Entity;
     draftEntitySubgraph: Subgraph<EntityRootType>;
-    onAcceptedEntity?: (acceptedEntity: Entity) => void;
+    onAcceptedEntity: ((acceptedEntity: Entity) => void) | null;
   } & ButtonProps
 > = ({
   draftEntity,
@@ -87,29 +93,43 @@ export const AcceptDraftEntityButton: FunctionComponent<
         draftEntity.linkData.leftEntityId,
       );
 
-      if (!leftEntity) {
-        throw new Error("Left entity of link entity not found in subgraph.");
-      }
-
       const rightEntity = getEntityRevision(
         draftEntitySubgraph,
         draftEntity.linkData.rightEntityId,
       );
 
-      if (!rightEntity) {
-        throw new Error("Right entity of link entity not found in subgraph.");
-      }
-
       return {
-        draftLeftEntity: leftEntity.metadata.draft ? leftEntity : undefined,
-        draftRightEntity: rightEntity.metadata.draft ? rightEntity : undefined,
+        /**
+         * Note: if a left or right draft entity has already been archived, it
+         * may not be present in the subgraph. This is why the `leftEntity` and
+         * `rightEntity` are nullable in this context.
+         */
+        draftLeftEntity:
+          leftEntity &&
+          extractDraftIdFromEntityId(leftEntity.metadata.recordId.entityId)
+            ? leftEntity
+            : undefined,
+        draftRightEntity:
+          rightEntity &&
+          extractDraftIdFromEntityId(rightEntity.metadata.recordId.entityId)
+            ? rightEntity
+            : undefined,
       };
     }
 
     return {};
   }, [draftEntity, draftEntitySubgraph]);
 
-  const hasLeftOrRightDraftEntity = !!draftLeftEntity || !!draftRightEntity;
+  const isUpdate =
+    !!draftEntity.metadata.provenance.firstNonDraftCreatedAtDecisionTime;
+
+  /**
+   * Links cannot be made live without live left && right entities, so if this is a draft update to a live link
+   * there must already be live left and right entities, and the user doesn't need to accept draft updates to
+   * those at the same time – they may be unwanted.
+   */
+  const hasLeftOrRightDraftEntityThatMustBeUndrafted =
+    !isUpdate && (!!draftLeftEntity || !!draftRightEntity);
 
   const [updateEntity] = useMutation<
     UpdateEntityMutation,
@@ -121,6 +141,10 @@ export const AcceptDraftEntityButton: FunctionComponent<
   const { markNotificationAsRead } = useNotificationEntities();
   const { notifications } = useNotificationsWithLinks();
 
+  /**
+   * Notifications are no longer created for draft entities, but they will exist for existing draft entities.
+   * Can be removed in the future – change to stop notifs for draft entities made in March 2024.
+   */
   const markRelatedGraphChangeNotificationsAsRead = useCallback(
     async (params: { draftEntity: Entity }) => {
       const relatedGraphChangeNotifications =
@@ -146,9 +170,11 @@ export const AcceptDraftEntityButton: FunctionComponent<
 
       const response = await updateEntity({
         variables: {
-          entityId: params.draftEntity.metadata.recordId.entityId,
-          updatedProperties: params.draftEntity.properties,
-          draft: false,
+          entityUpdate: {
+            entityId: params.draftEntity.metadata.recordId.entityId,
+            draft: false,
+            propertyPatches: [],
+          },
         },
       });
 
@@ -158,7 +184,7 @@ export const AcceptDraftEntityButton: FunctionComponent<
         throw new Error("An error occurred accepting the draft entity.");
       }
 
-      return response.data.updateEntity;
+      return new Entity(response.data.updateEntity);
     },
     [
       updateEntity,
@@ -168,7 +194,7 @@ export const AcceptDraftEntityButton: FunctionComponent<
   );
 
   const handleAccept = useCallback(async () => {
-    if (hasLeftOrRightDraftEntity) {
+    if (hasLeftOrRightDraftEntityThatMustBeUndrafted) {
       setShowDraftLinkEntityWithDraftLeftOrRightEntityWarning(true);
     } else {
       const acceptedEntity = await acceptDraftEntity({ draftEntity });
@@ -176,7 +202,7 @@ export const AcceptDraftEntityButton: FunctionComponent<
     }
   }, [
     onAcceptedEntity,
-    hasLeftOrRightDraftEntity,
+    hasLeftOrRightDraftEntityThatMustBeUndrafted,
     acceptDraftEntity,
     draftEntity,
   ]);
@@ -225,10 +251,19 @@ export const AcceptDraftEntityButton: FunctionComponent<
             </>
           }
           type="info"
+          contentStyle={{
+            width: {
+              sm: "90%",
+              md: 700,
+            },
+          }}
         >
           <LinkLabelWithSourceAndDestination
+            sx={{
+              maxWidth: "100%",
+            }}
             openInNew
-            linkEntity={draftEntity as LinkEntity}
+            linkEntity={new LinkEntity(draftEntity)}
             subgraph={draftEntitySubgraph}
             leftEntityEndAdornment={
               <LeftOrRightEntityEndAdornment isDraft={!!draftLeftEntity} />

@@ -1,10 +1,9 @@
 import { useQuery } from "@apollo/client";
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { Filter } from "@local/hash-graph-client";
-import {
-  getFirstEntityRevision,
-  TextProperties,
-} from "@local/hash-isomorphic-utils/entity";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import { typedEntries, typedValues } from "@local/advanced-types/typed-entries";
+import type { Filter } from "@local/hash-graph-client";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { TextWithTokens } from "@local/hash-isomorphic-utils/entity";
 import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
 import {
   currentTimeInstantTemporalAxes,
@@ -15,54 +14,46 @@ import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import {
-  SimpleProperties,
-  simplifyProperties,
-} from "@local/hash-isomorphic-utils/simplify-properties";
-import {
-  BlockProperties,
-  CommentNotificationProperties,
-  CommentProperties,
-  NotificationProperties,
-  OccurredInEntityProperties,
-  PageProperties,
-  UserProperties,
+import type { SimpleProperties } from "@local/hash-isomorphic-utils/simplify-properties";
+import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
+import type {
+  Block as BlockProperties,
+  Comment as CommentProperties,
+  CommentNotification as CommentNotificationProperties,
+  Notification as NotificationProperties,
+  OccurredInEntity as OccurredInEntityProperties,
+  Page as PageProperties,
 } from "@local/hash-isomorphic-utils/system-types/commentnotification";
-import { GraphChangeNotificationProperties } from "@local/hash-isomorphic-utils/system-types/graphchangenotification";
-import { MentionNotificationProperties } from "@local/hash-isomorphic-utils/system-types/mentionnotification";
-import {
-  Entity,
+import type { GraphChangeNotification as GraphChangeNotificationProperties } from "@local/hash-isomorphic-utils/system-types/graphchangenotification";
+import type { MentionNotification as MentionNotificationProperties } from "@local/hash-isomorphic-utils/system-types/mentionnotification";
+import type { User as UserProperties } from "@local/hash-isomorphic-utils/system-types/user";
+import type {
   EntityRootType,
-  extractEntityUuidFromEntityId,
+  EntityVertex,
   LinkEntityAndRightEntity,
 } from "@local/hash-subgraph";
+import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
 import { getOutgoingLinkAndTargetEntities } from "@local/hash-subgraph/stdlib";
-import {
-  createContext,
-  FunctionComponent,
-  PropsWithChildren,
-  useContext,
-  useMemo,
-  useRef,
-} from "react";
+import type { FunctionComponent, PropsWithChildren } from "react";
+import { createContext, useContext, useMemo, useRef } from "react";
 
-import {
-  StructuralQueryEntitiesQuery,
-  StructuralQueryEntitiesQueryVariables,
+import type {
+  GetEntitySubgraphQuery,
+  GetEntitySubgraphQueryVariables,
 } from "../../graphql/api-types.gen";
-import { structuralQueryEntitiesQuery } from "../../graphql/queries/knowledge/entity.queries";
-import { constructMinimalUser, MinimalUser } from "../../lib/user-and-org";
+import { getEntitySubgraphQuery } from "../../graphql/queries/knowledge/entity.queries";
+import type { MinimalUser } from "../../lib/user-and-org";
+import { constructMinimalUser } from "../../lib/user-and-org";
 import { useNotificationEntities } from "../../shared/notification-entities-context";
 
 export type PageMentionNotification = {
   kind: "page-mention";
-  createdAt: Date;
   entity: Entity<MentionNotificationProperties>;
   occurredInEntity: Entity<PageProperties>;
   occurredInBlock: Entity<BlockProperties>;
-  occurredInText: Entity<TextProperties>;
+  occurredInText: Entity<TextWithTokens>;
   triggeredByUser: MinimalUser;
-} & SimpleProperties<MentionNotificationProperties>;
+} & SimpleProperties<MentionNotificationProperties["properties"]>;
 
 export type CommentMentionNotification = {
   kind: "comment-mention";
@@ -71,13 +62,12 @@ export type CommentMentionNotification = {
 
 export type NewCommentNotification = {
   kind: "new-comment";
-  createdAt: Date;
   entity: Entity<CommentNotificationProperties>;
   occurredInEntity: Entity<PageProperties>;
   occurredInBlock: Entity<BlockProperties>;
   triggeredByComment: Entity<CommentProperties>;
   triggeredByUser: MinimalUser;
-} & SimpleProperties<CommentNotificationProperties>;
+} & SimpleProperties<CommentNotificationProperties["properties"]>;
 
 export type CommentReplyNotification = {
   kind: "comment-reply";
@@ -91,14 +81,13 @@ export type PageRelatedNotification =
   | CommentReplyNotification;
 
 export type GraphChangeNotification = {
-  createdAt: Date;
   entity: Entity<GraphChangeNotificationProperties>;
   kind: "graph-change";
   occurredInEntityEditionTimestamp: string | undefined;
   occurredInEntityLabel: string;
   occurredInEntity: Entity;
   operation: string;
-} & SimpleProperties<NotificationProperties>;
+} & SimpleProperties<NotificationProperties["properties"]>;
 
 export type Notification = PageRelatedNotification | GraphChangeNotification;
 
@@ -133,12 +122,12 @@ export const useNotificationsWithLinksContextValue =
     const getNotificationEntitiesFilter = useMemo<Filter>(
       () => ({
         any:
-          notificationEntities?.map((draftEntity) => ({
+          notificationEntities?.map((entity) => ({
             equal: [
               { path: ["uuid"] },
               {
                 parameter: extractEntityUuidFromEntityId(
-                  draftEntity.metadata.recordId.entityId,
+                  entity.metadata.recordId.entityId,
                 ),
               },
             ],
@@ -148,12 +137,12 @@ export const useNotificationsWithLinksContextValue =
     );
 
     const { data: notificationsWithOutgoingLinksData } = useQuery<
-      StructuralQueryEntitiesQuery,
-      StructuralQueryEntitiesQueryVariables
-    >(structuralQueryEntitiesQuery, {
+      GetEntitySubgraphQuery,
+      GetEntitySubgraphQueryVariables
+    >(getEntitySubgraphQuery, {
       variables: {
         includePermissions: false,
-        query: {
+        request: {
           filter: getNotificationEntitiesFilter,
           graphResolveDepths: {
             ...zeroedGraphResolveDepths,
@@ -175,46 +164,11 @@ export const useNotificationsWithLinksContextValue =
       () =>
         notificationsWithOutgoingLinksData
           ? mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
-              notificationsWithOutgoingLinksData.structuralQueryEntities
-                .subgraph,
+              notificationsWithOutgoingLinksData.getEntitySubgraph.subgraph,
             )
           : undefined,
       [notificationsWithOutgoingLinksData],
     );
-
-    const {
-      data: notificationRevisionsData,
-      loading: loadingNotificationRevisions,
-    } = useQuery<
-      StructuralQueryEntitiesQuery,
-      StructuralQueryEntitiesQueryVariables
-    >(structuralQueryEntitiesQuery, {
-      variables: {
-        includePermissions: false,
-        query: {
-          filter: getNotificationEntitiesFilter,
-          graphResolveDepths: zeroedGraphResolveDepths,
-          /**
-           * We need to obtain all revisions of the notifications
-           * to determine when they were created.
-           *
-           * @todo update this when we can obtain the created at timestamp
-           * from the latest revision of an entity
-           * @see https://linear.app/hash/issue/H-1098/expose-created-at-createdat-without-needing-to-fetch-entire-entity
-           */
-          temporalAxes: {
-            pinned: { axis: "transactionTime", timestamp: null },
-            variable: {
-              axis: "decisionTime",
-              interval: { start: { kind: "unbounded" }, end: null },
-            },
-          },
-          includeDrafts: false,
-        },
-      },
-      skip: !notificationEntities || notificationEntities.length === 0,
-      fetchPolicy: "network-only",
-    });
 
     const previouslyFetchedNotificationsRef = useRef<Notification[] | null>(
       null,
@@ -223,25 +177,7 @@ export const useNotificationsWithLinksContextValue =
     const notifications = useMemo<Notification[] | undefined>(() => {
       if (notificationEntities && notificationEntities.length === 0) {
         return [];
-      } else if (
-        !outgoingLinksSubgraph ||
-        !notificationEntities ||
-        !notificationRevisionsData ||
-        loadingNotificationRevisions
-      ) {
-        return previouslyFetchedNotificationsRef.current ?? undefined;
-      }
-
-      const revisionsSubgraph =
-        mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
-          notificationRevisionsData.structuralQueryEntities.subgraph,
-        );
-
-      /**
-       * For some reason the revisionsSubgraph query can return an empty subgraph occasionally
-       * @todo figure out why H-1706
-       */
-      if (notificationEntities.length && !revisionsSubgraph.roots.length) {
+      } else if (!outgoingLinksSubgraph || !notificationEntities) {
         return previouslyFetchedNotificationsRef.current ?? undefined;
       }
 
@@ -253,15 +189,6 @@ export const useNotificationsWithLinksContextValue =
               recordId: { entityId },
             },
           } = entity;
-
-          const firstRevision = getFirstEntityRevision(
-            revisionsSubgraph,
-            entityId,
-          );
-
-          const createdAt = new Date(
-            firstRevision.metadata.temporalVersioning.decisionTime.start.limit,
-          );
 
           const { readAt } = simplifyProperties(entity.properties);
 
@@ -322,11 +249,10 @@ export const useNotificationsWithLinksContextValue =
               return {
                 kind: "comment-mention",
                 readAt,
-                createdAt,
-                entity,
+                entity: entity as Entity<MentionNotificationProperties>,
                 occurredInEntity: occurredInEntity as Entity<PageProperties>,
                 occurredInBlock: occurredInBlock as Entity<BlockProperties>,
-                occurredInText: occurredInText as Entity<TextProperties>,
+                occurredInText: occurredInText as Entity<TextWithTokens>,
                 triggeredByUser,
                 occurredInComment:
                   occurredInComment as Entity<CommentProperties>,
@@ -336,11 +262,10 @@ export const useNotificationsWithLinksContextValue =
             return {
               kind: "page-mention",
               readAt,
-              createdAt,
-              entity,
+              entity: entity as Entity<MentionNotificationProperties>,
               occurredInEntity: occurredInEntity as Entity<PageProperties>,
               occurredInBlock: occurredInBlock as Entity<BlockProperties>,
-              occurredInText: occurredInText as Entity<TextProperties>,
+              occurredInText: occurredInText as Entity<TextWithTokens>,
               triggeredByUser,
             } satisfies PageMentionNotification;
           } else if (
@@ -395,12 +320,12 @@ export const useNotificationsWithLinksContextValue =
               return {
                 kind: "comment-reply",
                 readAt,
-                createdAt,
-                entity,
+                entity: entity as Entity<CommentNotificationProperties>,
                 occurredInEntity: occurredInEntity as Entity<PageProperties>,
                 occurredInBlock: occurredInBlock as Entity<BlockProperties>,
-                triggeredByComment,
-                repliedToComment,
+                triggeredByComment:
+                  triggeredByComment as Entity<CommentProperties>,
+                repliedToComment: repliedToComment as Entity<CommentProperties>,
                 triggeredByUser,
               } satisfies CommentReplyNotification;
             }
@@ -408,11 +333,11 @@ export const useNotificationsWithLinksContextValue =
             return {
               kind: "new-comment",
               readAt,
-              createdAt,
-              entity,
+              entity: entity as Entity<CommentNotificationProperties>,
               occurredInEntity: occurredInEntity as Entity<PageProperties>,
               occurredInBlock: occurredInBlock as Entity<BlockProperties>,
-              triggeredByComment,
+              triggeredByComment:
+                triggeredByComment as Entity<CommentProperties>,
               triggeredByUser,
             } satisfies NewCommentNotification;
           } else if (
@@ -425,7 +350,10 @@ export const useNotificationsWithLinksContextValue =
               ),
             );
 
-            if (!occurredInEntityLink) {
+            const linkRightEntityId =
+              occurredInEntityLink?.linkEntity[0]?.linkData?.rightEntityId;
+
+            if (!occurredInEntityLink || !linkRightEntityId) {
               throw new Error(
                 `Graph change notification "${entityId}" is missing required links`,
               );
@@ -444,7 +372,40 @@ export const useNotificationsWithLinksContextValue =
               );
             }
 
-            const occurredInEntity = occurredInEntityLink.rightEntity[0];
+            let occurredInEntity: Entity | undefined;
+            for (const [vertexKey, editionMap] of typedEntries(
+              outgoingLinksSubgraph.vertices,
+            )) {
+              /**
+               * The created/updated record might be a draft, in which case it is keyed in the subgraph by `${entityId}~${draftId}`.
+               * We need to find the vertex that _starts with_ the entityId and contains an edition at the exact timestamp from the link.
+               * Needing to do this is a limitation caused by:
+               * 1. The fact that links only point to the entire Entity, not any specific edition or draft series of it
+               * 2. The logic for returning linked entities from the subgraph library will just return the non-draft entity if it is found
+               */
+              if (!vertexKey.startsWith(linkRightEntityId)) {
+                continue;
+              }
+
+              /**
+               * We have a candidate – this might be one of multiple draft series for the entity, or the single live series.
+               * We match the timestamp logged in the link to the editions of the entity.
+               * This may result in a false positive if the live entity and any of its drafts have editions at the exact same timestamp.
+               */
+              occurredInEntity = typedValues(editionMap)
+                .flat()
+                .find(
+                  (vertex): vertex is EntityVertex =>
+                    vertex.kind === "entity" &&
+                    vertex.inner.metadata.temporalVersioning.decisionTime.start
+                      .limit === occurredInEntityEditionTimestamp,
+                )?.inner;
+
+              if (occurredInEntity) {
+                break;
+              }
+            }
+
             if (!occurredInEntity) {
               // @todo archive the notification when the entity it occurred in is archived
               return null;
@@ -455,7 +416,6 @@ export const useNotificationsWithLinksContextValue =
 
             return {
               kind: "graph-change",
-              createdAt: new Date(occurredInEntityEditionTimestamp),
               readAt,
               entity: graphChangeEntity,
               occurredInEntityLabel: generateEntityLabel(
@@ -476,13 +436,7 @@ export const useNotificationsWithLinksContextValue =
           (notification): notification is NonNullable<typeof notification> =>
             !!notification,
         )
-        /**
-         * Order the notifications by when their revisions were created
-         *
-         * @todo: if we ever want to display updated notifications, we will need
-         * to sort by their created at timestamps instead (i.e. when the first
-         * revision of the entity was created, not the latest)
-         */
+
         .sort((a, b) => {
           if (a.readAt && !b.readAt) {
             return 1;
@@ -490,7 +444,14 @@ export const useNotificationsWithLinksContextValue =
             return -1;
           }
 
-          const timeDifference = b.createdAt.getTime() - a.createdAt.getTime();
+          const aCreatedAt = new Date(
+            a.entity.metadata.provenance.createdAtDecisionTime,
+          );
+          const bCreatedAt = new Date(
+            b.entity.metadata.provenance.createdAtDecisionTime,
+          );
+
+          const timeDifference = bCreatedAt.getTime() - aCreatedAt.getTime();
           if (timeDifference !== 0) {
             return timeDifference;
           }
@@ -503,12 +464,7 @@ export const useNotificationsWithLinksContextValue =
       previouslyFetchedNotificationsRef.current = derivedNotifications;
 
       return derivedNotifications;
-    }, [
-      notificationEntities,
-      notificationRevisionsData,
-      outgoingLinksSubgraph,
-      loadingNotificationRevisions,
-    ]);
+    }, [notificationEntities, outgoingLinksSubgraph]);
 
     return { notifications };
   };

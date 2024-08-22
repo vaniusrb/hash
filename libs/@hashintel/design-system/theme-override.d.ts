@@ -1,5 +1,5 @@
-import { Components } from "@mui/material";
-import { CSSProperties } from "react";
+import type { Components } from "@mui/material";
+import type { CSSProperties } from "react";
 
 declare module "@mui/material/styles" {
   interface ShadowSizes {
@@ -140,6 +140,7 @@ declare module "@mui/material/Button" {
     secondary_quiet: true;
     tertiary: true;
     tertiary_quiet: true;
+    white_cta: true;
     warning: true;
     danger: true;
     // Disable defaults

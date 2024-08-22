@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use derivative::Derivative;
 use graph_types::{
@@ -14,7 +14,7 @@ use utoipa::{
 };
 
 use crate::{
-    store::{query::Filter, Record},
+    store::{query::Filter, SubgraphRecord},
     subgraph::{edges::GraphResolveDepths, temporal_axes::QueryTemporalAxesUnresolved},
 };
 
@@ -40,8 +40,10 @@ use crate::{
 /// as a root vertex.
 ///
 /// Depending on the type of the [`StructuralQuery`], different [`RecordPath`]s are valid. Please
-/// see the documentation on the implementation of [`Record::QueryPath`] for the valid paths for
-/// each type.
+/// see the documentation on the implementation of [`QueryRecord::QueryPath`] for the valid paths
+/// for each type.
+///
+/// [`QueryRecord::QueryPath`]: crate::store::QueryRecord::QueryPath
 ///
 /// # Depth
 ///
@@ -159,9 +161,12 @@ use crate::{
 /// [`RecordPath`]: crate::store::query::QueryPath
 /// [`Parameter`]: crate::store::query::Parameter
 #[derive(Deserialize, Derivative)]
-#[derivative(Debug(bound = "R::QueryPath<'p>: Debug, R::VertexId: Debug"))]
+#[derivative(
+    Debug(bound = "R::QueryPath<'p>: Debug, R::VertexId: Debug"),
+    Clone(bound = "R::QueryPath<'p>: Clone")
+)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct StructuralQuery<'p, R: Record> {
+pub struct StructuralQuery<'p, R: SubgraphRecord> {
     #[serde(bound = "'de: 'p, R::QueryPath<'p>: Deserialize<'de>")]
     pub filter: Filter<'p, R>,
     pub graph_resolve_depths: GraphResolveDepths,
@@ -170,7 +175,7 @@ pub struct StructuralQuery<'p, R: Record> {
 }
 
 #[cfg(feature = "utoipa")]
-impl<'p, R: Record> StructuralQuery<'p, R>
+impl<'p, R: SubgraphRecord> StructuralQuery<'p, R>
 where
     R::VertexId: ToSchema<'static>,
 {
@@ -202,7 +207,6 @@ where
 pub type DataTypeStructuralQuery = StructuralQuery<'static, DataTypeWithMetadata>;
 pub type PropertyTypeStructuralQuery = StructuralQuery<'static, PropertyTypeWithMetadata>;
 pub type EntityTypeStructuralQuery = StructuralQuery<'static, EntityTypeWithMetadata>;
-pub type EntityStructuralQuery = StructuralQuery<'static, Entity>;
 
 #[cfg(feature = "utoipa")]
 impl<'p> ToSchema<'_> for StructuralQuery<'p, DataTypeWithMetadata> {

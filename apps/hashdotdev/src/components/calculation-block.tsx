@@ -1,6 +1,7 @@
 import { MockBlockDock } from "mock-block-dock";
-import { FunctionComponent } from "react";
+import type { FunctionComponent } from "react";
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires -- TODO why was this declared like this
 const CalcBlock = require("calculation-block").default;
 
 export const CalculationBlock: FunctionComponent = () => (
@@ -16,6 +17,8 @@ export const CalculationBlock: FunctionComponent = () => (
       <MockBlockDock
         blockDefinition={{ ReactComponent: CalcBlock }}
         blockEntity={{
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore -- mismatch between in-repo @blockprotocol/graph and one referred to by mock-block-dock
           entityId: "calculation-block-1",
           entityTypeId: "calculation-block",
           properties: {

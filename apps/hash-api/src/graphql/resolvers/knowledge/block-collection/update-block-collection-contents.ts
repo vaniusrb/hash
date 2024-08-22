@@ -1,4 +1,4 @@
-import { Entity } from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
 import { UserInputError } from "apollo-server-errors";
 
 import { getLatestEntityById } from "../../../../graph/knowledge/primitive/entity";
@@ -8,13 +8,13 @@ import {
   removeBlockFromBlockCollection,
 } from "../../../../graph/knowledge/system-types/block-collection";
 import { exactlyOne } from "../../../../util";
-import {
+import type {
   MutationUpdateBlockCollectionContentsArgs,
   ResolverFn,
   UpdateBlockCollectionContentsResult,
 } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
 import {
   createEntityWithPlaceholdersFn,
   filterForAction,
@@ -30,7 +30,7 @@ import {
  *   updates or none. currently there is no guarantee that a failure rolls back
  *   all changes, which could leave the database in an undesired state.
  *   When we have a transaction primitive in the Graph API, we should use it here.
- *   See https://app.asana.com/0/1200211978612931/1202573572594586/f
+ *   See https://linear.app/hash/issue/H-2992
  */
 export const updateBlockCollectionContents: ResolverFn<
   Promise<
@@ -38,15 +38,16 @@ export const updateBlockCollectionContents: ResolverFn<
       blockCollection: Entity;
     }
   >,
-  {},
+  Record<string, never>,
   LoggedInGraphQLContext,
   MutationUpdateBlockCollectionContentsArgs
 > = async (
   _,
   { entityId: blockCollectionEntityId, actions },
-  { dataSources, authentication, user },
+  graphQLContext,
 ) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  const { authentication, user } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
   for (const [i, action] of actions.entries()) {
     if (

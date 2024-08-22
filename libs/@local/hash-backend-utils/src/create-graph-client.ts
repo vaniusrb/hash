@@ -1,15 +1,18 @@
 import { inspect } from "node:util";
 
-import { Logger } from "@local/hash-backend-utils/logger";
 import {
   Configuration,
   GraphApi as GraphApiClient,
 } from "@local/hash-graph-client";
-import { convertHttpCodeToStatusCode, isStatus, Status } from "@local/status";
-import { ErrorInfo } from "@local/status/type-defs/status-payloads/error-info";
+import type { Status } from "@local/status";
+import { convertHttpCodeToStatusCode, isStatus } from "@local/status";
+import type { ErrorInfo } from "@local/status/type-defs/status-payloads/error-info";
 import HttpAgent, { HttpsAgent } from "agentkeepalive";
-import { DataSource } from "apollo-datasource";
-import axios, { AxiosError } from "axios";
+import type { DataSource } from "apollo-datasource";
+import type { AxiosError, InternalAxiosRequestConfig } from "axios";
+import axios from "axios";
+
+import type { Logger } from "./logger.js";
 
 type GraphApi = GraphApiClient & DataSource;
 
@@ -22,7 +25,7 @@ const agentConfig = {
 const httpAgent = new HttpAgent(agentConfig);
 const httpsAgent = new HttpsAgent(agentConfig);
 
-type GraphStatus = Status<{}>;
+type GraphStatus = Status<Record<string, unknown>>;
 
 const isErrorAxiosError = (error: Error): error is AxiosError =>
   (error as AxiosError).isAxiosError;
@@ -76,13 +79,26 @@ class GraphApiError extends Error {
 
 export const createGraphClient = (
   _logger: Logger,
-  { host, port }: { host: string; port: number },
+  {
+    host,
+    port,
+    requestInterceptor,
+  }: {
+    host: string;
+    port: number;
+    requestInterceptor?: (
+      value: InternalAxiosRequestConfig,
+    ) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>;
+  },
 ): GraphApi => {
   const axiosInstance = axios.create({
     httpAgent,
     httpsAgent,
   });
 
+  if (requestInterceptor) {
+    axiosInstance.interceptors.request.use(requestInterceptor);
+  }
   axiosInstance.interceptors.response.use(
     (response) => response,
     (error: Error) => {
@@ -100,7 +116,9 @@ export const createGraphClient = (
         /* @todo - Do we have any useful information we can extract from `response.request`? */
         return Promise.reject(
           new Error(
-            "Encountered an error while calling the Graph API, which wasn't identified as coming from the Graph API.",
+            `Encountered an error while calling the Graph API, which wasn't identified as coming from the Graph API: ${
+              (secondaryError as Error).message
+            },`,
           ),
         );
       }

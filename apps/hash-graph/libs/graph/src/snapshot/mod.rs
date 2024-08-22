@@ -17,18 +17,22 @@ mod ontology;
 mod restore;
 mod web;
 
-use std::future::ready;
+use core::future::ready;
 
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use authorization::{
     backend::ZanzibarBackend,
     schema::{
-        AccountGroupRelationAndSubject, DataTypeId, DataTypeRelationAndSubject,
-        EntityRelationAndSubject, EntityTypeId, EntityTypeRelationAndSubject, PropertyTypeId,
-        PropertyTypeRelationAndSubject, WebRelationAndSubject,
+        AccountGroupRelationAndSubject, DataTypeRelationAndSubject, EntityNamespace,
+        EntityRelationAndSubject, EntityTypeRelationAndSubject, PropertyTypeRelationAndSubject,
+        WebRelationAndSubject,
     },
-    zanzibar::{types::RelationshipFilter, Consistency},
+    zanzibar::{
+        types::{RelationshipFilter, ResourceFilter},
+        Consistency,
+    },
+    AuthorizationApi, NoAuthorization,
 };
 use error_stack::{ensure, Context, Report, Result, ResultExt};
 use futures::{
@@ -36,25 +40,30 @@ use futures::{
 };
 use graph_types::{
     account::{AccountGroupId, AccountId},
-    knowledge::entity::{Entity, EntityUuid},
-    ontology::{DataTypeWithMetadata, EntityTypeWithMetadata, PropertyTypeWithMetadata},
+    knowledge::entity::{Entity, EntityId, EntityUuid},
+    ontology::{
+        DataTypeId, DataTypeWithMetadata, EntityTypeId, EntityTypeWithMetadata, PropertyTypeId,
+        PropertyTypeWithMetadata,
+    },
     owned_by_id::OwnedById,
 };
 use hash_status::StatusCode;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
-use tokio_postgres::{
-    error::SqlState,
-    tls::{MakeTlsConnect, TlsConnect},
-    Socket,
-};
+use tokio_postgres::error::SqlState;
 use type_system::url::VersionedUrl;
 
 use crate::{
-    snapshot::{entity::EntitySnapshotRecord, restore::SnapshotRecordBatch},
+    snapshot::{
+        entity::{EntityEmbeddingRecord, EntitySnapshotRecord},
+        ontology::{
+            DataTypeEmbeddingRecord, EntityTypeEmbeddingRecord, PropertyTypeEmbeddingRecord,
+        },
+        restore::SnapshotRecordBatch,
+    },
     store::{
         crud::Read, query::Filter, AsClient, InsertionError, PostgresStore, PostgresStorePool,
-        StorePool,
+        QueryRecord, StorePool,
     },
 };
 
@@ -77,19 +86,35 @@ pub struct Web {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "namespace")]
+pub enum AuthorizationRelation {
+    Entity {
+        object: EntityUuid,
+        #[serde(flatten)]
+        relationship: EntityRelationAndSubject,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type", deny_unknown_fields)]
 pub enum SnapshotEntry {
     Snapshot(SnapshotMetadata),
     Account(Account),
     AccountGroup(AccountGroup),
     Web(Web),
-    DataType(DataTypeSnapshotRecord),
-    PropertyType(PropertyTypeSnapshotRecord),
-    EntityType(EntityTypeSnapshotRecord),
-    Entity(EntitySnapshotRecord),
+    DataType(Box<DataTypeSnapshotRecord>),
+    DataTypeEmbedding(DataTypeEmbeddingRecord),
+    PropertyType(Box<PropertyTypeSnapshotRecord>),
+    PropertyTypeEmbedding(PropertyTypeEmbeddingRecord),
+    EntityType(Box<EntityTypeSnapshotRecord>),
+    EntityTypeEmbedding(EntityTypeEmbeddingRecord),
+    Entity(Box<EntitySnapshotRecord>),
+    EntityEmbedding(EntityEmbeddingRecord),
+    Relation(AuthorizationRelation),
 }
 
 impl SnapshotEntry {
+    #[expect(clippy::too_many_lines)]
     pub fn install_error_stack_hook() {
         error_stack::Report::install_debug_hook::<Self>(|entry, context| match entry {
             Self::Snapshot(global_metadata) => {
@@ -149,40 +174,100 @@ impl SnapshotEntry {
                     }
                 }
             }
+            Self::Relation(AuthorizationRelation::Entity {
+                object: id,
+                relationship: relation,
+            }) => {
+                context.push_body(format!("relation: {id}"));
+                if context.alternate() {
+                    if let Ok(json) = serde_json::to_string_pretty(relation) {
+                        context.push_appendix(format!("{id}:\n{json}"));
+                    }
+                }
+            }
+            Self::DataTypeEmbedding(embedding) => {
+                context.push_body(format!("data type embedding: {}", embedding.data_type_id));
+                if context.alternate() {
+                    if let Ok(json) = serde_json::to_string_pretty(embedding) {
+                        context.push_appendix(format!("{}:\n{json}", embedding.data_type_id));
+                    }
+                }
+            }
+            Self::PropertyTypeEmbedding(embedding) => {
+                context.push_body(format!(
+                    "property type embedding: {}",
+                    embedding.property_type_id
+                ));
+                if context.alternate() {
+                    if let Ok(json) = serde_json::to_string_pretty(embedding) {
+                        context.push_appendix(format!("{}:\n{json}", embedding.property_type_id));
+                    }
+                }
+            }
+            Self::EntityTypeEmbedding(embedding) => {
+                context.push_body(format!(
+                    "entity type embedding: {}",
+                    embedding.entity_type_id
+                ));
+                if context.alternate() {
+                    if let Ok(json) = serde_json::to_string_pretty(embedding) {
+                        context.push_appendix(format!("{}:\n{json}", embedding.entity_type_id));
+                    }
+                }
+            }
+            Self::EntityEmbedding(embedding) => {
+                context.push_body(format!(
+                    "entity embedding: {}",
+                    embedding.entity_id.entity_uuid
+                ));
+                if context.alternate() {
+                    if let Ok(json) = serde_json::to_string_pretty(embedding) {
+                        context
+                            .push_appendix(format!("{}:\n{json}", embedding.entity_id.entity_uuid));
+                    }
+                }
+            }
         });
     }
 }
 
 #[async_trait]
-trait WriteBatch<C> {
-    async fn begin(postgres_client: &PostgresStore<C>) -> Result<(), InsertionError>;
-    async fn write(
-        self,
-        postgres_client: &PostgresStore<C>,
-        authorization_api: &mut (impl ZanzibarBackend + Send),
-    ) -> Result<(), InsertionError>;
+trait WriteBatch<C, A> {
+    async fn begin(postgres_client: &mut PostgresStore<C, A>) -> Result<(), InsertionError>;
+    async fn write(self, postgres_client: &mut PostgresStore<C, A>) -> Result<(), InsertionError>;
     async fn commit(
-        postgres_client: &PostgresStore<C>,
+        postgres_client: &mut PostgresStore<C, A>,
         validation: bool,
     ) -> Result<(), InsertionError>;
 }
 
-pub struct SnapshotStore<C>(PostgresStore<C>);
+pub struct SnapshotStore<C, A>(PostgresStore<C, A>);
 
-impl<C> SnapshotStore<C> {
-    pub const fn new(store: PostgresStore<C>) -> Self {
+impl<C, A> SnapshotStore<C, A> {
+    pub const fn new(store: PostgresStore<C, A>) -> Self {
         Self(store)
     }
 }
 
-impl<Tls: Clone + Send + Sync + 'static> PostgresStorePool<Tls>
-where
-    Tls: MakeTlsConnect<
-            Socket,
-            Stream: Send + Sync,
-            TlsConnect: Send + TlsConnect<Socket, Future: Send>,
-        >,
-{
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "This is a configuration struct"
+)]
+#[derive(Debug, Copy, Clone)]
+pub struct SnapshotDumpSettings {
+    pub chunk_size: usize,
+    pub dump_webs: bool,
+    pub dump_accounts: bool,
+    pub dump_account_groups: bool,
+    pub dump_entities: bool,
+    pub dump_entity_types: bool,
+    pub dump_property_types: bool,
+    pub dump_data_types: bool,
+    pub dump_embeddings: bool,
+    pub dump_relations: bool,
+}
+
+impl PostgresStorePool {
     async fn read_accounts(
         &self,
     ) -> Result<impl Stream<Item = Result<Account, SnapshotDumpError>> + Send, SnapshotDumpError>
@@ -190,7 +275,7 @@ where
         // TODO: Make accounts a first-class `Record` type
         //   see https://linear.app/hash/issue/H-752
         Ok(self
-            .acquire()
+            .acquire(NoAuthorization, None)
             .await
             .change_context(SnapshotDumpError::Query)?
             .as_client()
@@ -214,7 +299,7 @@ where
         // TODO: Make account groups a first-class `Record` type
         //   see https://linear.app/hash/issue/H-752
         Ok(self
-            .acquire()
+            .acquire(NoAuthorization, None)
             .await
             .change_context(SnapshotDumpError::Query)?
             .as_client()
@@ -236,9 +321,10 @@ where
                         )
                         .await
                         .change_context(SnapshotDumpError::Query)?
-                        .into_iter()
-                        .map(|(_group, relation)| relation)
-                        .collect(),
+                        .map_ok(|(_group, relation)| relation)
+                        .try_collect()
+                        .await
+                        .change_context(SnapshotDumpError::Query)?,
                 })
             }))
     }
@@ -249,7 +335,7 @@ where
     ) -> Result<impl Stream<Item = Result<Web, SnapshotDumpError>> + Send + 'a, SnapshotDumpError>
     {
         Ok(self
-            .acquire()
+            .acquire(NoAuthorization, None)
             .await
             .change_context(SnapshotDumpError::Query)?
             .as_client()
@@ -268,9 +354,10 @@ where
                         )
                         .await
                         .change_context(SnapshotDumpError::Query)?
-                        .into_iter()
-                        .map(|(_web_id, relation)| relation)
-                        .collect(),
+                        .map_ok(|(_web_id, relation)| relation)
+                        .try_collect()
+                        .await
+                        .change_context(SnapshotDumpError::Query)?,
                 })
             }))
     }
@@ -280,23 +367,158 @@ where
         &'pool self,
     ) -> Result<impl Stream<Item = Result<T, SnapshotDumpError>> + Send + 'pool, SnapshotDumpError>
     where
-        <Self as StorePool>::Store<'pool>: Read<T>,
-        T: 'pool,
+        <Self as StorePool>::Store<'pool, NoAuthorization>: Read<T>,
+        T: QueryRecord + 'pool,
     {
         Ok(Read::<T>::read(
             &self
-                .acquire()
+                .acquire(NoAuthorization, None)
                 .await
                 .change_context(SnapshotDumpError::Query)?,
             &Filter::All(vec![]),
-            None,
-            None,
             None,
             true,
         )
         .await
         .map_err(|future_error| future_error.change_context(SnapshotDumpError::Query))?
         .map_err(|stream_error| stream_error.change_context(SnapshotDumpError::Read)))
+    }
+
+    async fn create_data_type_embedding_stream(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<SnapshotEntry, SnapshotDumpError>> + Send,
+        SnapshotDumpError,
+    > {
+        Ok(self
+            .acquire(NoAuthorization, None)
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .as_client()
+            .query_raw(
+                "SELECT base_url, version, embedding, updated_at_transaction_time
+                 FROM data_type_embeddings
+                 JOIN ontology_ids USING (ontology_id)",
+                [] as [&(dyn ToSql + Sync); 0],
+            )
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .map(|result| result.change_context(SnapshotDumpError::Query))
+            .map_ok(|row| {
+                SnapshotEntry::DataTypeEmbedding(DataTypeEmbeddingRecord {
+                    data_type_id: VersionedUrl {
+                        base_url: row.get(0),
+                        version: row.get(1),
+                    },
+                    embedding: row.get(2),
+                    updated_at_transaction_time: row.get(3),
+                })
+            }))
+    }
+
+    async fn create_property_type_embedding_stream(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<SnapshotEntry, SnapshotDumpError>> + Send,
+        SnapshotDumpError,
+    > {
+        Ok(self
+            .acquire(NoAuthorization, None)
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .as_client()
+            .query_raw(
+                "SELECT base_url, version, embedding, updated_at_transaction_time
+                 FROM property_type_embeddings
+                 JOIN ontology_ids USING (ontology_id)",
+                [] as [&(dyn ToSql + Sync); 0],
+            )
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .map(|result| result.change_context(SnapshotDumpError::Query))
+            .map_ok(|row| {
+                SnapshotEntry::PropertyTypeEmbedding(PropertyTypeEmbeddingRecord {
+                    property_type_id: VersionedUrl {
+                        base_url: row.get(0),
+                        version: row.get(1),
+                    },
+                    embedding: row.get(2),
+                    updated_at_transaction_time: row.get(3),
+                })
+            }))
+    }
+
+    async fn create_entity_type_embedding_stream(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<SnapshotEntry, SnapshotDumpError>> + Send,
+        SnapshotDumpError,
+    > {
+        Ok(self
+            .acquire(NoAuthorization, None)
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .as_client()
+            .query_raw(
+                "SELECT base_url, version, embedding, updated_at_transaction_time
+                 FROM entity_type_embeddings
+                 JOIN ontology_ids USING (ontology_id)",
+                [] as [&(dyn ToSql + Sync); 0],
+            )
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .map(|result| result.change_context(SnapshotDumpError::Query))
+            .map_ok(|row| {
+                SnapshotEntry::EntityTypeEmbedding(EntityTypeEmbeddingRecord {
+                    entity_type_id: VersionedUrl {
+                        base_url: row.get(0),
+                        version: row.get(1),
+                    },
+                    embedding: row.get(2),
+                    updated_at_transaction_time: row.get(3),
+                })
+            }))
+    }
+
+    async fn create_entity_embedding_stream(
+        &self,
+    ) -> Result<
+        impl Stream<Item = Result<SnapshotEntry, SnapshotDumpError>> + Send,
+        SnapshotDumpError,
+    > {
+        Ok(self
+            .acquire(NoAuthorization, None)
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .as_client()
+            .query_raw(
+                "SELECT
+                    web_id,
+                    entity_uuid,
+                    draft_id,
+                    property,
+                    embedding,
+                    updated_at_decision_time,
+                    updated_at_transaction_time
+                 FROM entity_embeddings",
+                [] as [&(dyn ToSql + Sync); 0],
+            )
+            .await
+            .change_context(SnapshotDumpError::Query)?
+            .map(|result| result.change_context(SnapshotDumpError::Query))
+            .map_ok(|row| {
+                SnapshotEntry::EntityEmbedding(EntityEmbeddingRecord {
+                    entity_id: EntityId {
+                        owned_by_id: row.get(0),
+                        entity_uuid: row.get(1),
+                        draft_id: row.get(2),
+                    },
+                    property: row.get(3),
+                    embedding: row.get(4),
+                    updated_at_decision_time: row.get(5),
+                    updated_at_transaction_time: row.get(6),
+                })
+            }))
     }
 
     /// Reads the snapshot from the store into the given sink.
@@ -313,9 +535,9 @@ where
         &self,
         sink: impl Sink<SnapshotEntry, Error = Report<impl Context>> + Send + 'static,
         authorization_api: &(impl ZanzibarBackend + Sync),
-        chunk_size: usize,
+        settings: SnapshotDumpSettings,
     ) -> Result<(), SnapshotDumpError> {
-        let (snapshot_record_tx, snapshot_record_rx) = mpsc::channel(chunk_size);
+        let (snapshot_record_tx, snapshot_record_rx) = mpsc::channel(settings.chunk_size);
         let snapshot_record_tx = snapshot_record_tx
             .sink_map_err(|error| Report::new(error).change_context(SnapshotDumpError::Write));
 
@@ -334,123 +556,181 @@ where
                 .forward(snapshot_record_tx.clone()),
             );
 
-            scope.spawn(
-                self.read_webs(authorization_api)
-                    .try_flatten_stream()
-                    .map_ok(SnapshotEntry::Web)
-                    .forward(snapshot_record_tx.clone()),
-            );
+            if settings.dump_webs {
+                scope.spawn(
+                    self.read_webs(authorization_api)
+                        .try_flatten_stream()
+                        .map_ok(SnapshotEntry::Web)
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
 
-            scope.spawn(
-                self.read_accounts()
-                    .try_flatten_stream()
-                    .map_ok(SnapshotEntry::Account)
-                    .forward(snapshot_record_tx.clone()),
-            );
+            if settings.dump_accounts {
+                scope.spawn(
+                    self.read_accounts()
+                        .try_flatten_stream()
+                        .map_ok(SnapshotEntry::Account)
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
 
-            scope.spawn(
-                self.read_account_groups(authorization_api)
-                    .try_flatten_stream()
-                    .map_ok(SnapshotEntry::AccountGroup)
-                    .forward(snapshot_record_tx.clone()),
-            );
+            if settings.dump_account_groups {
+                scope.spawn(
+                    self.read_account_groups(authorization_api)
+                        .try_flatten_stream()
+                        .map_ok(SnapshotEntry::AccountGroup)
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
 
-            scope.spawn(
-                self.create_dump_stream::<DataTypeWithMetadata>()
-                    .try_flatten_stream()
-                    .and_then(move |record| async move {
-                        Ok(SnapshotEntry::DataType(DataTypeSnapshotRecord {
-                            schema: record.schema,
-                            relations: authorization_api
-                                .read_relations::<(DataTypeId, DataTypeRelationAndSubject)>(
-                                    RelationshipFilter::from_resource(DataTypeId::from_url(
-                                        &VersionedUrl::from(record.metadata.record_id.clone()),
-                                    )),
-                                    Consistency::FullyConsistent,
-                                )
-                                .await
-                                .change_context(SnapshotDumpError::Query)?
-                                .into_iter()
-                                .map(|(_, relation)| relation)
-                                .collect(),
-                            metadata: record.metadata,
-                        }))
-                    })
-                    .forward(snapshot_record_tx.clone()),
-            );
+            if settings.dump_data_types {
+                scope.spawn(
+                    self.create_dump_stream::<DataTypeWithMetadata>()
+                        .try_flatten_stream()
+                        .and_then(move |record| async move {
+                            Ok(SnapshotEntry::DataType(Box::new(DataTypeSnapshotRecord {
+                                schema: record.schema,
+                                relations: authorization_api
+                                    .read_relations::<(DataTypeId, DataTypeRelationAndSubject)>(
+                                        RelationshipFilter::from_resource(DataTypeId::from_url(
+                                            &VersionedUrl::from(record.metadata.record_id.clone()),
+                                        )),
+                                        Consistency::FullyConsistent,
+                                    )
+                                    .await
+                                    .change_context(SnapshotDumpError::Query)?
+                                    .map_ok(|(_, relation)| relation)
+                                    .try_collect()
+                                    .await
+                                    .change_context(SnapshotDumpError::Query)?,
+                                metadata: record.metadata,
+                            })))
+                        })
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
 
-            scope.spawn(
-                self.create_dump_stream::<PropertyTypeWithMetadata>()
-                    .try_flatten_stream()
-                    .and_then(move |record| async move {
-                        Ok(SnapshotEntry::PropertyType(PropertyTypeSnapshotRecord {
-                            schema: record.schema,
-                            relations: authorization_api
-                                .read_relations::<(PropertyTypeId, PropertyTypeRelationAndSubject)>(
-                                    RelationshipFilter::from_resource(PropertyTypeId::from_url(
-                                        &VersionedUrl::from(record.metadata.record_id.clone()),
-                                    )),
-                                    Consistency::FullyConsistent,
-                                )
-                                .await
-                                .change_context(SnapshotDumpError::Query)?
-                                .into_iter()
-                                .map(|(_, relation)| relation)
-                                .collect(),
-                            metadata: record.metadata,
-                        }))
-                    })
-                    .forward(snapshot_record_tx.clone()),
-            );
+            if settings.dump_property_types {
+                scope.spawn(
+                        self.create_dump_stream::<PropertyTypeWithMetadata>()
+                            .try_flatten_stream()
+                            .and_then(move |record| async move {
+                                Ok(SnapshotEntry::PropertyType(Box::new(PropertyTypeSnapshotRecord {
+                                    schema: record.schema,
+                                    relations: authorization_api
+                                        .read_relations::<(PropertyTypeId, PropertyTypeRelationAndSubject)>(
+                                            RelationshipFilter::from_resource(PropertyTypeId::from_url(
+                                                &VersionedUrl::from(record.metadata.record_id.clone()),
+                                            )),
+                                            Consistency::FullyConsistent,
+                                        )
+                                        .await
+                                        .change_context(SnapshotDumpError::Query)?
+                                        .map_ok(|(_, relation)| relation)
+                                        .try_collect()
+                                        .await
+                                        .change_context(SnapshotDumpError::Query)?,
+                                    metadata: record.metadata,
+                                })))
+                            })
+                            .forward(snapshot_record_tx.clone()),
+                    );
+            }
 
-            scope.spawn(
-                self.create_dump_stream::<EntityTypeWithMetadata>()
-                    .try_flatten_stream()
-                    .and_then(move |record| async move {
-                        Ok(SnapshotEntry::EntityType(EntityTypeSnapshotRecord {
-                            schema: record.schema,
-                            relations: authorization_api
-                                .read_relations::<(EntityTypeId, EntityTypeRelationAndSubject)>(
-                                    RelationshipFilter::from_resource(EntityTypeId::from_url(
-                                        &VersionedUrl::from(record.metadata.record_id.clone()),
-                                    )),
-                                    Consistency::FullyConsistent,
-                                )
-                                .await
-                                .change_context(SnapshotDumpError::Query)?
-                                .into_iter()
-                                .map(|(_, relation)| relation)
-                                .collect(),
-                            metadata: record.metadata,
-                        }))
-                    })
-                    .forward(snapshot_record_tx.clone()),
-            );
+            if settings.dump_entity_types {
+                scope.spawn(
+                        self.create_dump_stream::<EntityTypeWithMetadata>()
+                            .try_flatten_stream()
+                            .and_then(move |record| async move {
+                                Ok(SnapshotEntry::EntityType(Box::new(EntityTypeSnapshotRecord {
+                                    schema: record.schema,
+                                    relations: authorization_api
+                                        .read_relations::<(EntityTypeId, EntityTypeRelationAndSubject)>(
+                                            RelationshipFilter::from_resource(EntityTypeId::from_url(
+                                                &VersionedUrl::from(record.metadata.record_id.clone()),
+                                            )),
+                                            Consistency::FullyConsistent,
+                                        )
+                                        .await
+                                        .change_context(SnapshotDumpError::Query)?
+                                        .map_ok(|(_, relation)| relation)
+                                        .try_collect()
+                                        .await
+                                        .change_context(SnapshotDumpError::Query)?,
+                                    metadata: record.metadata,
+                                })))
+                            })
+                            .forward(snapshot_record_tx.clone()),
+                    );
+            }
 
-            scope.spawn(
-                self.create_dump_stream::<Entity>()
-                    .try_flatten_stream()
-                    .and_then(move |entity| async move {
-                        Ok(SnapshotEntry::Entity(EntitySnapshotRecord {
-                            properties: entity.properties,
-                            link_data: entity.link_data,
-                            relations: authorization_api
-                                .read_relations::<(EntityUuid, EntityRelationAndSubject)>(
-                                    RelationshipFilter::from_resource(
-                                        entity.metadata.record_id.entity_id.entity_uuid,
-                                    ),
-                                    Consistency::FullyConsistent,
-                                )
-                                .await
-                                .change_context(SnapshotDumpError::Query)?
-                                .into_iter()
-                                .map(|(_, relation)| relation)
-                                .collect(),
-                            metadata: entity.metadata,
-                        }))
-                    })
-                    .forward(snapshot_record_tx),
-            );
+            if settings.dump_entities {
+                scope.spawn(
+                    self.create_dump_stream::<Entity>()
+                        .try_flatten_stream()
+                        .and_then(move |entity| async move {
+                            Ok(SnapshotEntry::Entity(Box::new(EntitySnapshotRecord {
+                                properties: entity.properties,
+                                link_data: entity.link_data,
+                                metadata: entity.metadata,
+                            })))
+                        })
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
+
+            if settings.dump_data_types && settings.dump_embeddings {
+                scope.spawn(
+                    self.create_data_type_embedding_stream()
+                        .try_flatten_stream()
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
+
+            if settings.dump_property_types && settings.dump_embeddings {
+                scope.spawn(
+                    self.create_property_type_embedding_stream()
+                        .try_flatten_stream()
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
+
+            if settings.dump_entity_types && settings.dump_embeddings {
+                scope.spawn(
+                    self.create_entity_type_embedding_stream()
+                        .try_flatten_stream()
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
+
+            if settings.dump_entities && settings.dump_embeddings {
+                scope.spawn(
+                    self.create_entity_embedding_stream()
+                        .try_flatten_stream()
+                        .forward(snapshot_record_tx.clone()),
+                );
+            }
+
+            if settings.dump_entities && settings.dump_relations {
+                scope.spawn(
+                    authorization_api
+                        .read_relations::<(EntityUuid, EntityRelationAndSubject)>(
+                            RelationshipFilter::from_resource(ResourceFilter::from_kind(
+                                EntityNamespace::Entity,
+                            )),
+                            Consistency::FullyConsistent,
+                        )
+                        .try_flatten_stream()
+                        .map(|result| result.change_context(SnapshotDumpError::Query))
+                        .map_ok(|(id, relation)| {
+                            SnapshotEntry::Relation(AuthorizationRelation::Entity {
+                                object: id,
+                                relationship: relation,
+                            })
+                        })
+                        .forward(snapshot_record_tx),
+                );
+            }
         });
 
         for result in results {
@@ -461,8 +741,12 @@ where
     }
 }
 
-impl<C: AsClient> SnapshotStore<C> {
-    /// Reads the snapshot from from the stream into the store.
+impl<C, A> SnapshotStore<C, A>
+where
+    C: AsClient,
+    A: ZanzibarBackend + AuthorizationApi,
+{
+    /// Reads the snapshot from the stream into the store.
     ///
     /// The data emitted by the stream is read in a separate thread and is sent to different
     /// channels for each record type. Each channel holds a buffer of `chunk_size` entries. The
@@ -496,7 +780,6 @@ impl<C: AsClient> SnapshotStore<C> {
     pub async fn restore_snapshot(
         &mut self,
         snapshot: impl Stream<Item = Result<SnapshotEntry, impl Context>> + Send + 'static,
-        authorization_api: &mut (impl ZanzibarBackend + Send),
         chunk_size: usize,
         validation: bool,
     ) -> Result<(), SnapshotRestoreError> {
@@ -513,26 +796,26 @@ impl<C: AsClient> SnapshotStore<C> {
                 ),
         );
 
-        let client = self
+        let mut client = self
             .0
             .transaction()
             .await
             .change_context(SnapshotRestoreError::Write)?;
 
-        SnapshotRecordBatch::begin(&client)
+        SnapshotRecordBatch::begin(&mut client)
             .await
             .change_context(SnapshotRestoreError::Write)?;
 
-        let (client, _) = snapshot_record_rx
+        let mut client = snapshot_record_rx
             .map(Ok::<_, Report<SnapshotRestoreError>>)
             .try_fold(
-                (client, authorization_api),
-                |(client, authorization_api), records: SnapshotRecordBatch| async move {
+                client,
+                |mut client, records: SnapshotRecordBatch| async move {
                     records
-                        .write(&client, authorization_api)
+                        .write(&mut client)
                         .await
                         .change_context(SnapshotRestoreError::Write)?;
-                    Ok((client, authorization_api))
+                    Ok(client)
                 },
             )
             .await?;
@@ -543,7 +826,7 @@ impl<C: AsClient> SnapshotStore<C> {
             .await
             .change_context(SnapshotRestoreError::Read)??;
 
-        SnapshotRecordBatch::commit(&client, validation)
+        SnapshotRecordBatch::commit(&mut client, validation)
             .await
             .change_context(SnapshotRestoreError::Write)
             .map_err(|report| {

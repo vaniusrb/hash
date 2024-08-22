@@ -1,13 +1,14 @@
 import {
   ArrowRotateLeftIcon,
   ArrowUpRightIcon,
+  DashIcon,
 } from "@hashintel/design-system";
-import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
-import { Box, Stack, SxProps, Theme, Tooltip } from "@mui/material";
+import { generateEntityPath } from "@local/hash-isomorphic-utils/frontend-paths";
+import type { SxProps, Theme } from "@mui/material";
+import { Box, Stack, Tooltip } from "@mui/material";
 
 import { useUserOrOrgShortnameByOwnedById } from "../../../../components/hooks/use-user-or-org-shortname-by-owned-by-id";
-import { FileUpload } from "../../../../shared/file-upload-context";
-import { DashIcon } from "../../../../shared/icons/dash-icon";
+import type { FileUpload } from "../../../../shared/file-upload-context";
 import { Link } from "../../../../shared/ui/link";
 
 const buttonSx: SxProps<Theme> = {
@@ -37,9 +38,17 @@ export const Action = ({
       return (
         <Tooltip title="View entity">
           <Link
-            href={`/@${shortname}/entities/${extractEntityUuidFromEntityId(
-              upload.createdEntities.fileEntity.metadata.recordId.entityId,
-            )}`}
+            href={
+              shortname
+                ? generateEntityPath({
+                    shortname,
+                    entityId:
+                      upload.createdEntities.fileEntity.metadata.recordId
+                        .entityId,
+                    includeDraftId: false,
+                  })
+                : "#"
+            }
             sx={{
               display: "block",
               height: actionHeight,

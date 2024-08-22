@@ -3,18 +3,21 @@
  * This file is not bundled with the library during the build process.
  */
 
-import {
+import type {
   Entity,
   RemoteFileEntityProperties,
   VersionedUrl,
 } from "@blockprotocol/graph";
 import { MockBlockDock } from "mock-block-dock";
-import { render } from "react-dom";
+import { createRoot } from "react-dom/client";
 
 import packageJSON from "../package.json";
 import Component from "./index";
 import { linkIds, propertyIds } from "./property-ids";
-import { BlockEntity, DisplaysMediaFile } from "./types/generated/block-entity";
+import type {
+  BlockEntity,
+  DisplaysMediaFile,
+} from "./types/generated/block-entity";
 
 const node = document.getElementById("app");
 
@@ -81,4 +84,4 @@ const App = () => {
   );
 };
 
-render(<App />, node);
+createRoot(node!).render(<App />);

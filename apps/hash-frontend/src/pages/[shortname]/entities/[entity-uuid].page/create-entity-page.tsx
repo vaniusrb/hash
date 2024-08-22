@@ -1,16 +1,17 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import { AlertModal } from "@hashintel/design-system";
+import type { PropertyObject } from "@local/hash-graph-types/entity";
 import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
 import { blockProtocolEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import {
-  EntityPropertiesObject,
-  extractEntityUuidFromEntityId,
-} from "@local/hash-subgraph";
+import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
+import { Typography } from "@mui/material";
 import { useRouter } from "next/router";
 import { useContext, useState } from "react";
 
 import { useBlockProtocolCreateEntity } from "../../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-create-entity";
 import { PageErrorState } from "../../../../components/page-error-state";
+import { Link } from "../../../../shared/ui/link";
 import { WorkspaceContext } from "../../../shared/workspace-context";
 import { EditBar } from "../../shared/edit-bar";
 import { EntityEditorPage } from "./entity-editor-page";
@@ -27,6 +28,8 @@ interface CreateEntityPageProps {
 export const CreateEntityPage = ({ entityTypeId }: CreateEntityPageProps) => {
   const router = useRouter();
   const applyDraftLinkEntityChanges = useApplyDraftLinkEntityChanges();
+
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [
     draftLinksToCreate,
@@ -52,9 +55,7 @@ export const CreateEntityPage = ({ entityTypeId }: CreateEntityPageProps) => {
    * I tried calling handleCreateEntity after setting the draftEntity state, but state was not updating
    * @todo find a better way to do this
    */
-  const handleCreateEntity = async (
-    overrideProperties?: EntityPropertiesObject,
-  ) => {
+  const handleCreateEntity = async (overrideProperties?: PropertyObject) => {
     if (!draftEntitySubgraph || !activeWorkspace) {
       return;
     }
@@ -89,6 +90,8 @@ export const CreateEntityPage = ({ entityTypeId }: CreateEntityPageProps) => {
       );
 
       void router.push(`/@${activeWorkspace.shortname}/entities/${entityId}`);
+    } catch (err) {
+      setErrorMessage((err as Error).message);
     } finally {
       setCreating(false);
     }
@@ -108,39 +111,54 @@ export const CreateEntityPage = ({ entityTypeId }: CreateEntityPageProps) => {
     entityTypeId === blockProtocolEntityTypes.query.entityTypeId;
 
   return (
-    <EntityEditorPage
-      editBar={
-        <EditBar
-          label="- this entity has not been created yet"
-          visible
-          discardButtonProps={{
-            href: "/new/entity",
-            children: "Discard entity",
-          }}
-          confirmButtonProps={{
-            onClick: () => handleCreateEntity(),
-            loading: creating,
-            children: "Create entity",
-          }}
-        />
-      }
-      entityLabel={entityLabel}
-      entityUuid="draft"
-      owner={`@${activeWorkspace?.shortname}`}
-      isQueryEntity={isQueryEntity}
-      isDirty
-      isDraft
-      handleSaveChanges={handleCreateEntity}
-      setEntity={(entity) => {
-        updateEntitySubgraphStateByEntity(entity, setDraftEntitySubgraph);
-      }}
-      draftLinksToCreate={draftLinksToCreate}
-      setDraftLinksToCreate={setDraftLinksToCreate}
-      draftLinksToArchive={draftLinksToArchive}
-      setDraftLinksToArchive={setDraftLinksToArchive}
-      entitySubgraph={draftEntitySubgraph}
-      readonly={false}
-      replaceWithLatestDbVersion={async () => {}}
-    />
+    <>
+      {errorMessage && (
+        <AlertModal
+          calloutMessage={errorMessage}
+          close={() => setErrorMessage("")}
+          header="Couldn't create entity"
+          type="warning"
+        >
+          <Typography>
+            Please <Link href="https://hash.ai/contact">contact us</Link> and
+            tell us what entity you were trying to create when this happened
+          </Typography>
+        </AlertModal>
+      )}
+      <EntityEditorPage
+        editBar={
+          <EditBar
+            label="- this entity has not been created yet"
+            visible
+            discardButtonProps={{
+              href: "/new/entity",
+              children: "Discard entity",
+            }}
+            confirmButtonProps={{
+              onClick: () => handleCreateEntity(),
+              loading: creating,
+              children: "Create entity",
+            }}
+          />
+        }
+        entityLabel={entityLabel}
+        entityUuid="draft"
+        owner={`@${activeWorkspace?.shortname}`}
+        isQueryEntity={isQueryEntity}
+        isDirty
+        isDraft
+        handleSaveChanges={handleCreateEntity}
+        setEntity={(entity) => {
+          updateEntitySubgraphStateByEntity(entity, setDraftEntitySubgraph);
+        }}
+        draftLinksToCreate={draftLinksToCreate}
+        setDraftLinksToCreate={setDraftLinksToCreate}
+        draftLinksToArchive={draftLinksToArchive}
+        setDraftLinksToArchive={setDraftLinksToArchive}
+        entitySubgraph={draftEntitySubgraph}
+        readonly={false}
+        onEntityUpdated={null}
+      />
+    </>
   );
 };

@@ -2,35 +2,6 @@ volumes:
   hash-vault-data:
 
 services:
-  hash-dev-opensearch:
-    deploy:
-      restart_policy:
-        condition: on-failure
-    environment:
-      HASH_OPENSEARCH_ENABLED: "${HASH_OPENSEARCH_ENABLED}"
-      ## Tell OpenSearch that it's operating in single-node mode
-      discovery.type: single-node
-      ## Disable the security module for development so we can connect over plain HTTP
-      plugins.security.disabled: true
-      ## Docker volumes are ~10GB by default which is typically much smaller than the
-      ## host's drive size. This can cause OpenSearch to shutdown if it thinks disk
-      ## space is running low. Set the disk high watermark to 100% to ignore this.
-      cluster.routing.allocation.disk.watermark.high: 100%
-      cluster.routing.allocation.disk.watermark.flood_stage: 100%
-    build:
-      context: ./opensearch
-    ports:
-      - "9200:9200"
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    ## Mounting open search data to a local directory may lead to java.nio.file.AccessDeniedException.
-    ## Details: https://github.com/opensearch-project/OpenSearch/issues/1579.
-    ## We can revisit the setup after upgrading base image or by fixing permissions in a custom image.
-    # volumes:
-    #   - ../../var/hash-external-service/opensearch/data:/usr/share/opensearch/data
-
   postgres:
     environment:
       HASH_SPICEDB_PG_USER: "${HASH_SPICEDB_PG_USER}"
@@ -38,6 +9,40 @@ services:
       HASH_SPICEDB_PG_DATABASE: "${HASH_SPICEDB_PG_DATABASE}"
     ports:
       - "${POSTGRES_PORT}:5432"
+
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${AWS_S3_UPLOADS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_S3_UPLOADS_SECRET_ACCESS_KEY}
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - ../../var/uploads/s3:/data
+
+  minio-ensure-bucket-exists:
+    image: minio/mc
+    depends_on:
+      - minio
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MINIO_ROOT_USER: ${AWS_S3_UPLOADS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_S3_UPLOADS_SECRET_ACCESS_KEY}
+      AWS_S3_UPLOADS_BUCKET: ${AWS_S3_UPLOADS_BUCKET}
+    entrypoint: >
+      /bin/sh -c "
+      # Wait until MinIO is accessible
+      until (mc config host add myminio http://minio:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD) do echo 'Waiting for MinIO...' && sleep 1; done;
+
+      # Add a fixed delay to ensure MinIO server is fully ready
+      sleep 5;
+
+      echo 'Creating bucket if not exists...';
+      mc mb myminio/\$AWS_S3_UPLOADS_BUCKET --ignore-existing;
+      "
 
   telemetry-collector:
     image: jaegertracing/all-in-one:1.48
@@ -82,7 +87,6 @@ services:
     command: migrate head
 
   spicedb:
-    image: authzed/spicedb:v${HASH_SPICEDB_VERSION}
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,62 +97,23 @@ services:
     ports:
       - "${HASH_SPICEDB_HTTP_PORT}:8443"
       - "${HASH_SPICEDB_GRPC_PORT}:50051"
-    restart: on-failure
     environment:
-      SPICEDB_HTTP_ENABLED: "True"
-      SPICEDB_SCHEMA_PREFIXES_REQUIRED: "True"
-      SPICEDB_TELEMETRY_ENDPOINT: ""
-      SPICEDB_LOG_FORMAT: "console"
       SPICEDB_DATASTORE_ENGINE: postgres
       SPICEDB_DATASTORE_CONN_URI: "postgres://${HASH_SPICEDB_PG_USER}:${HASH_SPICEDB_PG_PASSWORD}@postgres:${POSTGRES_PORT}/${HASH_SPICEDB_PG_DATABASE}?plan_cache_mode=force_custom_plan"
       SPICEDB_GRPC_PRESHARED_KEY: "${HASH_SPICEDB_GRPC_PRESHARED_KEY}"
       SPICEDB_OTEL_PROVIDER: "otlpgrpc"
       SPICEDB_OTEL_ENDPOINT: "telemetry-collector:4317"
       SPICEDB_OTEL_INSECURE: "True"
-    command: serve
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "grpc_health_probe", "-addr=localhost:50051"]
-      interval: 5s
-      timeout: 2s
-      retries: 10
-
-  graph-migrate:
-    depends_on:
-      telemetry-collector:
-        condition: service_healthy
-    # When an error happens on the graph, OTLP will run into a data race
-    # and crash the graph. For now, we've disabled traces.
-    # environment:
-    #   HASH_GRAPH_OTLP_ENDPOINT: "http://telemetry-collector:4317"
-
-  graph:
-    depends_on:
-      spicedb:
-        condition: service_healthy
-      telemetry-collector:
-        condition: service_healthy
-    environment:
-      HASH_SPICEDB_HOST: http://spicedb
-      HASH_SPICEDB_HTTP_PORT: "${HASH_SPICEDB_HTTP_PORT}"
-      HASH_SPICEDB_GRPC_PRESHARED_KEY: "${HASH_SPICEDB_GRPC_PRESHARED_KEY}"
-    # When an error happens on the graph, OTLP will run into a data race
-    # and crash the graph. For now, we've disabled traces.
-    # environment:
-    #   HASH_GRAPH_OTLP_ENDPOINT: "http://telemetry-collector:4317"
-    ports:
-      - "${HASH_GRAPH_API_PORT}:4000"
 
   kratos:
     depends_on:
       telemetry-collector:
         condition: service_healthy
     ports:
-      - "4433:4433" # public
-      - "4434:4434" # admin
+      - "4433:4433" # public API
+      - "4434:4434" # admin API
     environment:
+      OAUTH2_PROVIDER_URL: "http://hydra:4445"
       TRACING_PROVIDER: "jaeger"
       TRACING_PROVIDERS_JAEGER_SAMPLING_SERVER_URL: "telemetry-collector:5778/sampling"
       TRACING_PROVIDERS_JAEGER_LOCAL_AGENT_ADDRESS: "telemetry-collector:6831"
@@ -164,37 +129,12 @@ services:
     ports:
       - "6379:6379"
 
-  temporal-migrate:
-    build:
-      context: ./temporal
-      dockerfile: migrate.Dockerfile
-      args:
-        TEMPORAL_VERSION: "${HASH_TEMPORAL_VERSION}"
-    read_only: true
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      # This sets configuration values in
-      # https://github.com/temporalio/temporal/blob/master/docker/config_template.yaml
-      # posgres12 for v12+ of postgres.
-      DB: "postgres12"
-      DBNAME: "${HASH_TEMPORAL_PG_DATABASE}"
-      VISIBILITY_DBNAME: "${HASH_TEMPORAL_VISIBILITY_PG_DATABASE}"
-      DB_PORT: "5432"
-      # Intentionally use the POSTGRES user as it's the "superadmin" which has access to schema
-      POSTGRES_USER: "${POSTGRES_USER}"
-      POSTGRES_PWD: "${POSTGRES_PASSWORD}"
-      POSTGRES_SEEDS: "postgres" # the hostname of the postgres container
-    security_opt:
-      - no-new-privileges:true
-
   vault:
     image: hashicorp/vault
     ports:
       - "${HASH_VAULT_PORT}:8200"
     volumes:
-      - hash-postgres-data:/vault/file:rw
+      - hash-vault-data:/vault/file:rw
       # - ./vault/config:/vault/config:rw - for when we need a config file
     cap_add:
       - IPC_LOCK

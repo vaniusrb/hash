@@ -1,9 +1,25 @@
 {
   "extends": ["//"],
-  "pipeline": {
+  "tasks": {
     "codegen": {
       "outputs": ["./src/**/*.gen.*"],
       "dependsOn": ["^codegen"]
+    },
+    "build": {
+      "outputs": ["./build/**/*", "./zip/*"],
+      "dependsOn": ["codegen"]
+    },
+    "build:firefox": {
+      "outputs": ["./build/**/*", "./zip/*"],
+      "dependsOn": ["codegen"]
+    },
+    "build:test": {
+      "outputs": ["./build/**/*", "./zip/*"],
+      "dependsOn": ["codegen"]
+    },
+    "start:test:migrate": {
+      "cache": false,
+      "dependsOn": ["build:test", "^start:test:healthcheck"]
     }
   }
 }

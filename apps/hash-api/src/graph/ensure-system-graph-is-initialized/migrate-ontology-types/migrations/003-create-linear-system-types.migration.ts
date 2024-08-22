@@ -1,13 +1,12 @@
-import { systemPropertyTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { BaseUrl, linkEntityTypeUrl } from "@local/hash-subgraph";
-import { versionedUrlFromComponents } from "@local/hash-subgraph/type-system-patch";
+import { linkEntityTypeUrl } from "@local/hash-subgraph";
 
 import { enabledIntegrations } from "../../../../integrations/enabled-integrations";
-import { MigrationFunction } from "../types";
+import type { MigrationFunction } from "../types";
 import {
   anyUserInstantiator,
   createSystemEntityTypeIfNotExists,
   createSystemPropertyTypeIfNotExists,
+  getCurrentHashPropertyTypeId,
 } from "../util";
 
 const migrate: MigrationFunction = async ({
@@ -504,19 +503,10 @@ const migrate: MigrationFunction = async ({
     },
   );
 
-  const emailPropertyTypeBaseUrl = systemPropertyTypes.email
-    .propertyTypeBaseUrl as BaseUrl;
-
-  const emailPropertyTypeVersion =
-    migrationState.propertyTypeVersions[emailPropertyTypeBaseUrl];
-
-  if (typeof emailPropertyTypeVersion === "undefined") {
-    throw new Error("Expected HASH email property type to have been seeded");
-  }
-  const emailPropertyTypeId = versionedUrlFromComponents(
-    emailPropertyTypeBaseUrl,
-    emailPropertyTypeVersion,
-  );
+  const emailPropertyTypeId = getCurrentHashPropertyTypeId({
+    propertyTypeKey: "email",
+    migrationState,
+  });
 
   const guestPropertyType = await createSystemPropertyTypeIfNotExists(
     context,

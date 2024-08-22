@@ -16,6 +16,220 @@ const nextConfig = {
 
   async redirects() {
     return [
+      /**
+       * Docs pages
+       */
+      {
+        source: "/docs/simulation/:path",
+        destination: "/docs/simulations/:path",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/concepts/:path",
+        destination: "/docs/simulations/create/design-considerations/:path",
+        permanent: true,
+      },
+      {
+        source:
+          "/docs/simulations/create/advanced/designing-with-process-models",
+        destination: "/docs/simulations/create/libraries/process",
+        permanent: true,
+      },
+      {
+        source:
+          "/docs/simulations/create/advanced/designing-with-the-material-handling-libraries",
+        destination: "/docs/simulations/create/libraries/material",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/run/simulation/outputs/api-1",
+        destination: "/docs/simulations/api/access#hcloud-api",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/advanced/physics",
+        destination: "/docs/simulations/create/libraries/physics",
+        permanent: true,
+      },
+      {
+        source:
+          "/docs/simulations/create/advanced/designing-with-system-dynamics-models",
+        destination: "/docs/simulations/create/libraries/system-dynamics",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/creating-simulations/:path*",
+        destination: "/docs/simulations/create/:path*",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/experiment/:path*",
+        destination: "/docs/simulations/run/experiment/:path*",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/anatomy-of-an-agent/:path*",
+        destination: "/docs/simulations/create/agents/:path*",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/views/:path*",
+        destination: "/docs/simulations/run/simulation/outputs/:path*",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/agent-based-modeling-basics-1",
+        destination: "/docs/simulations/create/abm",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/h.cloud",
+        destination: "/docs/simulations/run/cloud",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/create/libraries/python-packages",
+        destination: "/docs/simulations/create/libraries/third-party",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/advanced/design-considerations",
+        destination:
+          "/docs/simulations/create/design-considerations/actor-model",
+        permanent: true,
+      },
+      {
+        source:
+          "/docs/simulations/advanced/design-considerations/managing-resource-access",
+        destination:
+          "/docs/simulations/create/design-considerations/resource-access",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/advanced/designing-for-different-timescales",
+        destination:
+          "/docs/simulations/create/design-considerations/timescales",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/advanced/designing-with-distributions",
+        destination:
+          "/docs/simulations/create/design-considerations/distributions",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/advanced/verification-and-validation",
+        destination:
+          "/docs/simulations/create/design-considerations/verify-validate",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/determinism",
+        destination:
+          "/docs/simulations/create/design-considerations/determinism",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/design-considerations",
+        destination: "/docs/simulations/create/design-considerations",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/performance",
+        destination: "/docs/simulations/run/performance",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/migrating",
+        destination: "/docs/simulations/tutorials/migrating",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/troubleshooting/error-reference",
+        destination: "/docs/simulations/run/errors",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/shortcuts",
+        destination: "/docs/simulations/ide/shortcuts",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/specs-requirements",
+        destination: "/docs/simulations/ide/system-requirements",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/shortcuts",
+        destination: "/docs/simulations/ide/shortcuts",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/memory-management",
+        destination: "/docs/simulations/ide/memory",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/troubleshooting",
+        destination: "/docs/simulations/ide/troubleshooting",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/extra/",
+        destination: "/docs/simulations/tutorials/",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/api/hcore",
+        destination: "/docs/simulations/api/",
+        permanent: true,
+      },
+      {
+        source: "/docs/simulations/api/register-for-access",
+        destination: "/docs/simulations/api/access",
+        permanent: true,
+      },
+      /**
+       * License page redirects
+       */
+      {
+        source: "/license",
+        destination: "https://hash.ai/legal/developers/license-open",
+        permanent: true,
+      },
+      {
+        source: "/licence",
+        destination: "https://hash.ai/legal/developers/license-open",
+        permanent: true,
+      },
+      /**
+       * General page redirects
+       */
+      {
+        source: "/discord",
+        destination: "https://github.com/orgs/hashintel/discussions",
+        permanent: true,
+      },
+      {
+        source: "/discuss",
+        destination: "https://github.com/orgs/hashintel/discussions",
+        permanent: true,
+      },
+      {
+        source: "/contact",
+        destination: "https://hash.ai/contact",
+        permanent: true,
+      },
+      /**
+       * Temporary redirects
+       * 1) the `/docs` home page to the first tab of `/docs`
+       * 2) `/labs` while we wait on its existence
+       */
+      {
+        source: "/docs",
+        destination: "/docs/get-started",
+        permanent: false,
+      },
       {
         source: "/labs",
         destination: "/blog?label=labs",
@@ -38,4 +252,5 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// eslint-disable-next-line import/no-default-export
+export default nextConfig;

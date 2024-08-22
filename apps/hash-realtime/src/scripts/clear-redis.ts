@@ -7,7 +7,7 @@ import { AsyncRedisClient } from "@local/hash-backend-utils/redis";
 
 const logger = new Logger({
   serviceName: "clear-redis-queues",
-  mode: "dev",
+  environment: "development",
 });
 
 /**
@@ -22,6 +22,7 @@ const main = async () => {
   const redis = new AsyncRedisClient(logger, {
     host,
     port,
+    tls: process.env.HASH_REDIS_ENCRYPTED_TRANSIT === "true",
   });
   try {
     await redis.flushall();

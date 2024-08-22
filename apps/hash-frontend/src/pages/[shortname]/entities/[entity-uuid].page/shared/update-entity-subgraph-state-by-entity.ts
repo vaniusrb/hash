@@ -1,10 +1,11 @@
-import {
-  Entity,
+import type { SerializedEntity } from "@local/hash-graph-sdk/entity";
+import { Entity } from "@local/hash-graph-sdk/entity";
+import type {
   EntityRevisionId,
   EntityRootType,
   Subgraph,
 } from "@local/hash-subgraph";
-import { Dispatch, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 export const updateEntitySubgraphStateByEntity = (
   entity: Entity,
@@ -19,12 +20,15 @@ export const updateEntitySubgraphStateByEntity = (
      *   For places where we mutate elements, we should probably store them separately from the subgraph to
      *   allow for optimistic updates without being incorrect.
      */
-    const newEntity = JSON.parse(JSON.stringify(entity)) as Entity;
+    const metadata = JSON.parse(JSON.stringify(entity.metadata));
     const newEntityRevisionId = new Date().toISOString() as EntityRevisionId;
-    newEntity.metadata.temporalVersioning.decisionTime.start.limit =
+    metadata.temporalVersioning.decisionTime.start.limit = newEntityRevisionId;
+    metadata.temporalVersioning.transactionTime.start.limit =
       newEntityRevisionId;
-    newEntity.metadata.temporalVersioning.transactionTime.start.limit =
-      newEntityRevisionId;
+    const newEntity = new Entity({
+      ...entity.toJSON(),
+      metadata,
+    } as SerializedEntity);
 
     return subgraph
       ? {
@@ -41,7 +45,7 @@ export const updateEntitySubgraphStateByEntity = (
               ...subgraph.vertices[newEntity.metadata.recordId.entityId],
               [newEntityRevisionId]: {
                 kind: "entity",
-                inner: newEntity,
+                inner: entity,
               },
             },
           },

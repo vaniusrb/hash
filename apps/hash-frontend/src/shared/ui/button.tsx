@@ -1,13 +1,14 @@
-import { UrlObject } from "node:url";
+import type { UrlObject } from "node:url";
 
+import type { ButtonProps as BaseButtonProps } from "@hashintel/design-system";
 import {
   // eslint-disable-next-line no-restricted-imports
   Button as BaseButton,
-  ButtonProps as BaseButtonProps,
 } from "@hashintel/design-system";
 // eslint-disable-next-line no-restricted-imports
 import Link from "next/link";
-import { forwardRef, FunctionComponent, ReactNode, useMemo } from "react";
+import type { ReactNode } from "react";
+import { forwardRef, useMemo } from "react";
 
 import { generateLinkParameters } from "../generate-link-parameters";
 
@@ -17,7 +18,7 @@ export type ButtonProps = {
   href?: UrlObject | string;
 } & Omit<BaseButtonProps, "href">; // MUI button renders <a /> when href is provided, but typings miss rel and target
 
-export const Button: FunctionComponent<ButtonProps> = forwardRef(
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ children, href: unvalidatedHref, openInNewTab, ...props }, ref) => {
     const { href, isExternal } = generateLinkParameters(unvalidatedHref);
 

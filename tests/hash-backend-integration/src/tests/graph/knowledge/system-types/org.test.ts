@@ -1,35 +1,26 @@
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
+import type { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
 import {
   getOrgByShortname,
-  Org,
   updateOrgName,
-  updateOrgShortname,
 } from "@apps/hash-api/src/graph/knowledge/system-types/org";
 import { systemAccountId } from "@apps/hash-api/src/graph/system-account";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
 import { Logger } from "@local/hash-backend-utils/logger";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
-import {
-  createTestImpureGraphContext,
-  createTestOrg,
-  generateRandomShortname,
-} from "../../../util";
-
-jest.setTimeout(60000);
+import { createTestImpureGraphContext, createTestOrg } from "../../../util";
 
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("Org", () => {
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
   });
 
@@ -44,7 +35,6 @@ describe("Org", () => {
       graphContext,
       { actorId: systemAccountId },
       "orgTest",
-      logger,
     );
 
     shortname = createdOrg.shortname;
@@ -52,16 +42,6 @@ describe("Org", () => {
 
   it("can get the account id", () => {
     expect(createdOrg.entity.metadata.recordId.entityId).toBeDefined();
-  });
-
-  it("can update the shortname of an org", async () => {
-    const authentication = { actorId: systemAccountId };
-    shortname = generateRandomShortname("orgTest");
-
-    createdOrg = await updateOrgShortname(graphContext, authentication, {
-      org: createdOrg,
-      updatedShortname: shortname,
-    });
   });
 
   it("can update the preferred name of an org", async () => {

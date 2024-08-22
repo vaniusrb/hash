@@ -1,11 +1,11 @@
-import { GraphQLContext, LoggedInGraphQLContext } from "../../context";
+import type { GraphQLContext, LoggedInGraphQLContext } from "../../context";
 import { loggedInMiddleware } from "./logged-in";
-import { ResolverMiddleware } from "./middleware-types";
+import type { ResolverMiddleware } from "./middleware-types";
 import { signedUpMiddleware } from "./signed-up";
 
 export const loggedInAndSignedUpMiddleware: ResolverMiddleware<
   GraphQLContext,
-  any,
+  Record<string, unknown>,
   LoggedInGraphQLContext
-> = (next) => (obj: any, args: any, ctx: GraphQLContext, info: any) =>
+> = (next) => (obj, args, ctx: GraphQLContext, info) =>
   loggedInMiddleware(signedUpMiddleware(next))(obj, args, ctx, info);

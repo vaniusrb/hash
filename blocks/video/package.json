@@ -15,6 +15,7 @@
   },
   "license": "(MIT OR Apache-2.0)",
   "author": "HASH",
+  "type": "module",
   "scripts": {
     "build": "block-scripts build",
     "codegen": "block-scripts codegen && yarn format",
@@ -26,19 +27,19 @@
     "serve": "block-scripts serve"
   },
   "dependencies": {
-    "@blockprotocol/graph": "0.3.1-canary-20231207113055",
-    "twind": "0.16.17"
+    "@blockprotocol/graph": "0.3.4",
+    "twind": "0.16.19"
   },
   "devDependencies": {
     "@local/eslint-config": "0.0.0-private",
     "@local/tsconfig": "0.0.0-private",
-    "@types/react-dom": "18.0.10",
-    "block-scripts": "0.3.1",
-    "eslint": "8.33.0",
-    "mock-block-dock": "0.1.6",
+    "@types/react-dom": "18.2.25",
+    "block-scripts": "0.3.4",
+    "eslint": "8.57.0",
+    "mock-block-dock": "0.1.9",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "typescript": "5.1.6"
+    "typescript": "5.5.4"
   },
   "peerDependencies": {
     "react": "^18.2.0",

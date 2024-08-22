@@ -1,6 +1,6 @@
 import { frontendUrl } from "@local/hash-isomorphic-utils/environment";
 import { sanitizeHref } from "@local/hash-isomorphic-utils/sanitize";
-import { Url } from "next/dist/shared/lib/router/router";
+import type { Url } from "next/dist/shared/lib/router/router";
 
 import { isHrefExternal } from "./is-href-external";
 
@@ -69,12 +69,13 @@ export const generateLinkParameters = (
         /**
          * Until H-1172 is implemented, we need to just take the pathname of the href, because we might
          * have links with a https://hash.ai origin that need to be served from a https://app.hash.ai frontend
-         * The exceptions are the /contact and /discord routes which actually reside at https://hash.ai
+         * The exceptions are the /cases, /contact, and /guide routes which actually reside at https://hash.ai
          * @todo when implementing H-1172, just use the href here
          */
         isExternal ||
-        pathname.startsWith("/discord") ||
-        pathname.startsWith("/contact")
+        pathname.startsWith("/cases") ||
+        pathname.startsWith("/contact") ||
+        pathname.startsWith("/guide")
           ? href
           : `${pathname}${paramsString ? `?${paramsString}` : ""}`,
     };

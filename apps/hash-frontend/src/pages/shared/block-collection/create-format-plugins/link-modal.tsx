@@ -2,7 +2,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import LanguageIcon from "@mui/icons-material/Language";
 import LinkIcon from "@mui/icons-material/LinkOutlined";
 import { Box } from "@mui/material";
-import { FormEvent, FunctionComponent, useRef, useState } from "react";
+import type { FormEvent, FunctionComponent } from "react";
+import { useRef, useState } from "react";
 
 import { isValidLink } from "./util";
 
@@ -35,7 +36,10 @@ export const LinkModal: FunctionComponent<LinkModalProps> = ({
       style={{
         backgroundColor: "#ffffff",
         borderRadius: "0.375rem",
-        // @todo use shadows from MUI theme https://app.asana.com/0/1203179076056209/1203480105875518/f
+        /**
+         * @todo use shadows from MUI theme
+         * @see https://linear.app/hash/issue/H-2999
+         */
         boxShadow:
           "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
         left: "50%",

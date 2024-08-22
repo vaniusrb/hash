@@ -111,6 +111,7 @@ blocks/**/.env
 **/.mypy_cache
 **/.pytest_cache
 **/.hypothesis
+**/wheels
 
 # generated files
 *.gen.*
@@ -122,7 +123,7 @@ feed.rss
 .sentryclirc
 
 # Application data
-/var
+**/var
 seed-users.json
 
 # Block Protocol

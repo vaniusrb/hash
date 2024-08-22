@@ -1,18 +1,19 @@
-import { TextToken } from "@local/hash-isomorphic-utils/types";
+import type { TextToken } from "@local/hash-isomorphic-utils/types";
 
 import { getCommentText } from "../../../../graph/knowledge/system-types/comment";
-import { ResolverFn } from "../../../api-types.gen";
-import { LoggedInGraphQLContext } from "../../../context";
-import { dataSourcesToImpureGraphContext } from "../../util";
-import { UnresolvedCommentGQL } from "../graphql-mapping";
+import type { ResolverFn } from "../../../api-types.gen";
+import type { LoggedInGraphQLContext } from "../../../context";
+import { graphQLContextToImpureGraphContext } from "../../util";
+import type { UnresolvedCommentGQL } from "../graphql-mapping";
 
 export const commentHasTextResolver: ResolverFn<
   TextToken[],
   UnresolvedCommentGQL,
   LoggedInGraphQLContext,
-  {}
-> = async ({ metadata }, _, { dataSources, authentication }) => {
-  const context = dataSourcesToImpureGraphContext(dataSources);
+  Record<string, never>
+> = async ({ metadata }, _, graphQLContext) => {
+  const { authentication } = graphQLContext;
+  const context = graphQLContextToImpureGraphContext(graphQLContext);
 
   const text = await getCommentText(context, authentication, {
     commentEntityId: metadata.recordId.entityId,

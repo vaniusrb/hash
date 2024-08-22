@@ -1,4 +1,5 @@
-import { autocompleteClasses, Box, Paper, PaperProps } from "@mui/material";
+import type { PaperProps } from "@mui/material";
+import { autocompleteClasses, Box, Paper } from "@mui/material";
 
 import { popperPlacementSelectors } from "./popper-placement-modifier";
 import { textFieldBorderRadius } from "./theme";
@@ -18,7 +19,8 @@ export const AutocompleteDropdown = ({
           left: 0,
           right: 0,
           width: "100%",
-          height: `calc(100% + ${inputHeight}px)`,
+          /** If we have a fixed height, we can stretch the box shadow over the input. If not, don't stretch it */
+          height: `calc(100% + ${inputHeight === "auto" ? 0 : inputHeight}px)`,
           boxShadow: theme.boxShadows.md,
           pointerEvents: "none",
           borderRadius: `${textFieldBorderRadius}px`,

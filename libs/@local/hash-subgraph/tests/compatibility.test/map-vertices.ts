@@ -1,55 +1,66 @@
-import {
+import type {
   EntityType,
-  OneOf,
+  OneOfSchema,
   PropertyType,
   PropertyValues,
-  validateBaseUrl,
-  validateVersionedUrl,
   VersionedUrl,
 } from "@blockprotocol/type-system";
 import {
+  validateBaseUrl,
+  validateVersionedUrl,
+} from "@blockprotocol/type-system";
+import type {
   DataType as DataTypeGraphApi,
   DataTypeMetadata as DataTypeMetadataGraphApi,
   EntityMetadata as EntityMetadataGraphApi,
-  EntityProvenanceMetadata as EntityProvenanceMetadataGraphApi,
+  EntityProvenance as EntityProvenanceGraphApi,
   EntityRecordId as EntityRecordIdGraphApi,
   EntityTemporalMetadata as EntityTemporalMetadataGraphApi,
   EntityType as EntityTypeGraphApi,
   EntityTypeMetadata as EntityTypeMetadataGraphApi,
   KnowledgeGraphVertex as KnowledgeGraphVertexGraphApi,
   LinkData as LinkDataGraphApi,
-  OntologyProvenanceMetadata as OntologyProvenanceMetadataGraphApi,
+  OntologyProvenance as OntologyProvenanceGraphApi,
   OntologyTypeRecordId as OntologyTypeRecordIdGraphApi,
   OntologyVertex as OntologyVertexGraphApi,
   PropertyType as PropertyTypeGraphApi,
   PropertyTypeMetadata as PropertyTypeMetadataGraphApi,
   Vertices as VerticesGraphApi,
 } from "@local/hash-graph-client";
-import {
-  BaseUrl,
-  CreatedAtDecisionTime,
-  CreatedAtTransactionTime,
+import { Entity } from "@local/hash-graph-sdk/entity";
+import type {
   CreatedById,
-  CustomDataType,
-  DataTypeMetadata,
   EditionArchivedById,
   EditionCreatedById,
+} from "@local/hash-graph-types/account";
+import type {
   EntityId,
   EntityMetadata,
-  EntityPropertiesObject,
-  EntityProvenanceMetadata,
+  EntityProvenance,
   EntityRecordId,
   EntityTemporalVersioningMetadata,
-  EntityTypeMetadata,
-  isEntityId,
-  KnowledgeGraphVertex,
   LinkData,
-  OntologyProvenanceMetadata,
+} from "@local/hash-graph-types/entity";
+import type {
+  BaseUrl,
+  CustomDataType,
+  DataTypeMetadata,
+  EntityTypeMetadata,
+  OntologyProvenance,
   OntologyTypeRecordId,
-  OntologyVertex,
+} from "@local/hash-graph-types/ontology";
+import type {
+  CreatedAtDecisionTime,
+  CreatedAtTransactionTime,
   Timestamp,
+} from "@local/hash-graph-types/temporal-versioning";
+
+import type {
+  KnowledgeGraphVertex,
+  OntologyVertex,
   Vertices,
-} from "@local/hash-subgraph";
+} from "../../src/main.js";
+import { isEntityId } from "../../src/main.js";
 
 const mapDataType = (dataType: DataTypeGraphApi): CustomDataType => {
   const idResult = validateVersionedUrl(dataType.$id);
@@ -89,7 +100,7 @@ const mapPropertyType = (propertyType: PropertyTypeGraphApi): PropertyType => {
     ...propertyType,
     $id,
     // We checked the length above
-    oneOf: propertyType.oneOf as OneOf<PropertyValues>["oneOf"],
+    oneOf: propertyType.oneOf as OneOfSchema<PropertyValues>["oneOf"],
   };
 };
 
@@ -107,20 +118,23 @@ const mapOntologyTypeRecordId = (
   };
 };
 
-const mapOntologyProvenanceMetadata = (
-  metadata: OntologyProvenanceMetadataGraphApi,
-): OntologyProvenanceMetadata => {
+const mapOntologyProvenance = (
+  metadata: OntologyProvenanceGraphApi,
+): OntologyProvenance => {
   return {
     edition: {
       createdById: metadata.edition.createdById as EditionCreatedById,
       archivedById: metadata.edition.archivedById as EditionArchivedById,
+      actorType: metadata.edition.actorType,
+      origin: metadata.edition.origin,
+      sources: metadata.edition.sources,
     },
   };
 };
 
-const mapEntityProvenanceMetadata = (
-  metadata: EntityProvenanceMetadataGraphApi,
-): EntityProvenanceMetadata => {
+const mapEntityProvenance = (
+  metadata: EntityProvenanceGraphApi,
+): EntityProvenance => {
   return {
     createdById: metadata.createdById as CreatedById,
     createdAtTransactionTime:
@@ -129,6 +143,10 @@ const mapEntityProvenanceMetadata = (
       metadata.createdAtDecisionTime as CreatedAtDecisionTime,
     edition: {
       createdById: metadata.edition.createdById as EditionCreatedById,
+      archivedById: metadata.edition.archivedById as EditionArchivedById,
+      actorType: metadata.edition.actorType,
+      origin: metadata.edition.origin,
+      sources: metadata.edition.sources,
     },
   };
 };
@@ -138,7 +156,7 @@ const mapDataTypeMetadata = (
 ): DataTypeMetadata => {
   return {
     recordId: mapOntologyTypeRecordId(metadata.recordId),
-    provenance: mapOntologyProvenanceMetadata(metadata.provenance),
+    provenance: mapOntologyProvenance(metadata.provenance),
     ...("fetchedAt" in metadata
       ? { fetchedAt: metadata.fetchedAt as Timestamp }
       : ({} as {
@@ -171,7 +189,7 @@ const mapPropertyTypeMetadata = (
 ): DataTypeMetadata => {
   return {
     recordId: mapOntologyTypeRecordId(metadata.recordId),
-    provenance: mapOntologyProvenanceMetadata(metadata.provenance),
+    provenance: mapOntologyProvenance(metadata.provenance),
     ...("fetchedAt" in metadata
       ? { fetchedAt: metadata.fetchedAt as Timestamp }
       : ({} as {
@@ -205,7 +223,7 @@ const mapEntityTypeMetadata = (
   return {
     recordId: mapOntologyTypeRecordId(metadata.recordId),
     labelProperty: metadata.labelProperty as BaseUrl,
-    provenance: mapOntologyProvenanceMetadata(metadata.provenance),
+    provenance: mapOntologyProvenance(metadata.provenance),
     ...("fetchedAt" in metadata
       ? { fetchedAt: metadata.fetchedAt as Timestamp }
       : ({} as {
@@ -278,8 +296,6 @@ const mapLinkData = (linkData: LinkDataGraphApi): LinkData => {
   return {
     leftEntityId: linkData.leftEntityId as EntityId,
     rightEntityId: linkData.rightEntityId as EntityId,
-    leftToRightOrder: linkData.leftToRightOrder,
-    rightToLeftOrder: linkData.rightToLeftOrder,
   };
 };
 
@@ -321,32 +337,32 @@ const mapEntityTemporalVersioningMetadata = (
 const mapEntityMetadata = (
   metadata: EntityMetadataGraphApi,
 ): EntityMetadata => {
+  if (metadata.entityTypeIds.length !== 1) {
+    throw new Error(
+      `Expected entity metadata to have exactly one entity type id, but got ${metadata.entityTypeIds.length}`,
+    );
+  }
   return {
     recordId: mapEntityRecordId(metadata.recordId),
-    entityTypeId: metadata.entityTypeId as VersionedUrl,
+    entityTypeId: metadata.entityTypeIds[0] as VersionedUrl,
     temporalVersioning: mapEntityTemporalVersioningMetadata(
       metadata.temporalVersioning,
     ),
-    provenance: mapEntityProvenanceMetadata(metadata.provenance),
+    provenance: mapEntityProvenance(metadata.provenance),
     archived: metadata.archived,
-    draft: metadata.draft,
   };
 };
 
 const mapKnowledgeGraphVertex = (
   vertex: KnowledgeGraphVertexGraphApi,
 ): KnowledgeGraphVertex => {
+  const _metadata = mapEntityMetadata(vertex.inner.metadata);
+  const _linkData = vertex.inner.linkData
+    ? mapLinkData(vertex.inner.linkData)
+    : undefined;
   return {
     kind: vertex.kind,
-    inner: {
-      properties: vertex.inner.properties as EntityPropertiesObject,
-      ...(vertex.inner.linkData
-        ? {
-            linkData: mapLinkData(vertex.inner.linkData),
-          }
-        : ({} as { linkData: never })),
-      metadata: mapEntityMetadata(vertex.inner.metadata),
-    },
+    inner: new Entity(vertex.inner),
   };
 };
 

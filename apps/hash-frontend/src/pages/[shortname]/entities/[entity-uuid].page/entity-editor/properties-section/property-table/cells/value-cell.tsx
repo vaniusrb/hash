@@ -1,15 +1,10 @@
-import { JsonValue } from "@blockprotocol/core";
-import {
-  CustomCell,
-  CustomRenderer,
-  GridCellKind,
-} from "@glideapps/glide-data-grid";
+import type { JsonValue } from "@blockprotocol/core";
+import type { CustomCell, CustomRenderer } from "@glideapps/glide-data-grid";
+import { GridCellKind } from "@glideapps/glide-data-grid";
 import { customColors } from "@hashintel/design-system/theme";
-import {
-  formatDataValue,
-  FormattedValuePart,
-} from "@local/hash-isomorphic-utils/data-types";
-import { DataTypeWithMetadata } from "@local/hash-subgraph";
+import type { DataTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { FormattedValuePart } from "@local/hash-isomorphic-utils/data-types";
+import { formatDataValue } from "@local/hash-isomorphic-utils/data-types";
 
 import {
   getCellHorizontalPadding,
@@ -23,7 +18,7 @@ import { isValueEmpty } from "../../is-value-empty";
 import { ArrayEditor } from "./value-cell/array-editor";
 import { getEditorSpecs } from "./value-cell/editor-specs";
 import { SingleValueEditor } from "./value-cell/single-value-editor";
-import { ValueCell } from "./value-cell/types";
+import type { ValueCell } from "./value-cell/types";
 import { guessEditorTypeFromValue } from "./value-cell/utils";
 
 const guessDataTypeFromValue = (
@@ -47,6 +42,7 @@ const guessDataTypeFromValue = (
 export const renderValueCell: CustomRenderer<ValueCell> = {
   kind: GridCellKind.Custom,
   isMatch: (cell: CustomCell): cell is ValueCell =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (cell.data as any).kind === "value-cell",
   draw: (args, cell) => {
     const { ctx, rect, theme } = args;
@@ -61,7 +57,7 @@ export const renderValueCell: CustomRenderer<ValueCell> = {
     const editorType = guessEditorTypeFromValue(value, expectedTypes);
     const relevantType = expectedTypes.find((type) => type.type === editorType);
 
-    const editorSpec = getEditorSpecs(editorType, relevantType?.title);
+    const editorSpec = getEditorSpecs(editorType, relevantType);
 
     if (isValueEmpty(value)) {
       // draw empty value

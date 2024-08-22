@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use axum::{
     response::{IntoResponse, Response},
@@ -8,7 +8,13 @@ use error_stack::{Context, Report};
 use hash_status::{Status, StatusCode};
 use serde::Serialize;
 
-pub(crate) fn status_to_response<T>(status: Status<T>) -> Response
+/// Converts a `Status` into an `axum::Response`.
+///
+/// # Panics
+///
+/// Panics if the `Status` code does not map to a valid HTTP status code.
+#[must_use]
+pub fn status_to_response<T>(status: Status<T>) -> Response
 where
     T: Serialize + Send + Sync + Debug,
 {
@@ -24,13 +30,16 @@ where
     C: Context,
 {
     let report = report.into();
-    tracing::error!(error = ?report);
     let status_code = report
         .request_ref::<StatusCode>()
         .next()
         .copied()
         .or_else(|| report.request_value::<StatusCode>().next())
         .unwrap_or(StatusCode::Internal);
+    // TODO: Currently, this mostly duplicates the error printed below, when more information is
+    //       added to the `Report` event consider commenting in this line again.
+    // hash_tracing::sentry::capture_report(&report);
+    tracing::error!(error = ?report, tags.code = ?status_code.to_http_code());
 
     status_to_response(Status::new(
         status_code,

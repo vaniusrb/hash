@@ -1,9 +1,9 @@
-#[doc(hidden)]
 pub mod __private {
+    #![doc(hidden)]
     //! Implementation detail for macros.
     //!
-    //! ⚠️ **Functionality in this module is considered unstable and is subject to change at any time
-    //! without a major version bump!** ⚠️
+    //! ⚠️ **Functionality in this module is considered unstable and is subject to change at any
+    //! time without a major version bump!** ⚠️
     mod specialization {
         #![allow(clippy::unused_self)]
         //! [Autoref-Based Stable Specialization](https://github.com/dtolnay/case-studies/blob/master/autoref-specialization/README.md)
@@ -60,8 +60,6 @@ pub mod __private {
         }
     }
 
-    // false-positive lint
-    #[allow(unreachable_pub)]
     // Import anonymously to allow calling `__kind` but forbid implementing the tag-traits.
     pub use self::specialization::{ContextTag as _, ReportTag as _};
 }
@@ -106,6 +104,7 @@ pub mod __private {
 /// use error_stack::{report, Context};
 ///
 /// #[derive(Debug)]
+/// # #[allow(dead_code)]
 /// struct PermissionDenied(User, Resource);
 ///
 /// impl fmt::Display for PermissionDenied {
@@ -173,6 +172,7 @@ macro_rules! report {
 /// use error_stack::{bail, Context};
 ///
 /// #[derive(Debug)]
+/// # #[allow(dead_code)]
 /// struct PermissionDenied(User, Resource);
 ///
 /// impl fmt::Display for PermissionDenied {
@@ -222,6 +222,7 @@ macro_rules! bail {
 /// use error_stack::{ensure, Context};
 ///
 /// #[derive(Debug)]
+/// # #[allow(dead_code)]
 /// struct PermissionDenied(User, Resource);
 ///
 /// impl fmt::Display for PermissionDenied {

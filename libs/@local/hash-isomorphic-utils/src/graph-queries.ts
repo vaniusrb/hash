@@ -1,6 +1,6 @@
-import { GraphResolveDepths } from "@blockprotocol/graph";
-import { VersionedUrl } from "@blockprotocol/type-system";
-import {
+import type { GraphResolveDepths } from "@blockprotocol/graph";
+import type { VersionedUrl } from "@blockprotocol/type-system";
+import type {
   DataTypeQueryToken,
   EntityQueryToken,
   EntityTypeQueryToken,
@@ -8,21 +8,22 @@ import {
   PropertyTypeQueryToken,
   Selector,
 } from "@local/hash-graph-client";
-import {
-  AccountId,
+import type { AccountId } from "@local/hash-graph-types/account";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { Timestamp } from "@local/hash-graph-types/temporal-versioning";
+import type {
   EntityRelationAndSubject,
+  EntityTypeRelationAndSubject,
+  PropertyTypeRelationAndSubject,
   QueryTemporalAxesUnresolved,
-  Subgraph,
   SubgraphRootType,
-  Timestamp,
 } from "@local/hash-subgraph";
-import {
-  componentsFromVersionedUrl,
-  extractBaseUrl,
-} from "@local/hash-subgraph/type-system-patch";
+import { splitEntityId } from "@local/hash-subgraph";
+import { componentsFromVersionedUrl } from "@local/hash-subgraph/type-system-patch";
 
-import { SubgraphFieldsFragment } from "./graphql/api-types.gen";
-import { systemPropertyTypes } from "./ontology-type-ids";
+import type { SubgraphFieldsFragment } from "./graphql/api-types.gen.js";
+import { systemPropertyTypes } from "./ontology-type-ids.js";
+import { deserializeSubgraph } from "./subgraph-mapping.js";
 
 export const zeroedGraphResolveDepths: GraphResolveDepths = {
   inheritsFrom: { outgoing: 0 },
@@ -33,6 +34,18 @@ export const zeroedGraphResolveDepths: GraphResolveDepths = {
   isOfType: { outgoing: 0 },
   hasLeftEntity: { incoming: 0, outgoing: 0 },
   hasRightEntity: { incoming: 0, outgoing: 0 },
+};
+
+export const fullOntologyResolveDepths: Omit<
+  GraphResolveDepths,
+  "hasLeftEntity" | "hasRightEntity"
+> = {
+  constrainsValuesOn: { outgoing: 255 },
+  constrainsPropertiesOn: { outgoing: 255 },
+  constrainsLinksOn: { outgoing: 1 },
+  constrainsLinkDestinationsOn: { outgoing: 1 },
+  inheritsFrom: { outgoing: 255 },
+  isOfType: { outgoing: 1 },
 };
 
 /**
@@ -100,17 +113,43 @@ export const fullDecisionTimeAxis: QueryTemporalAxesUnresolved = {
 };
 
 /**
+ * Return the full history of records according to their transaction time
+ *
+ * This is specifically useful for:
+ * 1. Returning archived types – types currently are archived by setting an upper bound on their transaction time
+ * 2. [Future] audit purposes, to check the transaction history of records
+ */
+export const fullTransactionTimeAxis: QueryTemporalAxesUnresolved = {
+  pinned: {
+    axis: "decisionTime",
+    timestamp: null,
+  },
+  variable: {
+    axis: "transactionTime",
+    interval: {
+      start: {
+        kind: "unbounded",
+      },
+      end: null,
+    },
+  },
+};
+
+/**
  * Generates a query filter to match a type, given its versionedUrl.
  *
  * @param versionedUrl
  * @param [options] configuration of the returned filter
+ * @param [options.forEntityType] if this filter is targeting Entity Type roots rather than Entity roots
  * @param [options.ignoreParents] don't check the type's parents for a match against the versionedUrl
  * @param [options.pathPrefix] the path to the thing to match the type of, if it's not the root of the query
- *     @example ["outgoingLinks", "rightEntity"] to filter query results to things with a linked entity of the given type
+ *     @example ["outgoingLinks", "rightEntity"] to filter query results to things with a linked entity of the given
+ *   type
  */
 export const generateVersionedUrlMatchingFilter = (
   versionedUrl: VersionedUrl,
   options?: {
+    forEntityType?: boolean;
     ignoreParents?: boolean;
     pathPrefix?: (
       | DataTypeQueryToken
@@ -121,14 +160,19 @@ export const generateVersionedUrlMatchingFilter = (
     )[];
   },
 ): Filter => {
-  const { ignoreParents = false, pathPrefix = [] } = options ?? {};
+  const {
+    forEntityType,
+    ignoreParents = false,
+    pathPrefix = [],
+  } = options ?? {};
 
   const { baseUrl, version } = componentsFromVersionedUrl(versionedUrl);
 
-  const basePath = [
-    ...pathPrefix,
-    ignoreParents ? "type(inheritanceDepth = 0)" : "type",
-  ];
+  const basePath: string[] = pathPrefix;
+
+  if (!forEntityType) {
+    basePath.push(ignoreParents ? "type(inheritanceDepth = 0)" : "type");
+  }
 
   return {
     all: [
@@ -142,11 +186,70 @@ export const generateVersionedUrlMatchingFilter = (
   };
 };
 
-const archivedBaseUrl = extractBaseUrl(
-  systemPropertyTypes.archived.propertyTypeId,
-);
+/**
+ * Generate a filter to match an entity by its ID.
+ *
+ * If the entityId includes a draftId, only that draft will be queried.
+ * Pass includeArchived: true to include archived entities in the query.
+ *
+ * N.B. Some entities (notifications, pages, quick notes) handle archived via a property type instead of a boolean.
+ * You must additionally use {@link pageOrNotificationNotArchivedFilter} to exclude entities of those types where the property is falsy:
+ * {
+ *   all: [generateEntityIdFilter({ entityId }), notArchivedFilter]
+ * }
+ */
+export const generateEntityIdFilter = ({
+  entityId,
+  includeArchived = false,
+}: {
+  entityId: EntityId;
+  includeArchived: boolean;
+}): Filter => {
+  const [ownedById, entityUuid, draftId] = splitEntityId(entityId);
 
-export const notArchivedFilter: Filter = {
+  const conditions: Filter[] = [
+    {
+      equal: [
+        { path: ["uuid"] },
+        {
+          parameter: entityUuid,
+        },
+      ],
+    },
+    {
+      equal: [
+        { path: ["ownedById"] },
+        {
+          parameter: ownedById,
+        },
+      ],
+    },
+  ];
+
+  if (draftId) {
+    conditions.push({
+      equal: [
+        { path: ["draftId"] },
+        {
+          parameter: draftId,
+        },
+      ],
+    });
+  }
+
+  if (!includeArchived) {
+    conditions.push({ equal: [{ path: ["archived"] }, { parameter: false }] });
+  }
+
+  return { all: conditions };
+};
+
+const archivedBaseUrl = systemPropertyTypes.archived.propertyTypeBaseUrl;
+/**
+ * A filter for entities which record 'archived' state as a property rather than via an 'archived' boolean
+ * @todo H-611 implement entity archival properly via temporal versioning, and migrate these other approaches
+ */
+export const pageOrNotificationNotArchivedFilter: Filter = {
   any: [
     {
       equal: [
@@ -171,7 +274,7 @@ export const mapGqlSubgraphFieldsFragmentToSubgraph = <
   RootType extends SubgraphRootType,
 >(
   subgraph: SubgraphFieldsFragment,
-) => subgraph as Subgraph<RootType>;
+) => deserializeSubgraph<RootType>(subgraph);
 
 export const createDefaultAuthorizationRelationships = (params: {
   actorId: AccountId;
@@ -205,3 +308,70 @@ export const createDefaultAuthorizationRelationships = (params: {
     },
   },
 ];
+
+export const createOrgMembershipAuthorizationRelationships = ({
+  memberAccountId,
+}: {
+  memberAccountId: AccountId;
+}): EntityRelationAndSubject[] => [
+  {
+    relation: "setting",
+    subject: {
+      kind: "setting",
+      subjectId: "administratorFromWeb", // web admins can edit the link
+    },
+  },
+  {
+    relation: "editor",
+    subject: {
+      kind: "account",
+      subjectId: memberAccountId, // so can the user
+    },
+  },
+  {
+    relation: "viewer",
+    subject: {
+      kind: "public", // everyone in the world can see it (until we allow restricting this)
+    },
+  },
+];
+
+export const defaultPropertyTypeAuthorizationRelationships: PropertyTypeRelationAndSubject[] =
+  [
+    {
+      relation: "setting",
+      subject: {
+        kind: "setting",
+        subjectId: "updateFromWeb",
+      },
+    },
+    {
+      relation: "viewer",
+      subject: {
+        kind: "public",
+      },
+    },
+  ];
+
+export const defaultEntityTypeAuthorizationRelationships: EntityTypeRelationAndSubject[] =
+  [
+    {
+      relation: "setting",
+      subject: {
+        kind: "setting",
+        subjectId: "updateFromWeb",
+      },
+    },
+    {
+      relation: "viewer",
+      subject: {
+        kind: "public",
+      },
+    },
+    {
+      relation: "instantiator",
+      subject: {
+        kind: "public",
+      },
+    },
+  ];

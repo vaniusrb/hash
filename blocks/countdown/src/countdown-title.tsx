@@ -1,4 +1,5 @@
-import { ChangeEvent, FunctionComponent, useEffect, useRef } from "react";
+import type { ChangeEvent, FunctionComponent } from "react";
+import { useEffect, useRef } from "react";
 
 type CountdownTitleProps = {
   value: string | undefined;
@@ -37,6 +38,7 @@ export const CountdownTitle: FunctionComponent<CountdownTitleProps> = ({
       <div
         ref={textareaEl}
         className="title-input"
+        // @ts-expect-error -- placeholder has been implemented as attr(placeholder) in CSS class
         placeholder="Event name"
         onInput={handleChange}
         onBlur={onBlur}
@@ -51,7 +53,7 @@ export const CountdownTitle: FunctionComponent<CountdownTitleProps> = ({
         })}
       />
       {!readonly && (
-        <button onClick={onBlur} type="button">
+        <button aria-label="Stop editing" onClick={onBlur} type="button">
           <svg
             width="20"
             height="20"

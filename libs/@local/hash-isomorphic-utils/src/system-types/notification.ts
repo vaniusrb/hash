@@ -2,24 +2,34 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   ArchivedPropertyValue,
+  ArchivedPropertyValueWithMetadata,
   BooleanDataType,
+  BooleanDataTypeWithMetadata,
   Notification,
   NotificationOutgoingLinkAndTarget,
   NotificationOutgoingLinksByLinkEntityTypeId,
   NotificationProperties,
+  NotificationPropertiesWithMetadata,
   ReadAtPropertyValue,
+  ReadAtPropertyValueWithMetadata,
   TextDataType,
-} from "./shared";
+  TextDataTypeWithMetadata,
+} from "./shared.js";
 
 export type {
   ArchivedPropertyValue,
+  ArchivedPropertyValueWithMetadata,
   BooleanDataType,
+  BooleanDataTypeWithMetadata,
   Notification,
   NotificationOutgoingLinkAndTarget,
   NotificationOutgoingLinksByLinkEntityTypeId,
   NotificationProperties,
+  NotificationPropertiesWithMetadata,
   ReadAtPropertyValue,
+  ReadAtPropertyValueWithMetadata,
   TextDataType,
+  TextDataTypeWithMetadata,
 };

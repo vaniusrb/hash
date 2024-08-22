@@ -2,16 +2,18 @@
  * This file was automatically generated – do not edit it.
  */
 
-import {
+import type {
   BlockCollection,
   BlockCollectionOutgoingLinkAndTarget,
   BlockCollectionOutgoingLinksByLinkEntityTypeId,
   BlockCollectionProperties,
-} from "./shared";
+  BlockCollectionPropertiesWithMetadata,
+} from "./shared.js";
 
 export type {
   BlockCollection,
   BlockCollectionOutgoingLinkAndTarget,
   BlockCollectionOutgoingLinksByLinkEntityTypeId,
   BlockCollectionProperties,
+  BlockCollectionPropertiesWithMetadata,
 };

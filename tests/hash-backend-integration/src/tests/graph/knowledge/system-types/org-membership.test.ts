@@ -1,17 +1,16 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
-import { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
+import type { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
+import type { OrgMembership } from "@apps/hash-api/src/graph/knowledge/system-types/org-membership";
 import {
   createOrgMembership,
   getOrgMembershipOrg,
   getOrgMembershipUser,
-  OrgMembership,
 } from "@apps/hash-api/src/graph/knowledge/system-types/org-membership";
-import { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
-import { AuthenticationContext } from "@apps/hash-api/src/graphql/authentication-context";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import {
@@ -20,15 +19,13 @@ import {
   createTestUser,
 } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 
 describe("OrgMembership", () => {
   let testUser: User;
@@ -37,7 +34,6 @@ describe("OrgMembership", () => {
   let authentication: AuthenticationContext;
 
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "orgMembershipTest", logger);
@@ -47,16 +43,15 @@ describe("OrgMembership", () => {
       graphContext,
       { actorId: testUser.accountId },
       "orgMembershipTest",
-      logger,
     );
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   let testOrgMembership: OrgMembership;

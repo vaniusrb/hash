@@ -1,21 +1,26 @@
 import { readdir } from "node:fs/promises";
-import path from "node:path";
+import path, { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { Logger } from "@local/hash-backend-utils/logger";
+import type { Logger } from "@local/hash-backend-utils/logger";
 
-import { ImpureGraphContext } from "../context-types";
+import { isProdEnv } from "../../lib/env-config";
+import type { ImpureGraphContext } from "../context-types";
 import { systemAccountId } from "../system-account";
-import {
+import type {
   MigrationFunction,
   MigrationState,
 } from "./migrate-ontology-types/types";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Migrate the ontology types in the Graph API.
  */
 export const migrateOntologyTypes = async (params: {
   logger: Logger;
-  context: ImpureGraphContext;
+  context: ImpureGraphContext<false, true>;
 }) => {
   const authentication = { actorId: systemAccountId };
 
@@ -36,6 +41,15 @@ export const migrateOntologyTypes = async (params: {
 
   for (const migrationFileName of migrationFileNames) {
     if (migrationFileName.endsWith(".migration.ts")) {
+      /**
+       * If the migration file is marked with `.dev.migration.ts`, it
+       * should only be seeded in non-production environments.
+       */
+      if (isProdEnv && migrationFileName.endsWith(".dev.migration.ts")) {
+        params.logger.debug(`Skipping dev migration ${migrationFileName}`);
+        continue;
+      }
+
       const filePath = path.join(migrationDirectory, migrationFileName);
 
       const module = await import(filePath);
@@ -50,6 +64,8 @@ export const migrateOntologyTypes = async (params: {
         authentication,
         migrationState,
       });
+
+      params.logger.debug(`Processed migration ${migrationFileName}`);
     }
   }
 };

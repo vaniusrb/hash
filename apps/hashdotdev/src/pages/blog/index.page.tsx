@@ -1,15 +1,11 @@
-import {
-  Container,
-  Divider,
-  Stack,
-  StackProps,
-  Typography,
-} from "@mui/material";
+import type { StackProps } from "@mui/material";
+import { Container, Divider, Stack, Typography } from "@mui/material";
 import { Box } from "@mui/system";
-import { GetStaticProps } from "next";
+import type { GetStaticProps } from "next";
 import Image from "next/legacy/image";
 import { NextSeo } from "next-seo";
-import { ComponentProps, Fragment, FunctionComponent } from "react";
+import type { ComponentProps, FunctionComponent } from "react";
+import { Fragment } from "react";
 
 import { BlogPostAuthor } from "../../components/blog-post";
 import { ArrowUpRightFromSquareRegularIcon } from "../../components/icons/arrow-up-right-from-square-regular-icon";
@@ -18,9 +14,12 @@ import { PageLayout } from "../../components/page-layout";
 import { Subscribe } from "../../components/pre-footer";
 import { parseNameFromFileName } from "../../util/client-mdx-util";
 import { getAllPages } from "../../util/mdx-util";
-import { NextPageWithLayout } from "../../util/next-types";
-import { BlogIndividualPage } from "../shared/blog-posts-context";
-import { BlogPost, BlogPostAuthorWithPhotoSrc } from "./[...blog-slug].page";
+import type { NextPageWithLayout } from "../../util/next-types";
+import type { BlogIndividualPage } from "../shared/blog-posts-context";
+import type {
+  BlogPost,
+  BlogPostAuthorWithPhotoSrc,
+} from "./[...blog-slug].page";
 import { generateFeeds } from "./index.page/generate-feeds";
 import { getPhoto } from "./shared/get-photo";
 
@@ -39,12 +38,12 @@ export const getStaticProps: GetStaticProps<BlogPageListProps> = async () => {
     const pages = await Promise.all(
       getAllPages<BlogPost>("blog")
         .sort((pageA, pageB) => {
-          const timeA = pageB.data.date
-            ? new Date(pageB.data.date).getTime()
+          const timeA = pageB.data.dateFirstPublished
+            ? new Date(pageB.data.dateFirstPublished).getTime()
             : 0;
 
-          const timeB = pageA.data.date
-            ? new Date(pageA.data.date).getTime()
+          const timeB = pageA.data.dateFirstPublished
+            ? new Date(pageA.data.dateFirstPublished).getTime()
             : 0;
 
           return timeA - timeB;

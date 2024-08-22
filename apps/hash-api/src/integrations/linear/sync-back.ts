@@ -1,27 +1,25 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system";
 import { linearTypeMappings } from "@local/hash-backend-utils/linear-type-mappings";
 import { getMachineActorId } from "@local/hash-backend-utils/machine-actors";
-import { UpdateLinearDataWorkflow } from "@local/hash-backend-utils/temporal-workflow-types";
-import { GraphApi } from "@local/hash-graph-client";
+import { createTemporalClient } from "@local/hash-backend-utils/temporal";
+import type { UpdateLinearDataWorkflow } from "@local/hash-backend-utils/temporal-integration-workflow-types";
+import { createVaultClient } from "@local/hash-backend-utils/vault";
+import type { GraphApi } from "@local/hash-graph-client";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import { LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { Uuid } from "@local/hash-graph-types/branded";
+import type { EntityUuid } from "@local/hash-graph-types/entity";
+import { generateUuid } from "@local/hash-isomorphic-utils/generate-uuid";
 import { linearPropertyTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import {
-  Entity,
-  entityIdFromOwnedByIdAndEntityUuid,
-  EntityUuid,
+  entityIdFromComponents,
   extractOwnedByIdFromEntityId,
-  Uuid,
 } from "@local/hash-subgraph";
-import {
-  extractBaseUrl,
-  LinkEntity,
-} from "@local/hash-subgraph/type-system-patch";
 
+import type { ImpureGraphContext } from "../../graph/context-types";
 import { getLatestEntityById } from "../../graph/knowledge/primitive/entity";
 import { getLinearSecretValueByHashWorkspaceId } from "../../graph/knowledge/system-types/linear-user-secret";
 import { systemAccountId } from "../../graph/system-account";
-import { createTemporalClient } from "../../temporal";
-import { genId } from "../../util";
-import { createVaultClient } from "../../vault";
 
 const supportedLinearEntityTypeIds = linearTypeMappings.map(
   ({ hashEntityTypeId }) => hashEntityTypeId as VersionedUrl,
@@ -69,22 +67,32 @@ export const processEntityChange = async (
     return;
   }
 
+  const graphContext: ImpureGraphContext = {
+    graphApi,
+    provenance: {
+      actorType: "machine",
+      origin: {
+        /**
+         * @todo use correct EntityId for Flow when Linear integration migrated to Flows
+         */
+        id: "linear-integration",
+        type: "flow",
+      },
+    },
+    temporalClient: null,
+  };
+
   const linearEntityToUpdate = supportedLinearEntityTypeIds.includes(
     entityTypeId,
   )
     ? entity
     : await getLatestEntityById(
-        { graphApi },
+        graphContext,
         { actorId: linearMachineActorId },
-        { entityId: (entity as LinkEntity).linkData.leftEntityId },
+        { entityId: new LinkEntity(entity).linkData.leftEntityId },
       );
 
   const temporalClient = await createTemporalClient();
-  if (!temporalClient) {
-    throw new Error(
-      "Cannot create Temporal client – are there missing environment variables?",
-    );
-  }
 
   const vaultClient = createVaultClient();
   if (!vaultClient) {
@@ -102,13 +110,13 @@ export const processEntityChange = async (
    *
    * @todo: fix this so that it works for users and orgs
    */
-  const hashWorkspaceEntityId = entityIdFromOwnedByIdAndEntityUuid(
+  const hashWorkspaceEntityId = entityIdFromComponents(
     owningAccountUuId,
     owningAccountUuId as Uuid as EntityUuid,
   );
 
   const linearApiKey = await getLinearSecretValueByHashWorkspaceId(
-    { graphApi },
+    graphContext,
     { actorId: linearMachineActorId },
     {
       hashWorkspaceEntityId,
@@ -117,9 +125,7 @@ export const processEntityChange = async (
   );
 
   const linearId =
-    linearEntityToUpdate.properties[
-      extractBaseUrl(linearPropertyTypes.id.propertyTypeId)
-    ];
+    linearEntityToUpdate.properties[linearPropertyTypes.id.propertyTypeBaseUrl];
 
   if (!linearId) {
     return;
@@ -128,7 +134,7 @@ export const processEntityChange = async (
   await temporalClient.workflow.start<UpdateLinearDataWorkflow>(
     "updateLinearData",
     {
-      workflowId: genId(),
+      workflowId: generateUuid(),
       taskQueue: "integration",
       args: [
         {
@@ -136,7 +142,7 @@ export const processEntityChange = async (
           linearId: linearId as string,
           authentication: { actorId: linearMachineActorId },
           entityTypeId: linearEntityToUpdate.metadata.entityTypeId,
-          entity: linearEntityToUpdate,
+          entity: linearEntityToUpdate.toJSON(),
         },
       ],
     },

@@ -1,41 +1,40 @@
 import { EntityTypeMismatchError } from "@local/hash-backend-utils/error";
 import { createWebMachineActor } from "@local/hash-backend-utils/machine-actors";
-import {
-  currentTimeInstantTemporalAxes,
-  generateVersionedUrlMatchingFilter,
-  zeroedGraphResolveDepths,
-} from "@local/hash-isomorphic-utils/graph-queries";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { AccountGroupId } from "@local/hash-graph-types/account";
+import type { EntityId, EntityUuid } from "@local/hash-graph-types/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
+import { currentTimeInstantTemporalAxes } from "@local/hash-isomorphic-utils/graph-queries";
 import {
   systemEntityTypes,
   systemPropertyTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { OrganizationProperties } from "@local/hash-isomorphic-utils/system-types/shared";
+import { mapGraphApiEntityToEntity } from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type {
+  Organization,
+  OrganizationNamePropertyValueWithMetadata,
+  OrganizationPropertiesWithMetadata,
+} from "@local/hash-isomorphic-utils/system-types/shared";
+import type { AccountGroupEntityId } from "@local/hash-subgraph";
+import { extractAccountGroupId } from "@local/hash-subgraph";
 import {
-  AccountGroupEntityId,
-  AccountGroupId,
-  Entity,
-  EntityId,
-  EntityRootType,
-  EntityUuid,
-  extractAccountGroupId,
-  OwnedById,
-} from "@local/hash-subgraph";
-import {
-  getRoots,
-  mapGraphApiSubgraphToSubgraph,
-} from "@local/hash-subgraph/stdlib";
-import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
+  extractBaseUrl,
+  versionedUrlFromComponents,
+} from "@local/hash-subgraph/type-system-patch";
 
 import {
   createAccountGroup,
   createWeb,
 } from "../../account-permission-management";
-import { ImpureGraphFunction, PureGraphFunction } from "../../context-types";
+import type {
+  ImpureGraphFunction,
+  PureGraphFunction,
+} from "../../context-types";
 import {
   createEntity,
   getLatestEntityById,
-  updateEntityProperty,
+  updateEntity,
 } from "../primitive/entity";
 import {
   shortnameIsInvalid,
@@ -47,24 +46,29 @@ export type Org = {
   accountGroupId: AccountGroupId;
   orgName: string;
   shortname: string;
-  entity: Entity;
+  entity: Entity<Organization>;
 };
+
+function assertOrganizationEntity(
+  entity: Entity,
+): asserts entity is Entity<Organization> {
+  const entityTypeBaseUrl = extractBaseUrl(entity.metadata.entityTypeId);
+  if (entityTypeBaseUrl !== systemEntityTypes.organization.entityTypeBaseUrl) {
+    throw new EntityTypeMismatchError(
+      entity.metadata.recordId.entityId,
+      systemEntityTypes.organization.entityTypeBaseUrl,
+      entityTypeBaseUrl,
+    );
+  }
+}
 
 export const getOrgFromEntity: PureGraphFunction<{ entity: Entity }, Org> = ({
   entity,
 }) => {
-  if (
-    entity.metadata.entityTypeId !== systemEntityTypes.organization.entityTypeId
-  ) {
-    throw new EntityTypeMismatchError(
-      entity.metadata.recordId.entityId,
-      systemEntityTypes.organization.entityTypeId,
-      entity.metadata.entityTypeId,
-    );
-  }
+  assertOrganizationEntity(entity);
 
   const { organizationName: orgName, shortname } = simplifyProperties(
-    entity.properties as OrganizationProperties,
+    entity.properties,
   );
 
   return {
@@ -93,10 +97,11 @@ export const createOrg: ImpureGraphFunction<
     name: string;
     orgAccountGroupId?: AccountGroupId;
     websiteUrl?: string | null;
+    entityTypeVersion?: number;
   },
   Promise<Org>
 > = async (ctx, authentication, params) => {
-  const { shortname, name, websiteUrl } = params;
+  const { shortname, name, websiteUrl, entityTypeVersion } = params;
 
   if (shortnameIsInvalid({ shortname })) {
     throw new Error(`The shortname "${shortname}" is invalid`);
@@ -126,20 +131,46 @@ export const createOrg: ImpureGraphFunction<
     });
   }
 
-  const properties: OrganizationProperties = {
-    "https://hash.ai/@hash/types/property-type/shortname/": shortname,
-    "https://hash.ai/@hash/types/property-type/organization-name/": name,
-    ...(websiteUrl
-      ? {
-          "https://hash.ai/@hash/types/property-type/website-url/": websiteUrl,
-        }
-      : {}),
+  const properties: OrganizationPropertiesWithMetadata = {
+    value: {
+      "https://hash.ai/@hash/types/property-type/shortname/": {
+        value: shortname,
+        metadata: {
+          dataTypeId:
+            "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+        },
+      },
+      "https://hash.ai/@hash/types/property-type/organization-name/": {
+        value: name,
+        metadata: {
+          dataTypeId:
+            "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+        },
+      },
+      ...(websiteUrl !== undefined && websiteUrl !== null
+        ? {
+            "https://hash.ai/@hash/types/property-type/website-url/": {
+              value: websiteUrl,
+              metadata: {
+                dataTypeId:
+                  "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+              },
+            },
+          }
+        : {}),
+    },
   };
 
   const entity = await createEntity(ctx, authentication, {
     ownedById: orgAccountGroupId as OwnedById,
     properties,
-    entityTypeId: systemEntityTypes.organization.entityTypeId,
+    entityTypeId:
+      typeof entityTypeVersion === "undefined"
+        ? systemEntityTypes.organization.entityTypeId
+        : versionedUrlFromComponents(
+            systemEntityTypes.organization.entityTypeBaseUrl,
+            entityTypeVersion,
+          ),
     entityUuid: orgAccountGroupId as string as EntityUuid,
     relationships: [
       {
@@ -183,23 +214,25 @@ export const getOrgById: ImpureGraphFunction<
  * @param params.shortname - the shortname of the organization
  */
 export const getOrgByShortname: ImpureGraphFunction<
-  { shortname: string; includeDrafts?: boolean },
+  { shortname: string },
   Promise<Org | null>
 > = async ({ graphApi }, { actorId }, params) => {
   const [orgEntity, ...unexpectedEntities] = await graphApi
-    .getEntitiesByQuery(actorId, {
+    .getEntities(actorId, {
       filter: {
         all: [
-          generateVersionedUrlMatchingFilter(
-            systemEntityTypes.organization.entityTypeId,
-            { ignoreParents: true },
-          ),
+          {
+            equal: [
+              { path: ["type(inheritanceDepth = 0)", "baseUrl"] },
+              { parameter: systemEntityTypes.organization.entityTypeBaseUrl },
+            ],
+          },
           {
             equal: [
               {
                 path: [
                   "properties",
-                  extractBaseUrl(systemPropertyTypes.shortname.propertyTypeId),
+                  systemPropertyTypes.shortname.propertyTypeBaseUrl,
                 ],
               },
               { parameter: params.shortname },
@@ -207,20 +240,18 @@ export const getOrgByShortname: ImpureGraphFunction<
           },
         ],
       },
-      graphResolveDepths: zeroedGraphResolveDepths,
       // TODO: Should this be an all-time query? What happens if the org is
       //       archived/deleted, do we want to allow orgs to replace their
       //       shortname?
       //   see https://linear.app/hash/issue/H-757
       temporalAxes: currentTimeInstantTemporalAxes,
-      includeDrafts: params.includeDrafts ?? false,
+      includeDrafts: false,
     })
-    .then(({ data }) => {
-      const userEntitiesSubgraph =
-        mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
-
-      return getRoots(userEntitiesSubgraph);
-    });
+    .then(({ data: response }) =>
+      response.entities.map((entity) =>
+        mapGraphApiEntityToEntity(entity, actorId),
+      ),
+    );
 
   if (unexpectedEntities.length > 0) {
     throw new Error(
@@ -229,43 +260,6 @@ export const getOrgByShortname: ImpureGraphFunction<
   }
 
   return orgEntity ? getOrgFromEntity({ entity: orgEntity }) : null;
-};
-
-/**
- * Update the shortname of an Org.
- *
- * @param params.org - the org
- * @param params.updatedShortname - the new shortname to assign to the Org
- * @param params.actorId - the id of the account that is updating the shortname
- */
-export const updateOrgShortname: ImpureGraphFunction<
-  { org: Org; updatedShortname: string },
-  Promise<Org>
-> = async (ctx, authentication, params) => {
-  const { org, updatedShortname } = params;
-
-  if (shortnameIsInvalid({ shortname: updatedShortname })) {
-    throw new Error(`The shortname "${updatedShortname}" is invalid`);
-  }
-
-  if (
-    shortnameIsRestricted({ shortname: updatedShortname }) ||
-    (await shortnameIsTaken(ctx, authentication, {
-      shortname: updatedShortname,
-    }))
-  ) {
-    throw new Error(
-      `An account with shortname "${updatedShortname}" already exists.`,
-    );
-  }
-
-  return updateEntityProperty(ctx, authentication, {
-    entity: org.entity,
-    propertyTypeBaseUrl: extractBaseUrl(
-      systemPropertyTypes.shortname.propertyTypeId,
-    ),
-    value: updatedShortname,
-  }).then((updatedEntity) => getOrgFromEntity({ entity: updatedEntity }));
 };
 
 /**
@@ -289,7 +283,9 @@ export const orgNameIsInvalid: PureGraphFunction<
  */
 export const updateOrgName: ImpureGraphFunction<
   { org: Org; updatedOrgName: string },
-  Promise<Org>
+  Promise<Org>,
+  false,
+  true
 > = async (ctx, authentication, params) => {
   const { org, updatedOrgName } = params;
 
@@ -297,12 +293,21 @@ export const updateOrgName: ImpureGraphFunction<
     throw new Error(`Organization name "${updatedOrgName}" is invalid.`);
   }
 
-  const updatedEntity = await updateEntityProperty(ctx, authentication, {
+  const updatedEntity = await updateEntity(ctx, authentication, {
     entity: org.entity,
-    propertyTypeBaseUrl: extractBaseUrl(
-      systemPropertyTypes.organizationName.propertyTypeId,
-    ),
-    value: updatedOrgName,
+    propertyPatches: [
+      {
+        op: "replace",
+        path: [systemPropertyTypes.organizationName.propertyTypeBaseUrl],
+        property: {
+          value: updatedOrgName,
+          metadata: {
+            dataTypeId:
+              "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+          },
+        } satisfies OrganizationNamePropertyValueWithMetadata,
+      },
+    ],
   });
 
   return getOrgFromEntity({ entity: updatedEntity });

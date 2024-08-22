@@ -1,0 +1,73 @@
+{
+  "name": "@blockprotocol/type-system",
+  "version": "0.1.2-canary.0",
+  "private": true,
+  "description": "Definitions of types within the Block Protocol Type System",
+  "homepage": "https://blockprotocol.org",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:hashintel/hash.git",
+    "directory": "libs/@blockprotocol/type-system/typescript"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "HASH",
+    "url": "https://hash.ai"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": "./dist/es/main.js",
+    "./slim": "./dist/es-slim/main-slim.js",
+    "./package.json": "./package.json",
+    "./wasm": "./dist/wasm/type-system.wasm"
+  },
+  "main": "./dist/es/main.js",
+  "types": "./dist/es/main.d.ts",
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/es-slim/main.d.ts"
+      ],
+      "slim": [
+        "./dist/es-slim/main-slim.d.ts"
+      ],
+      "wasm": [
+        "./dist/wasm/type-system.wasm.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "yarn clean && rollup -c --bundleConfigAsCjs",
+    "clean": "rimraf ./dist/",
+    "compressed-size": "yarn build && find dist -iname '*.js' -exec npx terser@latest --compress --mangle --output {} -- {} \\;",
+    "fix:eslint": "eslint --fix .",
+    "lint:eslint": "eslint --report-unused-disable-directives .",
+    "lint:tsc": "tsc --noEmit",
+    "prepublishOnly": "yarn build:wasm && yarn test && yarn build:bundle",
+    "test:unit": "vitest --run"
+  },
+  "dependencies": {
+    "@blockprotocol/type-system-rs": "0.0.0-private"
+  },
+  "devDependencies": {
+    "@local/eslint-config": "0.0.0-private",
+    "@local/tsconfig": "0.0.0-private",
+    "@rollup/plugin-node-resolve": "15.2.3",
+    "@rollup/plugin-typescript": "11.1.6",
+    "@rollup/plugin-wasm": "6.0.1",
+    "@types/node": "20.16.1",
+    "@types/react": "18.2.68",
+    "@vitest/coverage-istanbul": "2.0.5",
+    "eslint": "8.57.0",
+    "react": "18.2.0",
+    "rollup": "4.12.0",
+    "tslib": "2.4.1",
+    "typescript": "5.5.4",
+    "vite-plugin-wasm-pack": "0.1.12",
+    "vitest": "2.0.5"
+  }
+}

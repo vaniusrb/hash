@@ -1,25 +1,31 @@
 import { typedEntries } from "@local/advanced-types/typed-entries";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import { mergePropertiesAndMetadata } from "@local/hash-graph-sdk/entity";
+import type {
+  EntityId,
+  PropertyPatchOperation,
+} from "@local/hash-graph-types/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { createDefaultAuthorizationRelationships } from "@local/hash-isomorphic-utils/graph-queries";
-import { Entity, EntityId, OwnedById } from "@local/hash-subgraph";
-import { UserInputError } from "apollo-server-errors";
+import { ApolloError, UserInputError } from "apollo-server-errors";
 import produce from "immer";
 
-import { ImpureGraphContext } from "../../../../graph/context-types";
+import type { ImpureGraphContext } from "../../../../graph/context-types";
+import type { PropertyValue } from "../../../../graph/knowledge/primitive/entity";
 import {
   createEntityWithLinks,
   getLatestEntityById,
-  getOrCreateEntity,
-  PropertyValue,
-  updateEntityProperties,
+  updateEntity,
 } from "../../../../graph/knowledge/primitive/entity";
+import type { Block } from "../../../../graph/knowledge/system-types/block";
 import {
-  Block,
   createBlock,
   getBlockById,
   updateBlockDataEntity,
 } from "../../../../graph/knowledge/system-types/block";
-import { User } from "../../../../graph/knowledge/system-types/user";
-import {
+import type { User } from "../../../../graph/knowledge/system-types/user";
+import type {
   CreateEntityAction,
   EntityDefinition,
   InsertBlockAction,
@@ -27,12 +33,11 @@ import {
   UpdateBlockCollectionAction,
   UpdateEntityAction,
 } from "../../../api-types.gen";
-import { AuthenticationContext } from "../../../authentication-context";
 
 export const createEntityWithPlaceholdersFn =
   (
     authentication: AuthenticationContext,
-    context: ImpureGraphContext,
+    context: ImpureGraphContext<false, true>,
     placeholderResults: PlaceholderResultsMap,
   ) =>
   async (originalDefinition: EntityDefinition, ownedById: OwnedById) => {
@@ -45,17 +50,21 @@ export const createEntityWithPlaceholdersFn =
     });
 
     if (entityDefinition.existingEntityId) {
-      return await getOrCreateEntity(context, authentication, {
-        ownedById,
-        // We've looked up the placeholder ID, and have an actual entity ID at this point.
-        entityDefinition,
-        relationships: createDefaultAuthorizationRelationships(authentication),
-      });
+      try {
+        return await getLatestEntityById(context, authentication, {
+          entityId: entityDefinition.existingEntityId,
+        });
+      } catch {
+        throw new ApolloError(
+          `Entity ${entityDefinition.existingEntityId} not found`,
+          "NOT_FOUND",
+        );
+      }
     } else {
       return await createEntityWithLinks(context, authentication, {
         ownedById,
         entityTypeId: entityDefinition.entityTypeId!,
-        properties: entityDefinition.entityProperties ?? {},
+        properties: entityDefinition.entityProperties ?? { value: {} },
         linkedEntities: entityDefinition.linkedEntities ?? undefined,
         relationships: createDefaultAuthorizationRelationships(authentication),
       });
@@ -259,7 +268,7 @@ export const handleInsertNewBlock = async (
  * Acts on {@link SwapBlockDataAction}
  */
 export const handleSwapBlockData = async (
-  context: ImpureGraphContext,
+  context: ImpureGraphContext<false, true>,
   params: {
     user: User;
     swapBlockDataAction: SwapBlockDataAction;
@@ -301,7 +310,7 @@ export const handleSwapBlockData = async (
  * Acts on {@link UpdateEntityAction}
  */
 export const handleUpdateEntity = async (
-  context: ImpureGraphContext,
+  context: ImpureGraphContext<false, true>,
   params: {
     user: User;
     action: UpdateEntityAction;
@@ -321,11 +330,17 @@ export const handleUpdateEntity = async (
     entityId,
   });
 
-  await updateEntityProperties(context, authentication, {
+  await updateEntity(context, authentication, {
     entity,
-    updatedProperties: typedEntries(action.properties).map(([key, value]) => ({
-      propertyTypeBaseUrl: key,
-      value: (value ?? undefined) as PropertyValue,
-    })),
+    propertyPatches: typedEntries(action.properties).map(
+      ([key, value]) =>
+        ({
+          op: entity.properties[key] === value ? "replace" : "add",
+          path: [key],
+          property: mergePropertiesAndMetadata(
+            (value ?? undefined) as PropertyValue,
+          ),
+        }) satisfies PropertyPatchOperation,
+    ),
   });
 };

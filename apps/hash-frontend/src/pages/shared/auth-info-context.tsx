@@ -1,39 +1,33 @@
-import { useLazyQuery } from "@apollo/client";
+import { useApolloClient } from "@apollo/client";
+import { LinkEntity } from "@local/hash-graph-sdk/entity";
+import type { AccountGroupId } from "@local/hash-graph-types/account";
+import type { Uuid } from "@local/hash-graph-types/branded";
+import type { Timestamp } from "@local/hash-graph-types/temporal-versioning";
 import { mapGqlSubgraphFieldsFragmentToSubgraph } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemLinkEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { IsMemberOfProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import {
-  AccountGroupId,
-  EntityRootType,
-  extractEntityUuidFromEntityId,
-  Subgraph,
-  Timestamp,
-  Uuid,
-} from "@local/hash-subgraph";
+import type { IsMemberOf } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
+import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
 import {
   getOutgoingLinksForEntity,
   getRoots,
   intervalForTimestamp,
 } from "@local/hash-subgraph/stdlib";
-import { LinkEntity } from "@local/hash-subgraph/type-system-patch";
+import type { FunctionComponent, ReactElement } from "react";
 import {
   createContext,
-  FunctionComponent,
-  ReactElement,
   useCallback,
   useContext,
   useMemo,
   useState,
 } from "react";
 
+import { useHashInstance } from "../../components/hooks/use-hash-instance";
 import { useOrgsWithLinks } from "../../components/hooks/use-orgs-with-links";
-import { MeQuery } from "../../graphql/api-types.gen";
+import type { MeQuery } from "../../graphql/api-types.gen";
 import { meQuery } from "../../graphql/queries/user.queries";
-import {
-  constructUser,
-  isEntityUserEntity,
-  User,
-} from "../../lib/user-and-org";
+import type { User } from "../../lib/user-and-org";
+import { constructUser, isEntityUserEntity } from "../../lib/user-and-org";
 
 type RefetchAuthInfoFunction = () => Promise<{
   authenticatedUser?: User;
@@ -41,6 +35,7 @@ type RefetchAuthInfoFunction = () => Promise<{
 
 type AuthInfoContextValue = {
   authenticatedUser?: User;
+  isInstanceAdmin: boolean | undefined;
   refetch: RefetchAuthInfoFunction;
 };
 
@@ -61,10 +56,6 @@ export const AuthInfoProvider: FunctionComponent<AuthInfoProviderProps> = ({
     initialAuthenticatedUserSubgraph,
   ); // use the initial server-sent data to start – after that, the client controls the value
 
-  const [getMe] = useLazyQuery<MeQuery>(meQuery, {
-    fetchPolicy: "cache-and-network",
-  });
-
   const userMemberOfLinks = useMemo(() => {
     if (!authenticatedUserSubgraph) {
       return undefined;
@@ -82,11 +73,13 @@ export const AuthInfoProvider: FunctionComponent<AuthInfoProviderProps> = ({
       authenticatedUserSubgraph,
       userEntity.metadata.recordId.entityId,
       intervalForTimestamp(new Date().toISOString() as Timestamp),
-    ).filter(
-      (linkEntity) =>
-        linkEntity.metadata.entityTypeId ===
-        systemLinkEntityTypes.isMemberOf.linkEntityTypeId,
-    ) as LinkEntity<IsMemberOfProperties>[];
+    )
+      .filter(
+        (linkEntity) =>
+          linkEntity.metadata.entityTypeId ===
+          systemLinkEntityTypes.isMemberOf.linkEntityTypeId,
+      )
+      .map((linkEntity) => new LinkEntity<IsMemberOf>(linkEntity));
   }, [authenticatedUserSubgraph]);
 
   const { orgs: resolvedOrgs, refetch: refetchOrgs } = useOrgsWithLinks({
@@ -123,15 +116,30 @@ export const AuthInfoProvider: FunctionComponent<AuthInfoProviderProps> = ({
     [resolvedOrgs, userMemberOfLinks],
   );
 
+  const apolloClient = useApolloClient();
+
+  const { isUserAdmin: isInstanceAdmin } = useHashInstance();
+
   const fetchAuthenticatedUser =
     useCallback<RefetchAuthInfoFunction>(async () => {
-      const subgraph = await getMe()
+      /**
+       * @todo: use the `useLazyQuery` hook instead of the `apolloClient`
+       * here. This requires upgrading the `@apollo/client` to fix issue
+       * in the `useLazyQuery` hook that causes outdated data to be
+       * returned if an error is encountered by the query.
+       *
+       * @see https://linear.app/hash/issue/H-2182/upgrade-apolloclient-to-latest-version-to-fix-uselazyquery-behaviour
+       * @see https://github.com/apollographql/apollo-client/issues/6086
+       */
+      const subgraph = await apolloClient
+        .query<MeQuery>({
+          query: meQuery,
+          fetchPolicy: "network-only",
+        })
         .then(({ data }) =>
-          data
-            ? mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
-                data.me.subgraph,
-              )
-            : undefined,
+          mapGqlSubgraphFieldsFragmentToSubgraph<EntityRootType>(
+            data.me.subgraph,
+          ),
         )
         .catch(() => undefined);
 
@@ -143,7 +151,7 @@ export const AuthInfoProvider: FunctionComponent<AuthInfoProviderProps> = ({
       setAuthenticatedUserSubgraph(subgraph);
 
       return { authenticatedUser: constructUserValue(subgraph) };
-    }, [constructUserValue, getMe]);
+    }, [constructUserValue, apolloClient]);
 
   const authenticatedUser = useMemo(
     () => constructUserValue(authenticatedUserSubgraph),
@@ -153,13 +161,14 @@ export const AuthInfoProvider: FunctionComponent<AuthInfoProviderProps> = ({
   const value = useMemo(
     () => ({
       authenticatedUser,
+      isInstanceAdmin,
       refetch: async () => {
         // Refetch the detail on orgs in case this refetch is following them being modified
         await refetchOrgs();
         return fetchAuthenticatedUser();
       },
     }),
-    [authenticatedUser, fetchAuthenticatedUser, refetchOrgs],
+    [authenticatedUser, isInstanceAdmin, fetchAuthenticatedUser, refetchOrgs],
   );
 
   return (

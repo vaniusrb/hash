@@ -1,9 +1,9 @@
 import { Autocomplete, MenuItem } from "@hashintel/design-system";
-import { OwnedById } from "@local/hash-subgraph";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { Stack, Typography } from "@mui/material";
-import { ReactElement } from "react";
+import type { ReactElement } from "react";
 
-import { LocalStorage } from "../../../../../../shared/storage";
+import type { LocalStorage } from "../../../../../../shared/storage";
 import {
   darkModeBorderColor,
   darkModeInputBackgroundColor,
@@ -63,12 +63,12 @@ export const WebSelector = ({
         // Creating the component here reduces loading state in the dropdown
         <Avatar
           avatar={user.avatar}
-          name={user.properties.preferredName}
+          name={user.properties.displayName}
           size={16}
         />
       ),
       label: "My web",
-      name: user.properties.preferredName,
+      name: user.properties.displayName,
       value: user.webOwnedById,
     },
     ...user.orgs.map((org) => ({

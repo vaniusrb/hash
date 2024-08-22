@@ -2,17 +2,16 @@ import {
   faCircleExclamation,
   faWarning,
 } from "@fortawesome/free-solid-svg-icons";
+import type { BoxProps, TooltipProps } from "@mui/material";
 import {
   Box,
-  BoxProps,
   Collapse,
   styled,
   Tooltip,
   tooltipClasses,
-  TooltipProps,
   Typography,
 } from "@mui/material";
-import { forwardRef, FunctionComponent } from "react";
+import { forwardRef } from "react";
 
 import { FontAwesomeIcon } from "./fontawesome-icon";
 
@@ -36,8 +35,11 @@ export type SubmitButtonWrapperProps = {
   helperText: string;
 } & BoxProps;
 
-export const SubmitButtonWrapper: FunctionComponent<SubmitButtonWrapperProps> =
-  forwardRef(({ children, useTooltip, helperText, ...props }, ref) => {
+export const SubmitButtonWrapper = forwardRef(
+  (
+    { children, useTooltip, helperText, ...props }: SubmitButtonWrapperProps,
+    ref,
+  ) => {
     if (useTooltip && helperText) {
       return (
         <DisabledTooltip
@@ -100,4 +102,5 @@ export const SubmitButtonWrapper: FunctionComponent<SubmitButtonWrapperProps> =
         </Collapse>
       </Box>
     );
-  });
+  },
+);

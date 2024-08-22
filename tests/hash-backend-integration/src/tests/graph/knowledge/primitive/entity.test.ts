@@ -1,5 +1,4 @@
 import { deleteKratosIdentity } from "@apps/hash-api/src/auth/ory-kratos";
-import { ImpureGraphContext } from "@apps/hash-api/src/graph/context-types";
 import { ensureSystemGraphIsInitialized } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized";
 import { generateSystemEntityTypeSchema } from "@apps/hash-api/src/graph/ensure-system-graph-is-initialized/migrate-ontology-types/util";
 import {
@@ -10,31 +9,29 @@ import {
   updateEntity,
 } from "@apps/hash-api/src/graph/knowledge/primitive/entity";
 import { getLinkEntityRightEntity } from "@apps/hash-api/src/graph/knowledge/primitive/link-entity";
-import { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
-import {
-  joinOrg,
-  User,
-} from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import type { Org } from "@apps/hash-api/src/graph/knowledge/system-types/org";
+import type { User } from "@apps/hash-api/src/graph/knowledge/system-types/user";
+import { joinOrg } from "@apps/hash-api/src/graph/knowledge/system-types/user";
 import { createEntityType } from "@apps/hash-api/src/graph/ontology/primitive/entity-type";
 import { createPropertyType } from "@apps/hash-api/src/graph/ontology/primitive/property-type";
-import { TypeSystemInitializer } from "@blockprotocol/type-system";
 import { Logger } from "@local/hash-backend-utils/logger";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type {
+  EntityTypeWithMetadata,
+  PropertyTypeWithMetadata,
+} from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   createDefaultAuthorizationRelationships,
   currentTimeInstantTemporalAxes,
   zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
 import { generateTypeId } from "@local/hash-isomorphic-utils/ontology-types";
-import {
-  Entity,
-  EntityRootType,
-  EntityTypeWithMetadata,
-  linkEntityTypeUrl,
-  OwnedById,
-  PropertyTypeWithMetadata,
-  Subgraph,
-} from "@local/hash-subgraph";
+import { mapGraphApiSubgraphToSubgraph } from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type { EntityRootType } from "@local/hash-subgraph";
+import { linkEntityTypeUrl } from "@local/hash-subgraph";
 import { getRoots } from "@local/hash-subgraph/stdlib";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { resetGraph } from "../../../test-server";
 import {
@@ -44,15 +41,13 @@ import {
   textDataTypeId,
 } from "../../../util";
 
-jest.setTimeout(60000);
-
 const logger = new Logger({
-  mode: "dev",
+  environment: "test",
   level: "debug",
   serviceName: "integration-tests",
 });
 
-const graphContext: ImpureGraphContext = createTestImpureGraphContext();
+const graphContext = createTestImpureGraphContext();
 const { graphApi } = graphContext;
 
 describe("Entity CRU", () => {
@@ -65,7 +60,6 @@ describe("Entity CRU", () => {
   let linkEntityTypeFriend: EntityTypeWithMetadata;
 
   beforeAll(async () => {
-    await TypeSystemInitializer.initialize();
     await ensureSystemGraphIsInitialized({ logger, context: graphContext });
 
     testUser = await createTestUser(graphContext, "entitytest", logger);
@@ -77,7 +71,6 @@ describe("Entity CRU", () => {
       graphContext,
       authentication,
       "entitytestorg",
-      logger,
     );
     await joinOrg(graphContext, authentication, {
       userEntityId: testUser2.entity.metadata.recordId.entityId,
@@ -197,17 +190,17 @@ describe("Entity CRU", () => {
         },
       ],
     });
-  });
 
-  afterAll(async () => {
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser.kratosIdentityId,
-    });
-    await deleteKratosIdentity({
-      kratosIdentityId: testUser2.kratosIdentityId,
-    });
+    return async () => {
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser.kratosIdentityId,
+      });
+      await deleteKratosIdentity({
+        kratosIdentityId: testUser2.kratosIdentityId,
+      });
 
-    await resetGraph();
+      await resetGraph();
+    };
   });
 
   let createdEntity: Entity;
@@ -216,8 +209,22 @@ describe("Entity CRU", () => {
     createdEntity = await createEntity(graphContext, authentication, {
       ownedById: testOrg.accountGroupId as OwnedById,
       properties: {
-        [namePropertyType.metadata.recordId.baseUrl]: "Bob",
-        [favoriteBookPropertyType.metadata.recordId.baseUrl]: "some text",
+        value: {
+          [namePropertyType.metadata.recordId.baseUrl]: {
+            value: "Bob",
+            metadata: {
+              dataTypeId:
+                "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+            },
+          },
+          [favoriteBookPropertyType.metadata.recordId.baseUrl]: {
+            value: "some text",
+            metadata: {
+              dataTypeId:
+                "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+            },
+          },
+        },
       },
       entityTypeId: entityType.schema.$id,
       relationships: createDefaultAuthorizationRelationships(authentication),
@@ -252,13 +259,32 @@ describe("Entity CRU", () => {
       { actorId: testUser2.accountId },
       {
         entity: createdEntity,
-        properties: {
-          [namePropertyType.metadata.recordId.baseUrl]: "Updated Bob",
-          [favoriteBookPropertyType.metadata.recordId.baseUrl]:
-            "Even more text than before",
-        },
+        propertyPatches: [
+          {
+            op: "replace",
+            path: [namePropertyType.metadata.recordId.baseUrl],
+            property: {
+              value: "Updated Bob",
+              metadata: {
+                dataTypeId:
+                  "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+              },
+            },
+          },
+          {
+            op: "replace",
+            path: [favoriteBookPropertyType.metadata.recordId.baseUrl],
+            property: {
+              value: "Even more text than before",
+              metadata: {
+                dataTypeId:
+                  "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+              },
+            },
+          },
+        ],
       },
-    ).catch((err) => Promise.reject(err.data));
+    ).catch((err) => Promise.reject(err));
 
     expect(updatedEntity.metadata.provenance.edition.createdById).toBe(
       testUser2.accountId,
@@ -267,7 +293,7 @@ describe("Entity CRU", () => {
 
   it("can read all latest person entities", async () => {
     const allEntities = await graphApi
-      .getEntitiesByQuery(testUser.accountId, {
+      .getEntitySubgraph(testUser.accountId, {
         filter: {
           all: [
             {
@@ -290,7 +316,14 @@ describe("Entity CRU", () => {
         temporalAxes: currentTimeInstantTemporalAxes,
         includeDrafts: false,
       })
-      .then(({ data }) => getRoots(data as Subgraph<EntityRootType>));
+      .then(({ data }) =>
+        getRoots(
+          mapGraphApiSubgraphToSubgraph<EntityRootType>(
+            data.subgraph,
+            testUser.accountId,
+          ),
+        ),
+      );
 
     const newlyUpdated = allEntities.find(
       (ent) =>
@@ -321,8 +354,22 @@ describe("Entity CRU", () => {
         // First create a new entity given the following definition
         entityTypeId: entityType.schema.$id,
         properties: {
-          [namePropertyType.metadata.recordId.baseUrl]: "Alice",
-          [favoriteBookPropertyType.metadata.recordId.baseUrl]: "some text",
+          value: {
+            [namePropertyType.metadata.recordId.baseUrl]: {
+              value: "Alice",
+              metadata: {
+                dataTypeId:
+                  "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+              },
+            },
+            [favoriteBookPropertyType.metadata.recordId.baseUrl]: {
+              value: "some text",
+              metadata: {
+                dataTypeId:
+                  "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+              },
+            },
+          },
         },
         linkedEntities: [
           {

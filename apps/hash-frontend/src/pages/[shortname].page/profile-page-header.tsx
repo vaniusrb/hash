@@ -1,14 +1,16 @@
 import { Avatar } from "@hashintel/design-system";
 import { Box, Container, Skeleton, Typography } from "@mui/material";
-import { FunctionComponent, useState } from "react";
+import type { FunctionComponent } from "react";
+import { useState } from "react";
 
-import { Org, User } from "../../lib/user-and-org";
+import type { Org, User } from "../../lib/user-and-org";
 import { CogRegularIcon } from "../../shared/icons/cog-regular-icon";
 import { Button } from "../../shared/ui";
-import { getImageUrlFromEntityProperties } from "../shared/get-image-url-from-properties";
+import { getImageUrlFromEntityProperties } from "../shared/get-file-properties";
 import { EditPinnedEntityTypesModal } from "./edit-pinned-entity-types-modal";
 import { ProfilePageTabs } from "./profile-page-tabs";
-import { leftColumnWidth, ProfilePageTab } from "./util";
+import type { ProfilePageTab } from "./util";
+import { leftColumnWidth } from "./util";
 
 const avatarTopOffset = 25;
 
@@ -60,7 +62,7 @@ export const ProfilePageHeader: FunctionComponent<{
               <Avatar
                 src={avatarSrc}
                 title={
-                  profile.kind === "user" ? profile.preferredName : profile.name
+                  profile.kind === "user" ? profile.displayName : profile.name
                 }
                 size={leftColumnWidth}
                 sx={{
@@ -106,9 +108,7 @@ export const ProfilePageHeader: FunctionComponent<{
                     color: ({ palette }) => palette.gray[90],
                   }}
                 >
-                  {profile.kind === "user"
-                    ? profile.preferredName
-                    : profile.name}
+                  {profile.kind === "user" ? profile.displayName : profile.name}
                 </Typography>
               ) : (
                 <Skeleton

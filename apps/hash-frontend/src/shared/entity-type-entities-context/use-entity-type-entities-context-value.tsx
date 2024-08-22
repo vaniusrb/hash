@@ -1,16 +1,16 @@
-import {
+import type {
   EntityType,
   PropertyType,
   VersionedUrl,
 } from "@blockprotocol/type-system";
-import { BaseUrl } from "@local/hash-subgraph";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 import {
   getEntityTypeAndParentsById,
   getPropertyTypeById,
 } from "@local/hash-subgraph/stdlib";
 import { useMemo } from "react";
 
-import { EntityTypeEntitiesContextValue } from "../entity-type-entities-context";
+import type { EntityTypeEntitiesContextValue } from "../entity-type-entities-context";
 import { useEntityTypeEntities } from "../use-entity-type-entities";
 
 export const useEntityTypeEntitiesContextValue = (params: {
@@ -58,8 +58,10 @@ export const useEntityTypeEntitiesContextValue = (params: {
       for (const prop of Object.values(properties)) {
         const propertyUrl = "items" in prop ? prop.items.$ref : prop.$ref;
         if (!relevantPropertiesMap.has(propertyUrl)) {
-          const propertyType = getPropertyTypeById(subgraph, propertyUrl)
-            ?.schema;
+          const propertyType = getPropertyTypeById(
+            subgraph,
+            propertyUrl,
+          )?.schema;
           if (propertyType) {
             relevantPropertiesMap.set(propertyUrl, propertyType);
           }

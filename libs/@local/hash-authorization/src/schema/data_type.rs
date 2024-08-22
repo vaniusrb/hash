@@ -1,8 +1,7 @@
-use std::error::Error;
+use core::error::Error;
 
-use graph_types::owned_by_id::OwnedById;
+use graph_types::{ontology::DataTypeId, owned_by_id::OwnedById};
 use serde::{Deserialize, Serialize};
-use type_system::url::VersionedUrl;
 use uuid::Uuid;
 
 use crate::{
@@ -16,39 +15,10 @@ use crate::{
     },
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DataTypeNamespace {
     #[serde(rename = "graph/data_type")]
     DataType,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[repr(transparent)]
-pub struct DataTypeId(Uuid);
-
-impl DataTypeId {
-    #[must_use]
-    pub const fn new(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-
-    #[must_use]
-    pub fn from_url(url: &VersionedUrl) -> Self {
-        Self(Uuid::new_v5(
-            &Uuid::NAMESPACE_URL,
-            url.to_string().as_bytes(),
-        ))
-    }
-
-    #[must_use]
-    pub const fn as_uuid(&self) -> &Uuid {
-        &self.0
-    }
-
-    #[must_use]
-    pub const fn into_uuid(self) -> Uuid {
-        self.0
-    }
 }
 
 impl Resource for DataTypeId {
@@ -71,7 +41,7 @@ impl Resource for DataTypeId {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DataTypeResourceRelation {
     Owner,
@@ -80,7 +50,7 @@ pub enum DataTypeResourceRelation {
 
 impl Relation<DataTypeId> for DataTypeResourceRelation {}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DataTypePermission {
@@ -90,14 +60,14 @@ pub enum DataTypePermission {
 
 impl Permission<DataTypeId> for DataTypePermission {}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type", content = "id")]
 pub enum DataTypeSubject {
     Web(OwnedById),
     Public,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DataTypeSubjectNamespace {
     #[serde(rename = "graph/web")]
     Web,
@@ -105,7 +75,7 @@ pub enum DataTypeSubjectNamespace {
     Account,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DataTypeSubjectId {
     Uuid(Uuid),
@@ -149,7 +119,7 @@ impl Resource for DataTypeSubject {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase", tag = "kind", deny_unknown_fields)]
 pub enum DataTypeOwnerSubject {
@@ -159,14 +129,14 @@ pub enum DataTypeOwnerSubject {
     },
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase", tag = "kind", deny_unknown_fields)]
 pub enum DataTypeViewerSubject {
     Public,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[serde(rename_all = "camelCase", tag = "relation")]
 pub enum DataTypeRelationAndSubject {

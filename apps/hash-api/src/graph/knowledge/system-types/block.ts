@@ -1,9 +1,13 @@
 import { EntityTypeMismatchError } from "@local/hash-backend-utils/error";
+import type {
+  CreateEntityParameters,
+  Entity,
+} from "@local/hash-graph-sdk/entity";
+import type { EntityId } from "@local/hash-graph-types/entity";
 import {
   createDefaultAuthorizationRelationships,
   currentTimeInstantTemporalAxes,
   generateVersionedUrlMatchingFilter,
-  zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
 import {
   systemEntityTypes,
@@ -11,20 +15,21 @@ import {
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { contentLinkTypeFilter } from "@local/hash-isomorphic-utils/page-entity-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { BlockProperties } from "@local/hash-isomorphic-utils/system-types/shared";
+import type {
+  Block as BlockEntity,
+  HasData,
+} from "@local/hash-isomorphic-utils/system-types/shared";
 import {
-  Entity,
-  EntityId,
   extractEntityUuidFromEntityId,
   extractOwnedByIdFromEntityId,
 } from "@local/hash-subgraph";
-import { getRoots } from "@local/hash-subgraph/stdlib";
 
-import { ImpureGraphFunction, PureGraphFunction } from "../../context-types";
+import type {
+  ImpureGraphFunction,
+  PureGraphFunction,
+} from "../../context-types";
 import {
-  archiveEntity,
   createEntity,
-  CreateEntityParams,
   getEntities,
   getEntityIncomingLinks,
   getEntityOutgoingLinks,
@@ -36,17 +41,17 @@ import {
   getLinkEntityRightEntity,
   isEntityLinkEntity,
 } from "../primitive/link-entity";
-import { Comment, getCommentFromEntity } from "./comment";
+import type { Comment } from "./comment";
+import { getCommentFromEntity } from "./comment";
 
 export type Block = {
   componentId: string;
-  entity: Entity;
+  entity: Entity<BlockEntity>;
 };
 
-export const getBlockFromEntity: PureGraphFunction<
-  { entity: Entity },
-  Block
-> = ({ entity }) => {
+function assertBlockEntity(
+  entity: Entity,
+): asserts entity is Entity<BlockEntity> {
   if (entity.metadata.entityTypeId !== systemEntityTypes.block.entityTypeId) {
     throw new EntityTypeMismatchError(
       entity.metadata.recordId.entityId,
@@ -54,10 +59,15 @@ export const getBlockFromEntity: PureGraphFunction<
       entity.metadata.entityTypeId,
     );
   }
+}
 
-  const { componentId } = simplifyProperties(
-    entity.properties as BlockProperties,
-  );
+export const getBlockFromEntity: PureGraphFunction<
+  { entity: Entity },
+  Block
+> = ({ entity }) => {
+  assertBlockEntity(entity);
+
+  const { componentId } = simplifyProperties(entity.properties);
 
   return {
     componentId,
@@ -88,7 +98,7 @@ export const getBlockById: ImpureGraphFunction<
  * @see {@link createEntity} for the documentation of the remaining parameters
  */
 export const createBlock: ImpureGraphFunction<
-  Pick<CreateEntityParams, "ownedById"> & {
+  Pick<CreateEntityParameters, "ownedById"> & {
     componentId: string;
     blockData: Entity;
   },
@@ -96,22 +106,31 @@ export const createBlock: ImpureGraphFunction<
 > = async (ctx, authentication, params) => {
   const { componentId, blockData, ownedById } = params;
 
-  const properties: BlockProperties = {
-    "https://hash.ai/@hash/types/property-type/component-id/": componentId,
-  };
-
-  const entity = await createEntity(ctx, authentication, {
+  const entity = await createEntity<BlockEntity>(ctx, authentication, {
     ownedById,
-    properties,
+    properties: {
+      value: {
+        "https://hash.ai/@hash/types/property-type/component-id/": {
+          value: componentId,
+          metadata: {
+            dataTypeId:
+              "https://blockprotocol.org/@blockprotocol/types/data-type/text/v/1",
+          },
+        },
+      },
+    },
     entityTypeId: systemEntityTypes.block.entityTypeId,
     relationships: createDefaultAuthorizationRelationships(authentication),
   });
 
-  await createLinkEntity(ctx, authentication, {
-    linkEntityTypeId: systemLinkEntityTypes.hasData.linkEntityTypeId,
-    leftEntityId: entity.metadata.recordId.entityId,
-    rightEntityId: blockData.metadata.recordId.entityId,
+  await createLinkEntity<HasData>(ctx, authentication, {
     ownedById,
+    properties: { value: {} },
+    linkData: {
+      leftEntityId: entity.metadata.recordId.entityId,
+      rightEntityId: blockData.metadata.recordId.entityId,
+    },
+    entityTypeId: systemLinkEntityTypes.hasData.linkEntityTypeId,
     relationships: createDefaultAuthorizationRelationships(authentication),
   });
 
@@ -200,17 +219,18 @@ export const updateBlockDataEntity: ImpureGraphFunction<
     );
   }
 
-  await archiveEntity(ctx, authentication, {
-    entity: outgoingBlockDataLink,
-  });
+  await outgoingBlockDataLink.archive(ctx.graphApi, authentication);
 
   await createLinkEntity(ctx, authentication, {
-    linkEntityTypeId: systemLinkEntityTypes.hasData.linkEntityTypeId,
-    leftEntityId: block.entity.metadata.recordId.entityId,
-    rightEntityId: newBlockDataEntity.metadata.recordId.entityId,
     ownedById: extractOwnedByIdFromEntityId(
       block.entity.metadata.recordId.entityId,
     ),
+    properties: { value: {} },
+    linkData: {
+      leftEntityId: block.entity.metadata.recordId.entityId,
+      rightEntityId: newBlockDataEntity.metadata.recordId.entityId,
+    },
+    entityTypeId: systemLinkEntityTypes.hasData.linkEntityTypeId,
     relationships: createDefaultAuthorizationRelationships(authentication),
   });
 };
@@ -255,27 +275,24 @@ export const getBlockCollectionByBlock: ImpureGraphFunction<
   );
 
   const matchingContainsLinks = await getEntities(context, authentication, {
-    query: {
-      filter: {
-        all: [
-          contentLinkTypeFilter,
-          {
-            equal: [
-              { path: ["rightEntity", "uuid"] },
-              { parameter: blockEntityUuid },
-            ],
-          },
-          generateVersionedUrlMatchingFilter(
-            systemEntityTypes.blockCollection.entityTypeId,
-            { ignoreParents: false, pathPrefix: ["leftEntity"] },
-          ),
-        ],
-      },
-      graphResolveDepths: zeroedGraphResolveDepths,
-      temporalAxes: currentTimeInstantTemporalAxes,
-      includeDrafts,
+    filter: {
+      all: [
+        contentLinkTypeFilter,
+        {
+          equal: [
+            { path: ["rightEntity", "uuid"] },
+            { parameter: blockEntityUuid },
+          ],
+        },
+        generateVersionedUrlMatchingFilter(
+          systemEntityTypes.blockCollection.entityTypeId,
+          { ignoreParents: false, pathPrefix: ["leftEntity"] },
+        ),
+      ],
     },
-  }).then((subgraph) => getRoots(subgraph).filter(isEntityLinkEntity));
+    temporalAxes: currentTimeInstantTemporalAxes,
+    includeDrafts,
+  }).then((entities) => entities.filter(isEntityLinkEntity));
 
   /** @todo: account for blocks that are in multiple pages */
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { LOG_LEVELS, Logger, LogLevel } from "@local/hash-backend-utils/logger";
+import type { LogLevel } from "@local/hash-backend-utils/logger";
+import { LOG_LEVELS, Logger } from "@local/hash-backend-utils/logger";
 
 export const INSTANCE_ID = randomUUID();
 
@@ -19,6 +20,6 @@ if (!["development", "production", "test"].includes(NODE_ENV)) {
 // Configure the logger
 export const logger = new Logger({
   serviceName: "search-loader",
-  mode: NODE_ENV === "development" ? "dev" : "prod",
+  environment: NODE_ENV as "development" | "production" | "test",
   metadata: { instanceId: INSTANCE_ID },
 });

@@ -1,8 +1,5 @@
-import {
-  CustomCell,
-  CustomRenderer,
-  GridCellKind,
-} from "@glideapps/glide-data-grid";
+import type { CustomCell, CustomRenderer } from "@glideapps/glide-data-grid";
+import { GridCellKind } from "@glideapps/glide-data-grid";
 import { customColors } from "@hashintel/design-system/theme";
 
 import { getYCenter } from "../../../../../../components/grid/utils";
@@ -20,6 +17,7 @@ export type SummaryChipCell = CustomCell<SummaryChipCellProps>;
 export const renderSummaryChipCell: CustomRenderer<SummaryChipCell> = {
   kind: GridCellKind.Custom,
   isMatch: (cell: CustomCell): cell is SummaryChipCell =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (cell.data as any).kind === "summary-chip-cell",
   draw: (args, cell) => {
     const { ctx, rect, theme } = args;

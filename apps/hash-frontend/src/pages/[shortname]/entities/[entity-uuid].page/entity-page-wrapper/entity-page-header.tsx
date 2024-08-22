@@ -1,14 +1,18 @@
 import { faAsterisk } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@hashintel/design-system";
-import { Entity, EntityRootType, Subgraph } from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
+import { extractDraftIdFromEntityId } from "@local/hash-subgraph";
 import { Box, Collapse, Stack, Typography } from "@mui/material";
 import { Container } from "@mui/system";
 import { useRouter } from "next/router";
-import { ReactNode, useContext } from "react";
+import type { ReactNode } from "react";
+import { useContext } from "react";
 
 import { NotificationsWithLinksContextProvider } from "../../../../shared/notifications-with-links-context";
 import { TopContextBar } from "../../../../shared/top-context-bar";
 import { WorkspaceContext } from "../../../../shared/workspace-context";
+import { EntityEditorTabs } from "../shared/entity-editor-tabs";
 import { DraftEntityBanner } from "./draft-entity-banner";
 
 export const EntityPageHeader = ({
@@ -20,19 +24,21 @@ export const EntityPageHeader = ({
   chip,
   editBar,
   isModifyingEntity,
+  showTabs,
 }: {
   entity?: Entity;
   entitySubgraph?: Subgraph<EntityRootType>;
-  onEntityUpdated?: (entity: Entity) => void;
+  onEntityUpdated: ((entity: Entity) => void) | null;
   entityLabel: string;
   lightTitle?: boolean;
   chip: ReactNode;
   editBar?: ReactNode;
   isModifyingEntity?: boolean;
+  showTabs?: boolean;
 }) => {
   const router = useRouter();
 
-  const paramsShortname = router.query.shortname;
+  const paramsShortname = router.query.shortname as string | undefined;
   const { activeWorkspace } = useContext(WorkspaceContext);
 
   const shortname = paramsShortname?.slice(1) ?? activeWorkspace?.shortname;
@@ -50,6 +56,7 @@ export const EntityPageHeader = ({
           {
             title: "Entities",
             id: "entities",
+            href: "/entities",
           },
           {
             title: entityLabel,
@@ -63,12 +70,15 @@ export const EntityPageHeader = ({
 
       {entity && entitySubgraph ? (
         <NotificationsWithLinksContextProvider>
-          <Collapse in={entity.metadata.draft}>
+          <Collapse
+            in={!!extractDraftIdFromEntityId(entity.metadata.recordId.entityId)}
+          >
             <DraftEntityBanner
               draftEntity={entity}
               draftEntitySubgraph={entitySubgraph}
               isModifyingEntity={isModifyingEntity}
               onAcceptedEntity={onEntityUpdated}
+              owningShortname={shortname}
             />
           </Collapse>
         </NotificationsWithLinksContextProvider>
@@ -77,7 +87,8 @@ export const EntityPageHeader = ({
       {editBar}
 
       <Box
-        py={3.75}
+        pt={3.75}
+        pb={showTabs ? 0 : 3.75}
         sx={({ palette }) => ({ background: palette.common.white })}
       >
         <Container>
@@ -93,6 +104,11 @@ export const EntityPageHeader = ({
               {entityLabel}
             </Typography>
           </Stack>
+          {showTabs && (
+            <Box mt={6}>
+              <EntityEditorTabs />
+            </Box>
+          )}
         </Container>
       </Box>
     </>

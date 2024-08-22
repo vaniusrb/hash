@@ -1,30 +1,15 @@
-import { GraphQLError } from "graphql";
+import { queryGraphQlApi as queryApi } from "@local/hash-isomorphic-utils/query-graphql-api";
 
-export const queryGraphQlApi = <
-  Query extends any,
+import { getFromLocalStorage } from "./storage";
+
+export const queryGraphQlApi = async <
+  ReturnData,
   Variables extends Record<string, unknown>,
 >(
   query: string,
   variables?: Variables,
-): Promise<{ data: Query }> =>
-  fetch(`${API_ORIGIN}/graphql`, {
-    method: "POST",
-    body: JSON.stringify({
-      query,
-      variables,
-    }),
-    headers: {
-      "content-type": "application/json",
-    },
-    credentials: "include",
-  })
-    .then((resp) => resp.json())
-    .then((resp: { data?: any; errors?: GraphQLError[] }) => {
-      if (resp.errors || !resp.data) {
-        throw new Error(
-          resp.errors?.[0].message ?? "No data and no errors returned",
-        );
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      return { data: resp.data };
-    });
+): Promise<{ data: ReturnData }> => {
+  const apiOrigin = (await getFromLocalStorage("apiOrigin")) ?? API_ORIGIN;
+
+  return queryApi({ client: "browser-extension", query, variables, apiOrigin });
+};

@@ -1,41 +1,45 @@
-import {
+import type {
   EntityType,
-  extractVersion,
   PropertyType,
+  VersionedUrl,
 } from "@blockprotocol/type-system";
-import { SizedGridColumn } from "@glideapps/glide-data-grid";
+import { extractVersion } from "@blockprotocol/type-system";
+import type { SizedGridColumn } from "@glideapps/glide-data-grid";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityId } from "@local/hash-graph-types/entity";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 import { generateEntityLabel } from "@local/hash-isomorphic-utils/generate-entity-label";
 import { isPageEntityTypeId } from "@local/hash-isomorphic-utils/page-entity-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { PageProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import {
-  BaseUrl,
-  Entity,
-  EntityId,
-  EntityRootType,
-  Subgraph,
-} from "@local/hash-subgraph";
+import { stringifyPropertyValue } from "@local/hash-isomorphic-utils/stringify-property-value";
+import type { PageProperties } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
 import { extractBaseUrl } from "@local/hash-subgraph/type-system-patch";
 import { format } from "date-fns";
 import { useMemo } from "react";
 
 import { useGetOwnerForEntity } from "../../../components/hooks/use-get-owner-for-entity";
-import { useUsers } from "../../../components/hooks/use-users";
-import { MinimalUser } from "../../../lib/user-and-org";
+import type { MinimalActor } from "../../../shared/use-actors";
+import { useActors } from "../../../shared/use-actors";
 
 export interface TypeEntitiesRow {
   rowId: string;
   entityId: EntityId;
-  entity: string;
+  entity: Entity;
+  entityLabel: string;
+  entityTypeId: VersionedUrl;
   entityTypeVersion: string;
-  namespace: string;
   archived?: boolean;
   lastEdited: string;
-  lastEditedBy?: MinimalUser;
+  lastEditedBy?: MinimalActor;
+  created: string;
+  createdBy?: MinimalActor;
+  web: string;
   properties?: {
     [k: string]: string;
   };
   /** @todo: get rid of this by typing `columnId` */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -44,8 +48,9 @@ export const useEntitiesTable = (params: {
   entityTypes?: EntityType[];
   propertyTypes?: PropertyType[];
   subgraph?: Subgraph<EntityRootType>;
+  hidePageArchivedColumn?: boolean;
   hideEntityTypeVersionColumn?: boolean;
-  hidePropertiesColumns?: boolean;
+  hidePropertiesColumns: boolean;
   isViewingPages?: boolean;
 }) => {
   const {
@@ -53,12 +58,22 @@ export const useEntitiesTable = (params: {
     entityTypes,
     propertyTypes,
     subgraph,
+    hidePageArchivedColumn = false,
     hideEntityTypeVersionColumn = false,
-    hidePropertiesColumns = false,
+    hidePropertiesColumns,
     isViewingPages = false,
   } = params;
 
-  const { users } = useUsers();
+  const editorActorIds = useMemo(
+    () =>
+      entities?.flatMap(({ metadata }) => [
+        metadata.provenance.edition.createdById,
+        metadata.provenance.createdById,
+      ]),
+    [entities],
+  );
+
+  const { actors } = useActors({ accountIds: editorActorIds });
 
   const getOwnerForEntity = useGetOwnerForEntity();
 
@@ -93,11 +108,11 @@ export const useEntitiesTable = (params: {
     const columns: SizedGridColumn[] = [
       {
         title: entitiesHaveSameType
-          ? entityTypes?.find(
+          ? (entityTypes?.find(
               ({ $id }) => $id === entities?.[0]?.metadata.entityTypeId,
-            )?.title ?? "Entity"
+            )?.title ?? "Entity")
           : "Entity",
-        id: "entity",
+        id: "entityLabel",
         width: 252,
         grow: 1,
       },
@@ -111,11 +126,11 @@ export const useEntitiesTable = (params: {
             },
           ]),
       {
-        title: "Namespace",
-        id: "namespace",
-        width: 250,
+        title: "Web",
+        id: "web",
+        width: 200,
       },
-      ...(isViewingPages
+      ...(isViewingPages && !hidePageArchivedColumn
         ? [
             {
               title: "Archived",
@@ -132,6 +147,16 @@ export const useEntitiesTable = (params: {
       {
         title: "Last Edited By",
         id: "lastEditedBy",
+        width: 200,
+      },
+      {
+        title: "Created",
+        id: "created",
+        width: 200,
+      },
+      {
+        title: "Created By",
+        id: "createdBy",
         width: 200,
       },
       /** @todo: uncomment this when we have additional types for entities */
@@ -152,7 +177,15 @@ export const useEntitiesTable = (params: {
               (type) => type.$id === entity.metadata.entityTypeId,
             );
 
-            const { shortname: entityNamespace } = getOwnerForEntity(entity);
+            if (!entityType) {
+              throw new Error(
+                `Could not find entity type with id ${entity.metadata.entityTypeId} in subgraph`,
+              );
+            }
+
+            const { shortname: entityNamespace } = getOwnerForEntity({
+              entityId: entity.metadata.recordId.entityId,
+            });
 
             const entityId = entity.metadata.recordId.entityId;
 
@@ -170,34 +203,48 @@ export const useEntitiesTable = (params: {
               "yyyy-MM-dd HH:mm",
             );
 
-            const lastEditedBy = users?.find(
+            const lastEditedBy = actors?.find(
               ({ accountId }) =>
                 accountId === entity.metadata.provenance.edition.createdById,
+            );
+
+            const created = format(
+              new Date(entity.metadata.provenance.createdAtDecisionTime),
+              "yyyy-MM-dd HH:mm",
+            );
+
+            const createdBy = actors?.find(
+              ({ accountId }) =>
+                accountId === entity.metadata.provenance.createdById,
             );
 
             return {
               rowId: entityId,
               entityId,
-              entity: entityLabel,
-              entityTypeVersion: entityType
-                ? `v${extractVersion(entityType.$id)} ${entityType.title}`
-                : "",
-              namespace: `@${entityNamespace}`,
+              entity,
+              entityLabel,
+              entityTypeId: entityType.$id,
+              entityTypeVersion: `${entityType.title} v${extractVersion(entityType.$id)}`,
+              web: `@${entityNamespace}`,
               archived: isPage
                 ? simplifyProperties(entity.properties as PageProperties)
                     .archived
                 : undefined,
               lastEdited,
               lastEditedBy,
+              created,
+              createdBy,
               /** @todo: uncomment this when we have additional types for entities */
               // additionalTypes: "",
-              properties: propertyColumns.reduce((fields, column) => {
+              ...propertyColumns.reduce((fields, column) => {
                 if (column.id) {
                   const propertyValue = entity.properties[column.id as BaseUrl];
 
-                  const value = Array.isArray(propertyValue)
-                    ? propertyValue.join(", ")
-                    : propertyValue;
+                  const value =
+                    typeof propertyValue === "undefined"
+                      ? ""
+                      : stringifyPropertyValue(propertyValue);
+
                   return { ...fields, [column.id]: value };
                 }
 
@@ -216,8 +263,9 @@ export const useEntitiesTable = (params: {
     subgraph,
     entitiesHaveSameType,
     hideEntityTypeVersionColumn,
+    hidePageArchivedColumn,
     hidePropertiesColumns,
     isViewingPages,
-    users,
+    actors,
   ]);
 };

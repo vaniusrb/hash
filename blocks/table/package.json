@@ -2,6 +2,7 @@
   "name": "@blocks/table",
   "version": "0.3.4",
   "private": true,
+  "type": "module",
   "description": "Display and manipulate tabular data with filter, sort, and search features",
   "keywords": [
     "blockprotocol",
@@ -30,9 +31,9 @@
     "trailingComma": "all"
   },
   "dependencies": {
-    "@blockprotocol/graph": "0.3.1-canary-20231207113055",
-    "@glideapps/glide-data-grid": "5.2.1",
-    "@hashintel/block-design-system": "0.0.1",
+    "@blockprotocol/graph": "0.3.4",
+    "@glideapps/glide-data-grid": "6.0.3",
+    "@hashintel/block-design-system": "0.0.2",
     "@mui/material": "5.14.11",
     "clsx": "1.2.1",
     "immer": "9.0.6",
@@ -47,15 +48,16 @@
   "devDependencies": {
     "@local/eslint-config": "0.0.0-private",
     "@local/tsconfig": "0.0.0-private",
-    "@types/react-dom": "18.0.10",
-    "@types/lodash.debounce": "4.0.7",
-    "@types/lodash.isequal": "4.5.6",
+    "@types/react-dom": "18.2.25",
+    "@types/lodash.debounce": "4.0.9",
+    "@types/lodash.isequal": "4.5.8",
     "@types/lodash.uniqueid": "4.0.7",
-    "block-scripts": "0.3.1",
-    "eslint": "8.33.0",
-    "mock-block-dock": "0.1.6",
+    "block-scripts": "0.3.4",
+    "eslint": "8.57.0",
+    "mock-block-dock": "0.1.9",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "typescript": "5.5.4"
   },
   "peerDependencies": {
     "react": "^18.0.0",

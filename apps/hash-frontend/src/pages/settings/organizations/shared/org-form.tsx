@@ -1,15 +1,16 @@
 import { TextField } from "@hashintel/design-system";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { EntityId, OwnedById } from "@local/hash-subgraph";
 import { Box, outlinedInputClasses, Stack, Typography } from "@mui/material";
-import { PropsWithChildren, useState } from "react";
+import type { PropsWithChildren } from "react";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { useShortnameInput } from "../../../../components/hooks/use-shortname-input";
-import { Org } from "../../../../lib/user-and-org";
+import type { Org } from "../../../../lib/user-and-org";
 import { useFileUploads } from "../../../../shared/file-upload-context";
 import { Button } from "../../../../shared/ui/button";
 import { useAuthInfo } from "../../../shared/auth-info-context";
@@ -69,9 +70,10 @@ const InputGroup = ({ children }: PropsWithChildren) => {
   return <Box mb={3}>{children}</Box>;
 };
 
-export type OrgFormData = Omit<Org, "kind" | "entity" | "memberships"> & {
-  entity?: Org["entity"];
-};
+export type OrgFormData = Pick<
+  Org,
+  "name" | "description" | "location" | "shortname" | "websiteUrl"
+>;
 
 type OrgFormProps = {
   autoFocusDisplayName?: boolean;
@@ -80,7 +82,7 @@ type OrgFormProps = {
    * An existing org to edit. Editing the shortname will not be allowed.
    * Without an existing org, some fields will be hidden from the user.
    */
-  org?: OrgFormData;
+  org?: Org;
   readonly: boolean;
   submitLabel: string;
 };
@@ -148,11 +150,11 @@ export const OrgForm = ({
         description: `The avatar for the ${nameWatcher} organization in HASH`,
         file,
         name: `${nameWatcher}'s avatar`,
-        ...(existingImageEntity
+        ...(existingImageEntity !== undefined
           ? {
               fileEntityUpdateInput: {
-                existingFileEntityId: existingImageEntity.metadata.recordId
-                  .entityId as EntityId,
+                existingFileEntityId:
+                  existingImageEntity.metadata.recordId.entityId,
               },
             }
           : {

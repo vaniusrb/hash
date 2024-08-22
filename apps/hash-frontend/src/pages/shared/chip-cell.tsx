@@ -1,14 +1,12 @@
-import { faAsterisk, IconDefinition } from "@fortawesome/free-solid-svg-icons";
-import {
-  CustomCell,
-  CustomRenderer,
-  GridCellKind,
-} from "@glideapps/glide-data-grid";
-import type { CustomIcon } from "@glideapps/glide-data-grid/dist/ts/data-grid/data-grid-sprites";
+import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
+import { faAsterisk } from "@fortawesome/free-solid-svg-icons";
+import type { CustomCell, CustomRenderer } from "@glideapps/glide-data-grid";
+import { GridCellKind } from "@glideapps/glide-data-grid";
 import { Chip, FontAwesomeIcon } from "@hashintel/design-system";
 import { customColors } from "@hashintel/design-system/theme";
 import { Box } from "@mui/material";
 
+import type { CustomIcon } from "../../components/grid/utils/custom-grid-icons";
 import { drawCellFadeOutGradient } from "../../components/grid/utils/draw-cell-fade-out-gradient";
 import { drawChipWithIcon } from "../../components/grid/utils/draw-chip-with-icon";
 
@@ -68,6 +66,7 @@ export const getChipColors = (
 export const renderChipCell: CustomRenderer<ChipCell> = {
   kind: GridCellKind.Custom,
   isMatch: (cell: CustomCell): cell is ChipCell =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (cell.data as any).kind === "chip-cell",
   draw: (args, cell) => {
     const { theme, rect } = args;

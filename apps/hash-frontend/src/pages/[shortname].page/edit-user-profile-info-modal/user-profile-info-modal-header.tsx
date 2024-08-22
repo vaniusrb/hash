@@ -5,30 +5,26 @@ import {
   IconButton,
   RotateIconRegular,
 } from "@hashintel/design-system";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import { EntityId, OwnedById } from "@local/hash-subgraph";
 import { Box, buttonClasses, styled } from "@mui/material";
 import Image from "next/image";
-import {
-  ChangeEventHandler,
-  FunctionComponent,
-  useCallback,
-  useRef,
-  useState,
-} from "react";
+import type { ChangeEventHandler, FunctionComponent } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { useBlockProtocolArchiveEntity } from "../../../components/hooks/block-protocol-functions/knowledge/use-block-protocol-archive-entity";
-import { User } from "../../../lib/user-and-org";
+import type { User } from "../../../lib/user-and-org";
 import { useFileUploads } from "../../../shared/file-upload-context";
 import { TrashRegularIcon } from "../../../shared/icons/trash-regular-icon";
 import { XMarkRegularIcon } from "../../../shared/icons/x-mark-regular-icon";
-import { Button, ButtonProps } from "../../../shared/ui";
+import type { ButtonProps } from "../../../shared/ui";
+import { Button } from "../../../shared/ui";
 import { useUpdateProfileAvatar } from "../../[shortname]/shared/use-update-profile-avatar";
 import { useAuthInfo } from "../../shared/auth-info-context";
-import { getImageUrlFromEntityProperties } from "../../shared/get-image-url-from-properties";
+import { getImageUrlFromEntityProperties } from "../../shared/get-file-properties";
 import { leftColumnWidth } from "../util";
 
 const AvatarButton = styled((props: ButtonProps) => (
@@ -149,14 +145,14 @@ export const UserProfileInfoModalHeader: FunctionComponent<{
         ownedById: userProfile.accountId as OwnedById,
         makePublic: true,
         fileData: {
-          description: `The cover image for the ${userProfile.preferredName} user in HASH`,
-          name: `${userProfile.preferredName}'s cover image`,
+          description: `The cover image for the ${userProfile.displayName} user in HASH`,
+          name: `${userProfile.displayName}'s cover image`,
           file,
           ...(existingCoverImageEntity
             ? {
                 fileEntityUpdateInput: {
-                  existingFileEntityId: existingCoverImageEntity.metadata
-                    .recordId.entityId as EntityId,
+                  existingFileEntityId:
+                    existingCoverImageEntity.metadata.recordId.entityId,
                 },
               }
             : {
@@ -238,7 +234,7 @@ export const UserProfileInfoModalHeader: FunctionComponent<{
       />
       <Avatar
         src={avatarSrc}
-        title={userProfile.preferredName}
+        title={userProfile.displayName}
         size={leftColumnWidth}
         sx={{
           border: "none",

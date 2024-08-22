@@ -1,4 +1,4 @@
-import { LinkEntityAndRightEntity } from "@blockprotocol/graph";
+import type { LinkEntityAndRightEntity } from "@blockprotocol/graph";
 import {
   type BlockComponent,
   useEntitySubgraph,
@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuid } from "uuid";
 
 import { Question } from "./question";
-import {
+import type {
   BlockEntity,
   FAQBlockOutgoingLinksByLinkEntityTypeId,
   FrequentlyAskedQuestion,
@@ -83,16 +83,10 @@ export const App: BlockComponent<BlockEntity> = ({
 
   const questionLinkedEntities: LinkEntityAndRightEntity[] = useMemo(
     () =>
-      linkedEntities
-        .filter(
-          ({ linkEntity }) =>
-            linkEntity.metadata.entityTypeId === hasFrequentlyAskedQuestion,
-        )
-        .sort(
-          (a, b) =>
-            (a.linkEntity.linkData?.leftToRightOrder ?? 0) -
-            (b.linkEntity.linkData?.leftToRightOrder ?? 0),
-        ),
+      linkedEntities.filter(
+        ({ linkEntity }) =>
+          linkEntity.metadata.entityTypeId === hasFrequentlyAskedQuestion,
+      ),
     [linkedEntities],
   );
 
@@ -157,14 +151,11 @@ export const App: BlockComponent<BlockEntity> = ({
           linkData: {
             leftEntityId: entityId,
             rightEntityId: createdEntityId,
-            leftToRightOrder:
-              (questionLinkedEntities[questionLinkedEntities.length - 1]
-                ?.linkEntity.linkData?.leftToRightOrder ?? 0) + 1,
           },
         },
       });
     }
-  }, [graphModule, questionLinkedEntities, entityId, readonly]);
+  }, [graphModule, entityId, readonly]);
 
   const addQuestion = useCallback(async () => {
     setQuestions([...questions, { id: uuid(), properties: {} }]);

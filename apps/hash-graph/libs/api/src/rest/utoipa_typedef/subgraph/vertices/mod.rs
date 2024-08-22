@@ -1,10 +1,11 @@
-use std::collections::{hash_map::Entry, BTreeMap, HashMap};
+use alloc::collections::BTreeMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 use graph::subgraph::temporal_axes::VariableAxis;
-use graph_types::{knowledge::entity::EntityId, ontology::OntologyTypeVersion};
+use graph_types::knowledge::entity::EntityId;
 use serde::Serialize;
 use temporal_versioning::Timestamp;
-use type_system::url::BaseUrl;
+use type_system::url::{BaseUrl, OntologyTypeVersion};
 use utoipa::{
     openapi::{schema::AdditionalProperties, ObjectBuilder, OneOfBuilder, Ref, RefOr, Schema},
     ToSchema,
@@ -16,9 +17,7 @@ pub(crate) mod vertex;
 
 #[derive(Serialize, ToSchema)]
 #[serde(transparent)]
-pub(crate) struct OntologyVertices(
-    pub(crate) HashMap<BaseUrl, BTreeMap<OntologyTypeVersion, OntologyVertex>>,
-);
+pub(crate) struct OntologyVertices(HashMap<BaseUrl, BTreeMap<OntologyTypeVersion, OntologyVertex>>);
 
 #[derive(Serialize, ToSchema)]
 #[serde(transparent)]

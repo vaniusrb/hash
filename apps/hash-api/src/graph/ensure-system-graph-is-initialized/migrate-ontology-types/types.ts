@@ -1,7 +1,7 @@
-import { BaseUrl } from "@local/hash-subgraph";
+import type { AuthenticationContext } from "@local/hash-graph-sdk/authentication-context";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 
-import { AuthenticationContext } from "../../../graphql/authentication-context";
-import { ImpureGraphContext } from "../../context-types";
+import type { ImpureGraphContext } from "../../context-types";
 
 export type MigrationState = {
   propertyTypeVersions: Record<BaseUrl, number>;
@@ -10,7 +10,7 @@ export type MigrationState = {
 };
 
 export type MigrationFunction = (params: {
-  context: ImpureGraphContext;
+  context: ImpureGraphContext<false, true>;
   authentication: AuthenticationContext;
   migrationState: MigrationState;
 }) => Promise<MigrationState>;

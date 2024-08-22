@@ -1,15 +1,14 @@
+import type { Uuid } from "@local/hash-graph-types/branded";
+import type { EntityUuid } from "@local/hash-graph-types/entity";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import {
   systemEntityTypes,
   systemLinkEntityTypes,
 } from "@local/hash-isomorphic-utils/ontology-type-ids";
 import { isPageEntityTypeId } from "@local/hash-isomorphic-utils/page-entity-type-ids";
 import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import { UserProperties } from "@local/hash-isomorphic-utils/system-types/shared";
-import {
-  entityIdFromOwnedByIdAndEntityUuid,
-  EntityUuid,
-  OwnedById,
-} from "@local/hash-subgraph";
+import type { UserProperties } from "@local/hash-isomorphic-utils/system-types/user";
+import { entityIdFromComponents } from "@local/hash-subgraph";
 
 import { isProdEnv } from "../../../../lib/env-config";
 import { createOrUpdateMailchimpUser } from "../../../../mailchimp";
@@ -28,16 +27,16 @@ import {
   createMentionNotification,
   getMentionNotification,
 } from "../../system-types/notification";
-import { getPageAuthor, getPageFromEntity } from "../../system-types/page";
+import { getPageFromEntity } from "../../system-types/page";
 import {
   getMentionedUsersInTextualContent,
   getTextById,
 } from "../../system-types/text";
 import { getUserById } from "../../system-types/user";
 import { checkPermissionsOnEntity } from "../entity";
-import {
-  CreateEntityHook,
-  CreateEntityHookCallback,
+import type {
+  AfterCreateEntityHook,
+  AfterCreateEntityHookCallback,
 } from "./create-entity-hooks";
 import { getTextUpdateOccurredIn } from "./shared/mention-notification";
 
@@ -47,7 +46,7 @@ import { getTextUpdateOccurredIn } from "./shared/mention-notification";
  * - the parent of the comment is a block on a page
  * - the parent of the comment is another comment (i.e the comment is a reply)
  */
-const commentCreateHookCallback: CreateEntityHookCallback = async ({
+const commentCreateHookCallback: AfterCreateEntityHookCallback = async ({
   entity,
   authentication,
   context,
@@ -77,8 +76,14 @@ const commentCreateHookCallback: CreateEntityHookCallback = async ({
         entity: blockCollectionEntity,
       });
 
-      const pageAuthor = await getPageAuthor(context, authentication, {
-        pageEntityId: occurredInEntity.entity.metadata.recordId.entityId,
+      const pageAuthorAccountId =
+        occurredInEntity.entity.metadata.provenance.createdById;
+
+      const pageAuthor = await getUserById(context, authentication, {
+        entityId: entityIdFromComponents(
+          pageAuthorAccountId as Uuid as OwnedById,
+          pageAuthorAccountId as Uuid as EntityUuid,
+        ),
       });
 
       const commentAuthor = await getCommentAuthor(context, authentication, {
@@ -175,8 +180,6 @@ const commentCreateHookCallback: CreateEntityHookCallback = async ({
       }
     }
   }
-
-  return entity;
 };
 
 /**
@@ -186,7 +189,7 @@ const commentCreateHookCallback: CreateEntityHookCallback = async ({
  * - the `Text` is in a page
  * - the `Text` is in a comment that's on a page
  */
-const hasTextCreateHookCallback: CreateEntityHookCallback = async ({
+const hasTextCreateHookCallback: AfterCreateEntityHookCallback = async ({
   entity,
   authentication,
   context,
@@ -201,7 +204,7 @@ const hasTextCreateHookCallback: CreateEntityHookCallback = async ({
     });
 
   if (!occurredInEntity || !occurredInBlock) {
-    return entity;
+    return undefined;
   }
 
   const { textualContent } = text;
@@ -213,7 +216,7 @@ const hasTextCreateHookCallback: CreateEntityHookCallback = async ({
   );
 
   const triggeredByUser = await getUserById(context, authentication, {
-    entityId: entityIdFromOwnedByIdAndEntityUuid(
+    entityId: entityIdFromComponents(
       authentication.actorId as OwnedById,
       authentication.actorId as string as EntityUuid,
     ),
@@ -265,16 +268,16 @@ const hasTextCreateHookCallback: CreateEntityHookCallback = async ({
         }
       }),
   ]);
-
-  return entity;
 };
 
-const userCreateHookCallback: CreateEntityHookCallback = async ({ entity }) => {
+const userCreateHookCallback: AfterCreateEntityHookCallback = async ({
+  entity,
+}) => {
   if (isProdEnv) {
     const {
       email: emails,
       shortname,
-      preferredName,
+      displayName,
     } = simplifyProperties(entity.properties as UserProperties);
 
     /**
@@ -286,14 +289,12 @@ const userCreateHookCallback: CreateEntityHookCallback = async ({ entity }) => {
     await createOrUpdateMailchimpUser({
       email,
       shortname,
-      preferredName,
+      displayName,
     });
   }
-
-  return entity;
 };
 
-export const afterCreateEntityHooks: CreateEntityHook[] = [
+export const afterCreateEntityHooks: AfterCreateEntityHook[] = [
   {
     entityTypeId: systemEntityTypes.comment.entityTypeId,
     callback: commentCreateHookCallback,

@@ -1,39 +1,35 @@
-import {
-  EntityTypeMismatchError,
-  NotFoundError,
-} from "@local/hash-backend-utils/error";
-import { getMachineActorId } from "@local/hash-backend-utils/machine-actors";
-import { GraphApi } from "@local/hash-graph-client";
+import type { GraphApi } from "@local/hash-graph-client";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type {
+  AccountGroupId,
+  AccountId,
+} from "@local/hash-graph-types/account";
 import {
   currentTimeInstantTemporalAxes,
   generateVersionedUrlMatchingFilter,
-  zeroedGraphResolveDepths,
 } from "@local/hash-isomorphic-utils/graph-queries";
 import { systemEntityTypes } from "@local/hash-isomorphic-utils/ontology-type-ids";
-import {
-  SimpleProperties,
-  simplifyProperties,
-} from "@local/hash-isomorphic-utils/simplify-properties";
-import { HASHInstanceProperties } from "@local/hash-isomorphic-utils/system-types/hashinstance";
-import {
-  AccountGroupId,
-  AccountId,
-  Entity,
-  EntityRootType,
-} from "@local/hash-subgraph";
-import {
-  getRoots,
-  mapGraphApiSubgraphToSubgraph,
-} from "@local/hash-subgraph/stdlib";
+import type { SimpleProperties } from "@local/hash-isomorphic-utils/simplify-properties";
+import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
+import { mapGraphApiEntityToEntity } from "@local/hash-isomorphic-utils/subgraph-mapping";
+import type {
+  HASHInstance,
+  HASHInstance as HASHInstanceEntity,
+  HASHInstanceProperties,
+} from "@local/hash-isomorphic-utils/system-types/hashinstance";
+import { backOff } from "exponential-backoff";
+
+import { EntityTypeMismatchError, NotFoundError } from "./error.js";
+import { getMachineActorId } from "./machine-actors.js";
 
 export type HashInstance = {
-  entity: Entity;
+  entity: Entity<HASHInstance>;
 } & SimpleProperties<HASHInstanceProperties>;
 
 export const getHashInstanceFromEntity = ({
   entity,
 }: {
-  entity: Entity;
+  entity: Entity<HASHInstanceEntity>;
 }): HashInstance => {
   if (
     entity.metadata.entityTypeId !== systemEntityTypes.hashInstance.entityTypeId
@@ -46,7 +42,7 @@ export const getHashInstanceFromEntity = ({
   }
 
   return {
-    ...simplifyProperties(entity.properties as HASHInstanceProperties),
+    ...simplifyProperties(entity.properties),
     entity,
   };
 };
@@ -58,21 +54,28 @@ export const getHashInstance = async (
   { graphApi }: { graphApi: GraphApi },
   { actorId }: { actorId: AccountId },
 ): Promise<HashInstance> => {
-  const entities = await graphApi
-    .getEntitiesByQuery(actorId, {
-      filter: generateVersionedUrlMatchingFilter(
-        systemEntityTypes.hashInstance.entityTypeId,
-        { ignoreParents: true },
-      ),
-      graphResolveDepths: zeroedGraphResolveDepths,
-      temporalAxes: currentTimeInstantTemporalAxes,
-      includeDrafts: false,
-    })
-    .then(({ data }) => {
-      const subgraph = mapGraphApiSubgraphToSubgraph<EntityRootType>(data);
-
-      return getRoots(subgraph);
-    });
+  const entities = await backOff(
+    () =>
+      graphApi
+        .getEntities(actorId, {
+          filter: generateVersionedUrlMatchingFilter(
+            systemEntityTypes.hashInstance.entityTypeId,
+            { ignoreParents: true },
+          ),
+          temporalAxes: currentTimeInstantTemporalAxes,
+          includeDrafts: false,
+        })
+        .then(({ data: response }) =>
+          response.entities.map((entity) =>
+            mapGraphApiEntityToEntity<HASHInstanceEntity>(entity, actorId),
+          ),
+        ),
+    {
+      numOfAttempts: 3,
+      startingDelay: 1_000,
+      jitter: "full",
+    },
+  );
 
   if (entities.length > 1) {
     throw new Error("More than one hash instance entity found in the graph.");
@@ -96,16 +99,38 @@ export const isUserHashInstanceAdmin = async (
   ctx: { graphApi: GraphApi },
   authentication: { actorId: AccountId },
   { userAccountId }: { userAccountId: AccountId },
-) =>
-  getHashInstance(ctx, authentication).then((hashInstance) =>
-    ctx.graphApi
-      .checkEntityPermission(
-        userAccountId,
-        hashInstance.entity.metadata.recordId.entityId,
-        "update",
-      )
-      .then(({ data }) => data.has_permission),
+) => {
+  // console.info(`[${userAccountId}] Fetching HASH Instance entity`);
+  const hashInstance = await getHashInstance(ctx, authentication).catch(
+    (err) => {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[${userAccountId}] ERROR Fetching HASH Instance entity: ${err}`,
+      );
+      throw err;
+    },
   );
+  // console.info(`[${userAccountId}] SUCCESS Fetching HASH Instance entity`);
+  // console.info(`[${userAccountId}] Checking permission on instance`);
+  return ctx.graphApi
+    .checkEntityPermission(
+      userAccountId,
+      hashInstance.entity.metadata.recordId.entityId,
+      "update",
+    )
+    .then(({ data }) => {
+      // console.info(
+      //   `[${userAccountId}] SUCCESS Checking permission on instance`,
+      // );
+      return data.has_permission;
+    })
+    .catch((err) => {
+      // console.error(
+      //   `[${userAccountId}] ERROR Checking permission on instance: ${err}`,
+      // );
+      throw err;
+    });
+};
 
 /**
  * Retrieves the accountGroupId of the instance admin account group.

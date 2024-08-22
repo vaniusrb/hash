@@ -4,7 +4,7 @@ import {
   addAccountGroupMember,
   removeAccountGroupMember,
 } from "../../graph/account-permission-management";
-import {
+import type {
   EntityAuthorizationSubject,
   MutationResolvers,
   QueryResolvers,
@@ -12,6 +12,12 @@ import {
 } from "../api-types.gen";
 import { getBlockProtocolBlocksResolver } from "./blockprotocol/get-block";
 import { embedCode } from "./embed";
+import { cancelFlow } from "./flows/cancel-flow";
+import { getFlowRunByIdResolver } from "./flows/get-flow-run-by-id";
+import { getFlowRunsResolver } from "./flows/get-flow-runs";
+import { resetFlow } from "./flows/reset-flow";
+import { startFlow } from "./flows/start-flow";
+import { submitExternalInputResponse } from "./flows/submit-external-input-response";
 import { getLinearOrganizationResolver } from "./integrations/linear/linear-organization";
 import { syncLinearIntegrationWithWorkspacesMutation } from "./integrations/linear/sync-workspaces-with-teams";
 import { blocksResolver } from "./knowledge/block/block";
@@ -31,21 +37,24 @@ import {
   addEntityEditorResolver,
   addEntityOwnerResolver,
   addEntityViewerResolver,
+  archiveEntitiesResolver,
   archiveEntityResolver,
   createEntityResolver,
   getEntityAuthorizationRelationshipsResolver,
   getEntityResolver,
+  getEntitySubgraphResolver,
   isEntityPublicResolver,
   queryEntitiesResolver,
   removeEntityEditorResolver,
   removeEntityOwnerResolver,
   removeEntityViewerResolver,
-  structuralQueryEntitiesResolver,
+  updateEntitiesResolver,
   updateEntityResolver,
 } from "./knowledge/entity/entity";
+import { getEntityDiffsResolver } from "./knowledge/entity/get-entity-diffs";
 import { createFileFromUrl } from "./knowledge/file/create-file-from-url";
 import { requestFileUpload } from "./knowledge/file/request-file-upload";
-import { hashInstanceEntityResolver } from "./knowledge/hash-instance/hash-instance";
+import { hashInstanceSettingsResolver } from "./knowledge/hash-instance/hash-instance";
 import { createOrgResolver } from "./knowledge/org/create-org";
 import { pageContents } from "./knowledge/page";
 import {
@@ -59,14 +68,17 @@ import {
   checkUserPermissionsOnEntity,
 } from "./knowledge/shared/check-permissions";
 import { getUsageRecordsResolver } from "./knowledge/user/get-usage-records";
+import { getWaitlistPositionResolver } from "./knowledge/user/get-waitlist-position";
 import { hasAccessToHashResolver } from "./knowledge/user/has-access-to-hash";
 import { isShortnameTakenResolver } from "./knowledge/user/is-shortname-taken";
 import { meResolver } from "./knowledge/user/me";
+import { submitEarlyAccessFormResolver } from "./knowledge/user/submit-early-access-form";
 import { loggedInMiddleware } from "./middlewares/logged-in";
 import { loggedInAndSignedUpMiddleware } from "./middlewares/logged-in-and-signed-up";
 import { getDataType, queryDataTypes } from "./ontology/data-type";
 import {
   archiveEntityTypeResolver,
+  checkUserPermissionsOnEntityTypeResolver,
   createEntityTypeResolver,
   getEntityTypeResolver,
   queryEntityTypesResolver,
@@ -91,6 +103,7 @@ export const resolvers: Omit<Resolvers, "Query" | "Mutation"> & {
     getBlockProtocolBlocks: getBlockProtocolBlocksResolver,
     // Logged in users only
     me: loggedInMiddleware(meResolver),
+    getWaitlistPosition: loggedInMiddleware(getWaitlistPositionResolver),
     // Admins
     getUsageRecords: loggedInMiddleware(getUsageRecordsResolver),
     // Any user
@@ -107,19 +120,23 @@ export const resolvers: Omit<Resolvers, "Query" | "Mutation"> & {
     pageComments: loggedInAndSignedUpMiddleware(pageCommentsResolver),
     blocks: loggedInAndSignedUpMiddleware(blocksResolver),
     getEntity: getEntityResolver,
+    getEntityDiffs: getEntityDiffsResolver,
+    getFlowRuns: loggedInAndSignedUpMiddleware(getFlowRunsResolver),
+    getFlowRunById: loggedInAndSignedUpMiddleware(getFlowRunByIdResolver),
     queryEntities: queryEntitiesResolver,
     isEntityPublic: loggedInAndSignedUpMiddleware(isEntityPublicResolver),
     getEntityAuthorizationRelationships: loggedInAndSignedUpMiddleware(
       getEntityAuthorizationRelationshipsResolver,
     ),
-    structuralQueryEntities: structuralQueryEntitiesResolver,
-    hashInstanceEntity: hashInstanceEntityResolver,
+    getEntitySubgraph: getEntitySubgraphResolver,
+    hashInstanceSettings: hashInstanceSettingsResolver,
     // Integration
     getLinearOrganization: loggedInAndSignedUpMiddleware(
       getLinearOrganizationResolver,
     ),
     checkUserPermissionsOnEntity: (_, { metadata }, context, info) =>
       checkUserPermissionsOnEntity({ metadata }, _, context, info),
+    checkUserPermissionsOnEntityType: checkUserPermissionsOnEntityTypeResolver,
     hasAccessToHash: loggedInMiddleware(hasAccessToHashResolver),
   },
 
@@ -152,7 +169,9 @@ export const resolvers: Omit<Resolvers, "Query" | "Mutation"> & {
     // Knowledge
     createEntity: loggedInAndSignedUpMiddleware(createEntityResolver),
     updateEntity: loggedInMiddleware(updateEntityResolver),
+    updateEntities: loggedInMiddleware(updateEntitiesResolver),
     archiveEntity: loggedInMiddleware(archiveEntityResolver),
+    archiveEntities: loggedInMiddleware(archiveEntitiesResolver),
     createPage: loggedInAndSignedUpMiddleware(createPageResolver),
     setParentPage: loggedInAndSignedUpMiddleware(setParentPageResolver),
     updatePage: loggedInAndSignedUpMiddleware(updatePageResolver),
@@ -163,6 +182,8 @@ export const resolvers: Omit<Resolvers, "Query" | "Mutation"> & {
 
     createOrg: loggedInAndSignedUpMiddleware(createOrgResolver),
 
+    submitEarlyAccessForm: loggedInMiddleware(submitEarlyAccessFormResolver),
+
     addEntityOwner: loggedInAndSignedUpMiddleware(addEntityOwnerResolver),
     removeEntityOwner: loggedInAndSignedUpMiddleware(removeEntityOwnerResolver),
     addEntityEditor: loggedInAndSignedUpMiddleware(addEntityEditorResolver),
@@ -172,6 +193,13 @@ export const resolvers: Omit<Resolvers, "Query" | "Mutation"> & {
     addEntityViewer: loggedInAndSignedUpMiddleware(addEntityViewerResolver),
     removeEntityViewer: loggedInAndSignedUpMiddleware(
       removeEntityViewerResolver,
+    ),
+
+    cancelFlow: loggedInAndSignedUpMiddleware(cancelFlow),
+    resetFlow: loggedInAndSignedUpMiddleware(resetFlow),
+    startFlow: loggedInAndSignedUpMiddleware(startFlow),
+    submitExternalInputResponse: loggedInAndSignedUpMiddleware(
+      submitExternalInputResponse,
     ),
 
     addAccountGroupMember: (_, { accountId, accountGroupId }, context) =>
@@ -203,7 +231,6 @@ export const resolvers: Omit<Resolvers, "Query" | "Mutation"> & {
     // @ts-expect-error –– the type requires 'blockChildEntity' inside the return, but we deal with it in a field resolver
     contents: blockCollectionContents,
   },
-
   Comment: {
     canUserEdit,
     hasText: commentHasTextResolver,

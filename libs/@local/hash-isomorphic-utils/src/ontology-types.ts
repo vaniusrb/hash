@@ -1,19 +1,18 @@
-import { VersionedUrl } from "@blockprotocol/type-system";
-import { EntityTypeReference } from "@blockprotocol/type-system/dist/cjs";
-import { EntityType } from "@blockprotocol/type-system/dist/cjs-slim/index-slim";
+import { atLeastOne } from "@blockprotocol/type-system";
+import type { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
 import { typedEntries } from "@local/advanced-types/typed-entries";
-import { slugifyTypeTitle } from "@local/hash-isomorphic-utils/slugify-type-title";
-import { BaseUrl } from "@local/hash-subgraph";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
 import {
   componentsFromVersionedUrl,
   versionedUrlFromComponents,
 } from "@local/hash-subgraph/type-system-patch";
 
-import { frontendUrl } from "./environment";
+import { frontendUrl } from "./environment.js";
+import { slugifyTypeTitle } from "./slugify-type-title.js";
 
 export type SchemaKind = "data-type" | "property-type" | "entity-type";
 
-export const systemTypeWebShortnames = ["hash", "linear"] as const;
+export const systemTypeWebShortnames = ["hash", "google", "linear"] as const;
 export type SystemTypeWebShortname = (typeof systemTypeWebShortnames)[number];
 
 /**
@@ -94,33 +93,29 @@ export const generateLinkMapWithConsistentSelfReferences = (
 ) =>
   typedEntries(links ?? {}).reduce<NonNullable<EntityType["links"]>>(
     (accumulator, [linkTypeId, linkSchema]) => {
+      const oneOf =
+        "oneOf" in linkSchema.items
+          ? atLeastOne(
+              linkSchema.items.oneOf.map((item) => {
+                const isSelfReference = item.$ref === currentEntityTypeId;
+                if (isSelfReference) {
+                  const { baseUrl, version: currentVersion } =
+                    componentsFromVersionedUrl(currentEntityTypeId);
+                  return {
+                    $ref: versionedUrlFromComponents(
+                      baseUrl,
+                      currentVersion + 1,
+                    ),
+                  };
+                }
+                return item;
+              }),
+            )
+          : undefined;
+
       const schemaWithConsistentSelfReferences = {
         ...linkSchema,
-        items:
-          /**
-           * @todo remove array check when it's no longer possible for  the value of
-           * `oneOf` to be `{}`
-           *
-           * @see https://linear.app/hash/issue/BP-74/omit-emtpy-oneof-and-allof-in-types
-           */
-          "oneOf" in linkSchema.items && Array.isArray(linkSchema.items.oneOf)
-            ? {
-                oneOf: linkSchema.items.oneOf.map((item) => {
-                  const isSelfReference = item.$ref === currentEntityTypeId;
-                  if (isSelfReference) {
-                    const { baseUrl, version: currentVersion } =
-                      componentsFromVersionedUrl(currentEntityTypeId);
-                    return {
-                      $ref: versionedUrlFromComponents(
-                        baseUrl,
-                        currentVersion + 1,
-                      ),
-                    };
-                  }
-                  return item;
-                }) as [EntityTypeReference, ...EntityTypeReference[]],
-              }
-            : {},
+        items: oneOf ? { oneOf } : ({} as Record<string, never>),
       };
 
       accumulator[linkTypeId] = schemaWithConsistentSelfReferences;
@@ -128,3 +123,45 @@ export const generateLinkMapWithConsistentSelfReferences = (
     },
     {},
   );
+
+const hashFormattedVersionedUrlRegExp =
+  /https?:\/\/.+\/@(.+)\/types\/(entity-type|data-type|property-type)\/.+\/v\/\d+$/;
+
+export type DeconstructedVersionedUrl = {
+  baseUrl: string;
+  hostname: string;
+  kind?: SchemaKind;
+  isHashFormatted: boolean;
+  version: number;
+  webShortname?: string;
+};
+
+export const deconstructVersionedUrl = (
+  url: VersionedUrl,
+): {
+  baseUrl: string;
+  hostname: string;
+  kind?: SchemaKind;
+  isHashFormatted: boolean;
+  version: number;
+  webShortname?: string;
+} => {
+  const { baseUrl, version } = componentsFromVersionedUrl(url);
+
+  const matchArray = baseUrl.match(hashFormattedVersionedUrlRegExp);
+
+  const isHashFormatted = !!matchArray;
+
+  const [_url, webShortname, kind] = matchArray ?? [];
+
+  const urlObject = new URL(baseUrl);
+
+  return {
+    baseUrl,
+    hostname: urlObject.hostname,
+    isHashFormatted,
+    kind: kind as SchemaKind | undefined,
+    version,
+    webShortname,
+  };
+};

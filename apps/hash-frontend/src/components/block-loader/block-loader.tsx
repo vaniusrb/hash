@@ -1,30 +1,33 @@
-import {
+import type {
   BlockGraphProperties,
   GraphEmbedderMessageCallbacks,
   Subgraph as BpSubgraph,
-} from "@blockprotocol/graph/temporal";
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
+} from "@blockprotocol/graph";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
 import { typedEntries } from "@local/advanced-types/typed-entries";
-import { HashBlockMeta } from "@local/hash-isomorphic-utils/blocks";
+import { Entity } from "@local/hash-graph-sdk/entity";
+import type {
+  EntityId,
+  EntityRecordId,
+  PropertyObject,
+} from "@local/hash-graph-types/entity";
+import type { HashBlockMeta } from "@local/hash-isomorphic-utils/blocks";
+import type { EntityStore } from "@local/hash-isomorphic-utils/entity-store";
 import {
-  EntityStore,
   getDraftEntityByEntityId,
   textualContentPropertyTypeBaseUrl,
 } from "@local/hash-isomorphic-utils/entity-store";
-import { TextualContentPropertyValue } from "@local/hash-isomorphic-utils/system-types/shared";
-import { UserPermissionsOnEntities } from "@local/hash-isomorphic-utils/types";
-import {
-  Entity,
-  EntityId,
-  EntityPropertiesObject,
+import type { TextualContentPropertyValue } from "@local/hash-isomorphic-utils/system-types/shared";
+import type { UserPermissionsOnEntities } from "@local/hash-isomorphic-utils/types";
+import type {
   EntityRevisionId,
   EntityRootType,
   EntityVertex,
-  isEntityId,
   Subgraph,
 } from "@local/hash-subgraph";
+import { extractOwnedByIdFromEntityId, isEntityId } from "@local/hash-subgraph";
+import type { FunctionComponent } from "react";
 import {
-  FunctionComponent,
   useCallback,
   useContext,
   useEffect,
@@ -38,7 +41,7 @@ import { useBlockLoadedContext } from "../../blocks/on-block-loaded";
 import { useFetchBlockSubgraph } from "../../blocks/use-fetch-block-subgraph";
 import { useBlockContext } from "../../pages/shared/block-collection/block-context";
 import { WorkspaceContext } from "../../pages/shared/workspace-context";
-import {
+import type {
   ArchiveEntityMessageCallback,
   CreateEntityMessageCallback,
   UpdateEntityMessageCallback,
@@ -50,6 +53,7 @@ import { useBlockProtocolFileUpload } from "../hooks/block-protocol-functions/kn
 import { useBlockProtocolGetEntity } from "../hooks/block-protocol-functions/knowledge/use-block-protocol-get-entity";
 import { useBlockProtocolQueryEntities } from "../hooks/block-protocol-functions/knowledge/use-block-protocol-query-entities";
 import { useBlockProtocolUpdateEntity } from "../hooks/block-protocol-functions/knowledge/use-block-protocol-update-entity";
+import type { RemoteBlockProps } from "../remote-block/remote-block";
 import { RemoteBlock } from "../remote-block/remote-block";
 import { fetchEmbedCode } from "./fetch-embed-code";
 
@@ -64,7 +68,7 @@ export type BlockLoaderProps = {
    * Properties to be used when the blockEntityId is not yet available for fetching the block from the API.
    * Used when new entities are created mid-session.
    */
-  fallbackBlockProperties?: EntityPropertiesObject;
+  fallbackBlockProperties?: PropertyObject;
   onBlockLoaded: () => void;
   userPermissionsOnEntities?: UserPermissionsOnEntities;
   wrappingEntityId: string;
@@ -79,9 +83,7 @@ export type BlockLoaderProps = {
  * the block as a plain string (a predictable format), complying with the schema in both cases.
  * Here we translate our rich text tokens into a plain string for passing into the block.
  */
-const rewrittenPropertiesForTextualContent = (
-  properties: EntityPropertiesObject,
-) => {
+const rewrittenPropertiesForTextualContent = (properties: PropertyObject) => {
   const textTokens = properties[textualContentPropertyTypeBaseUrl] as
     | TextualContentPropertyValue
     | undefined;
@@ -140,6 +142,7 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
     blockSubgraph: possiblyStaleSubgraph,
     userPermissions: permissionsFromContext,
     setUserPermissions,
+    setBlockSelectDataModalIsOpen,
   } = useBlockContext();
 
   const fetchBlockSubgraph = useFetchBlockSubgraph();
@@ -247,18 +250,18 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
 
       if (!entityInStore || !draftEntityIsNewer) {
         if (isBlockEntity) {
+          // @ts-expect-error –– @todo fix this
+          const entityVertex = entityOrTypeEditionMap[
+            latestSubgraphEditionTimestamp
+          ] as EntityVertex;
+
           // If it's the block entity, rewrite the textual-content property of the latest edition to a plain string
           newVertices[entityIdOrTypeId] = {
             ...entityOrTypeEditionMap,
             [latestSubgraphEditionTimestamp]: {
               kind: "entity",
-              inner: {
-                ...(
-                  entityOrTypeEditionMap as Record<
-                    EntityRevisionId,
-                    EntityVertex
-                  >
-                )[latestSubgraphEditionTimestamp]!.inner,
+              inner: new Entity({
+                ...entityVertex.inner.toJSON(),
                 properties: rewrittenPropertiesForTextualContent(
                   (
                     entityOrTypeEditionMap as Record<
@@ -267,7 +270,7 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
                     >
                   )[latestSubgraphEditionTimestamp]!.inner.properties,
                 ),
-              },
+              }),
             },
           };
         } else {
@@ -280,23 +283,40 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
           ...entityOrTypeEditionMap,
           [draftEntityEditionTimestamp as string]: {
             kind: "entity",
-            inner: {
-              ...entityInStore,
+            // TODO: `Entity` should not be created here
+            //   see https://linear.app/hash/issue/H-2786/avoid-constructing-graphentity-in-block-loader
+            inner: new Entity({
+              metadata: {
+                recordId: entityInStore.metadata.recordId as EntityRecordId,
+                entityTypeIds: [
+                  entityInStore.metadata.entityTypeId,
+                ] as VersionedUrl[],
+                temporalVersioning: entityInStore.metadata.temporalVersioning,
+                archived: false,
+                provenance: {
+                  createdAtDecisionTime:
+                    entityInStore.metadata.temporalVersioning.decisionTime.start
+                      .limit,
+                  createdAtTransactionTime:
+                    entityInStore.metadata.temporalVersioning.transactionTime
+                      .start.limit,
+                  createdById: extractOwnedByIdFromEntityId(
+                    entityInStore.metadata.recordId.entityId as EntityId,
+                  ),
+                  edition: {
+                    createdById: extractOwnedByIdFromEntityId(
+                      entityInStore.metadata.recordId.entityId as EntityId,
+                    ),
+                  },
+                },
+              },
               properties: isBlockEntity
                 ? entityInStore.properties
                 : rewrittenPropertiesForTextualContent(
                     entityInStore.properties,
                   ),
-              /**
-               * This cast is necessary because the DraftEntity type has some missing fields (e.g. entityId)
-               * to account for entities which are only in the local store, and not in the API.
-               * Because this entity must exist in the API, since we have matched it on an entityId from the API,
-               * we can safely cast it to the Entity type.
-               *
-               * Ideally the entity store would not have differences in the type to persisted entities,
-               * which we should address when moving to a single global entity store – see H-1351.
-               */
-            } as Entity,
+              linkData: entityInStore.linkData,
+            }),
           } satisfies EntityVertex,
         };
 
@@ -395,12 +415,12 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
     setUserPermissions,
   ]);
 
-  const functions = useMemo(
+  const functions = useMemo<RemoteBlockProps["graphCallbacks"]>(
     () => ({
       queryEntities,
       /**
        * @todo remove this when embed block no longer relies on server-side oEmbed calls
-       * @see https://app.asana.com/0/1200211978612931/1202509819279267/f
+       * @see https://linear.app/hash/issue/H-2996
        */
       getEmbedBlock: fetchEmbedCode,
       createEntity: async (
@@ -437,9 +457,13 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
 
         return res;
       },
-      updateEntity: async (
-        ...args: Parameters<GraphEmbedderMessageCallbacks["updateEntity"]>
-      ) => {
+      // eslint-disable-next-line @typescript-eslint/require-await
+      requestLinkedQuery: async () => {
+        setBlockSelectDataModalIsOpen(true);
+
+        return { data: null };
+      },
+      updateEntity: async (...args) => {
         const res = await updateEntity(
           args[0] as Parameters<UpdateEntityMessageCallback>[0],
         );
@@ -457,6 +481,7 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
       updateEntity,
       uploadFile,
       refetchSubgraph,
+      setBlockSelectDataModalIsOpen,
     ],
   );
 
@@ -503,7 +528,7 @@ export const BlockLoader: FunctionComponent<BlockLoaderProps> = ({
               !!(
                 blockEntityId &&
                 userPermissions?.[blockEntityId] &&
-                !userPermissions[blockEntityId]!.edit
+                !userPermissions[blockEntityId].edit
               ),
             blockEntitySubgraph:
               blockSubgraph as unknown as BpSubgraph<EntityRootType>,

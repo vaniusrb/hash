@@ -43,7 +43,7 @@ const waitForRecentFileChange = async (
  *
  * @param emailDispatchTimestamp If defined, the function waits for the dump
  *   to be written after the provided value. This helps avoid race conditions
- *   in tests, e.g. requesting a fresh login code but reading the old one.
+ *   in tests, e.g. requesting a fresh signin code but reading the old one.
  *   An alternative would be to introduce a fixed delay, which can slow down tests.
  */
 export const getDerivedPayloadFromMostRecentEmail = async (
@@ -74,8 +74,9 @@ export const getDerivedPayloadFromMostRecentEmail = async (
 
   if (typeof mostRecentEmailDump !== "object") {
     throw new Error(
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      `Expected most recent email to be an object, got ${mostRecentEmailDump}`,
+      `Expected most recent email to be an object, got ${JSON.stringify(
+        mostRecentEmailDump,
+      )}`,
     );
   }
 

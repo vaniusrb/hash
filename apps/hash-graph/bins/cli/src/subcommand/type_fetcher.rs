@@ -1,9 +1,8 @@
-use std::time::Duration;
+use core::time::Duration;
 
 use clap::Parser;
 use error_stack::{Result, ResultExt};
 use futures::{future, StreamExt};
-use graph::logging::{init_logger, LoggingArgs};
 use tarpc::{
     serde_transport::Transport,
     server::{self, Channel},
@@ -15,9 +14,12 @@ use type_fetcher::{
     fetcher_server::FetchServer,
 };
 
-use crate::error::{GraphError, HealthcheckError};
+use crate::{
+    error::{GraphError, HealthcheckError},
+    subcommand::wait_healthcheck,
+};
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 pub struct TypeFetcherAddress {
     /// The host the type fetcher RPC server is listening at.
     #[clap(
@@ -28,28 +30,37 @@ pub struct TypeFetcherAddress {
     pub type_fetcher_host: String,
 
     /// The port the type fetcher RPC server is listening at.
-    #[clap(long, default_value_t = 4444, env = "HASH_GRAPH_TYPE_FETCHER_PORT")]
+    #[clap(long, default_value_t = 4455, env = "HASH_GRAPH_TYPE_FETCHER_PORT")]
     pub type_fetcher_port: u16,
 }
 
 #[derive(Debug, Parser)]
 pub struct TypeFetcherArgs {
     #[clap(flatten)]
-    pub log_config: LoggingArgs,
-
-    #[clap(flatten)]
     pub address: TypeFetcherAddress,
 
     /// Runs the healthcheck for the type fetcher.
     #[clap(long, default_value_t = false)]
     pub healthcheck: bool,
+
+    /// Waits for the healthcheck to become healthy
+    #[clap(long, default_value_t = false, requires = "healthcheck")]
+    pub wait: bool,
+
+    /// Timeout for the wait flag in seconds
+    #[clap(long, requires = "wait")]
+    pub timeout: Option<u64>,
 }
 
 pub async fn type_fetcher(args: TypeFetcherArgs) -> Result<(), GraphError> {
-    let _log_guard = init_logger(&args.log_config);
-
     if args.healthcheck {
-        return healthcheck(args.address).await.change_context(GraphError);
+        return wait_healthcheck(
+            || healthcheck(args.address.clone()),
+            args.wait,
+            args.timeout.map(Duration::from_secs),
+        )
+        .await
+        .change_context(GraphError);
     }
 
     let mut listener = tarpc::serde_transport::tcp::listen(

@@ -1,25 +1,25 @@
-import { extractVersion } from "@blockprotocol/type-system";
-import { EntityType, VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { EntityTypeWithMetadata } from "@blockprotocol/graph";
+import { atLeastOne, extractVersion } from "@blockprotocol/type-system";
+import type { VersionedUrl } from "@blockprotocol/type-system/slim";
 import {
   EntityTypeIcon,
   LinkTypeIcon,
   OntologyChip,
 } from "@hashintel/design-system";
+import type { EntityTypeEditorFormData } from "@hashintel/type-editor";
 import {
-  EntityTypeEditorFormData,
   EntityTypeFormProvider,
-  getFormDataFromSchema,
-  getSchemaFromFormData,
+  getEntityTypeFromFormData,
+  getFormDataFromEntityType,
   useEntityTypeForm,
 } from "@hashintel/type-editor";
+import type { AccountId } from "@local/hash-graph-types/account";
+import type { BaseUrl } from "@local/hash-graph-types/ontology";
+import type { OwnedById } from "@local/hash-graph-types/web";
 import { generateLinkMapWithConsistentSelfReferences } from "@local/hash-isomorphic-utils/ontology-types";
-import {
-  AccountId,
-  BaseUrl,
-  linkEntityTypeUrl,
-  OwnedById,
-} from "@local/hash-subgraph";
-import { Box, Container, Theme, Typography } from "@mui/material";
+import { linkEntityTypeUrl } from "@local/hash-subgraph";
+import type { Theme } from "@mui/material";
+import { Box, Container, Typography } from "@mui/material";
 import { GlobalStyles } from "@mui/system";
 import { useRouter } from "next/router";
 import { NextSeo } from "next-seo";
@@ -32,6 +32,7 @@ import { useIsSpecialEntityType } from "../../shared/entity-types-context/hooks"
 import { generateLinkParameters } from "../../shared/generate-link-parameters";
 import { isTypeArchived } from "../../shared/is-archived";
 import { isHrefExternal } from "../../shared/is-href-external";
+import { useUserPermissionsOnEntityType } from "../../shared/use-user-permissions-on-entity-type";
 import { ArchiveMenuItem } from "../[shortname]/shared/archive-menu-item";
 import { ConvertTypeMenuItem } from "./entity-type-page/convert-type-menu-item";
 import { DefinitionTab } from "./entity-type-page/definition-tab";
@@ -48,10 +49,9 @@ import { TopContextBar } from "./top-context-bar";
 
 type EntityTypeProps = {
   accountId?: AccountId | null;
-  draftEntityType?: EntityType | null;
+  draftEntityType?: EntityTypeWithMetadata | null;
   entityTypeBaseUrl?: BaseUrl;
   requestedVersion: number | null;
-  readonly: boolean;
 };
 
 export const EntityTypePage = ({
@@ -59,7 +59,6 @@ export const EntityTypePage = ({
   draftEntityType,
   entityTypeBaseUrl,
   requestedVersion,
-  readonly,
 }: EntityTypeProps) => {
   const router = useRouter();
 
@@ -67,21 +66,14 @@ export const EntityTypePage = ({
     entityTypeBaseUrl,
   });
 
-  const formMethods = useEntityTypeForm<
-    /**
-     * @todo add icon support in `@hashintel/type-editor`
-     *
-     * @see https://linear.app/hash/issue/H-1439/move-icon-and-labelproperty-to-the-metadata-types-in-bp-so-that-it-can
-     */
-    EntityTypeEditorFormData & { icon?: string | null }
-  >({
+  const formMethods = useEntityTypeForm<EntityTypeEditorFormData>({
     defaultValues: { allOf: [], properties: [], links: [] },
   });
   const { handleSubmit: wrapHandleSubmit, reset, watch } = formMethods;
 
   useEffect(() => {
     if (draftEntityType) {
-      reset(getFormDataFromSchema(draftEntityType));
+      reset(getFormDataFromEntityType(draftEntityType));
     }
   }, [draftEntityType, reset]);
 
@@ -99,23 +91,19 @@ export const EntityTypePage = ({
     (fetchedEntityType) => {
       // Load the initial form data after the entity type has been fetched
       reset({
-        ...getFormDataFromSchema(fetchedEntityType.schema),
+        ...getFormDataFromEntityType(fetchedEntityType),
         icon: fetchedEntityType.metadata.icon,
       });
     },
   );
 
-  const entityType = remoteEntityType?.schema ?? draftEntityType;
+  const entityType = remoteEntityType ?? draftEntityType;
 
   const parentRefs = formMethods.watch("allOf");
   const { isLink, isFile, isImage } = useIsSpecialEntityType({
-    allOf: parentRefs.map((id) => ({ $ref: id })),
-    $id: entityType?.$id,
+    allOf: atLeastOne(parentRefs.map((id) => ({ $ref: id }))),
+    $id: entityType?.schema.$id,
   });
-
-  const isLatest = !requestedVersion || requestedVersion === latestVersion;
-
-  const isReadonly = readonly || !isLatest;
 
   const entityTypeAndPropertyTypes = useMemo(
     () =>
@@ -131,6 +119,10 @@ export const EntityTypePage = ({
   const isDirty = formMethods.formState.isDirty;
   const isDraft = !!draftEntityType;
 
+  const { userPermissions } = useUserPermissionsOnEntityType(
+    entityType?.schema.$id,
+  );
+
   const handleSubmit = wrapHandleSubmit(async (data) => {
     if (!isDirty && !isDraft) {
       /**
@@ -143,19 +135,24 @@ export const EntityTypePage = ({
       return;
     }
 
-    const entityTypeSchema = getSchemaFromFormData(data);
+    const { labelProperty, schema: entityTypeSchema } =
+      getEntityTypeFromFormData(data);
 
     if (draftEntityType) {
       await publishDraft(
         {
-          ...draftEntityType,
+          ...draftEntityType.schema,
           ...entityTypeSchema,
         },
-        { icon: data.icon },
+        {
+          icon: data.icon,
+          labelProperty:
+            (labelProperty as BaseUrl | null | undefined) ?? undefined,
+        },
       );
       reset(data);
     } else {
-      const currentEntityTypeId = entityType?.$id;
+      const currentEntityTypeId = entityType?.schema.$id;
       if (!currentEntityTypeId) {
         throw new Error(
           "Cannot update entity type without existing entityType schema",
@@ -178,6 +175,8 @@ export const EntityTypePage = ({
 
       const res = await updateEntityType(schemaWithConsistentSelfReferences, {
         icon: data.icon,
+        labelProperty:
+          (labelProperty as BaseUrl | null | undefined) ?? undefined,
       });
 
       if (!res.errors?.length && res.data) {
@@ -198,7 +197,7 @@ export const EntityTypePage = ({
   const titleWrapperRef = useRef<HTMLDivElement>(null);
 
   const onNavigateToType = (url: VersionedUrl) => {
-    if (entityType && url === entityType.$id) {
+    if (entityType && url === entityType.schema.$id) {
       titleWrapperRef.current?.scrollIntoView({ behavior: "smooth" });
     } else {
       setPreviewEntityTypeUrl(url);
@@ -225,17 +224,23 @@ export const EntityTypePage = ({
     }
   }
 
-  const currentVersion = draftEntityType ? 0 : extractVersion(entityType.$id);
+  if (!userPermissions) {
+    return null;
+  }
+
+  const currentVersion = draftEntityType
+    ? 0
+    : extractVersion(entityType.schema.$id);
 
   const convertToLinkType = wrapHandleSubmit(async (data) => {
-    const entityTypeSchema = getSchemaFromFormData(data);
+    const { icon, labelProperty, schema } = getEntityTypeFromFormData(data);
 
     const res = await updateEntityType(
       {
-        ...entityTypeSchema,
-        allOf: [{ $ref: linkEntityTypeUrl }],
+        ...schema,
+        allOf: [{ $ref: linkEntityTypeUrl }, ...(schema.allOf ?? [])],
       },
-      { icon: data.icon },
+      { icon, labelProperty: labelProperty as BaseUrl },
     );
 
     if (!res.errors?.length && res.data) {
@@ -249,11 +254,15 @@ export const EntityTypePage = ({
 
   const icon = watch("icon");
 
+  const isLatest = !requestedVersion || requestedVersion === latestVersion;
+
+  const isReadonly = !draftEntityType && (!userPermissions.edit || !isLatest);
+
   return (
     <>
-      <NextSeo title={`${entityType.title} | Entity Type`} />
+      <NextSeo title={`${entityType.schema.title} | Entity Type`} />
       <EntityTypeFormProvider {...formMethods}>
-        <EntityTypeContext.Provider value={entityType}>
+        <EntityTypeContext.Provider value={entityType.schema}>
           <EntityTypeEntitiesContext.Provider value={entityTypeEntitiesValue}>
             <Box display="contents" component="form" onSubmit={handleSubmit}>
               <TopContextBar
@@ -261,7 +270,7 @@ export const EntityTypePage = ({
                   ...(remoteEntityType && !isTypeArchived(remoteEntityType)
                     ? [
                         <ArchiveMenuItem
-                          key={entityType.$id}
+                          key={entityType.schema.$id}
                           item={remoteEntityType}
                         />,
                       ]
@@ -269,10 +278,10 @@ export const EntityTypePage = ({
                   ...(!isReadonly && !isDraft && !isLink
                     ? [
                         <ConvertTypeMenuItem
-                          key={entityType.$id}
+                          key={entityType.schema.$id}
                           convertToLinkType={convertToLinkType}
                           disabled={isDirty}
-                          typeTitle={entityType.title}
+                          typeTitle={entityType.schema.title}
                         />,
                       ]
                     : []),
@@ -291,9 +300,9 @@ export const EntityTypePage = ({
                     id: "entity-types",
                   },
                   {
-                    title: entityType.title,
+                    title: entityType.schema.title,
                     href: "#",
-                    id: entityType.$id,
+                    id: entityType.schema.$id,
                     icon:
                       icon ??
                       (isLink ? (
@@ -330,7 +339,7 @@ export const EntityTypePage = ({
                           },
                         }
                   }
-                  key={entityType.$id} // reset edit bar state when the entity type changes
+                  key={entityType.schema.$id} // reset edit bar state when the entity type changes
                 />
               )}
 
@@ -348,20 +357,21 @@ export const EntityTypePage = ({
                     isDraft={isDraft}
                     ontologyChip={
                       <OntologyChip
-                        domain={new URL(entityType.$id).hostname}
-                        path={new URL(entityType.$id).pathname.replace(
+                        domain={new URL(entityType.schema.$id).hostname}
+                        path={new URL(entityType.schema.$id).pathname.replace(
                           /\d+$/,
                           currentVersion.toString(),
                         )}
                       />
                     }
-                    entityType={entityType}
+                    entityTypeSchema={entityType.schema}
                     isLink={isLink}
                     isReadonly={isReadonly}
                     latestVersion={latestVersion}
                   />
 
                   <EntityTypeTabs
+                    canCreateEntity={userPermissions.instantiate}
                     isDraft={isDraft}
                     isFile={isFile}
                     isImage={isImage}

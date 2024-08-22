@@ -1,4 +1,5 @@
-import { expect, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 import { getDerivedPayloadFromMostRecentEmail } from "./get-derived-payload-from-most-recent-email";
 
@@ -9,7 +10,7 @@ export const loginUsingUi = async ({
   page: Page;
   accountShortName: string;
 }): Promise<void> => {
-  await page.goto("/login");
+  await page.goto("/signin");
 
   // Enter account short name
   const accountShortNameInputSelector =
@@ -36,10 +37,10 @@ export const loginUsingUi = async ({
   await page.press(verificationCodeInputSelector, "Enter");
 
   // Wait for the redirect to the account page
-  await expect(page.locator("text=Welcome to HASH")).toBeVisible();
+  await expect(page.locator("text=Get support")).toBeVisible();
 
   // Wait for Sign in button to disappear
-  // TODO: Completely avoid rendering Sign up / Sign in after login
+  // TODO: Completely avoid rendering "Sign up" / "Sign in" after successful sign in
   await expect(page.locator('button:has-text("Sign in")')).not.toBeVisible();
   await expect(page.locator(`[data-testid="user-avatar"]`)).toBeVisible();
 };

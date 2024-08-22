@@ -1,9 +1,10 @@
+import type { MenuItemProps as BaseMenuItemProps } from "@hashintel/design-system";
 import {
   // eslint-disable-next-line no-restricted-imports
   MenuItem as BaseMenuItem,
-  MenuItemProps as BaseMenuItemProps,
 } from "@hashintel/design-system";
-import { forwardRef, FunctionComponent, ReactNode } from "react";
+import type { ReactNode } from "react";
+import { forwardRef } from "react";
 
 import { Link } from "./link";
 
@@ -12,7 +13,7 @@ export type MenuItemProps = {
   href?: string;
 } & BaseMenuItemProps;
 
-export const MenuItem: FunctionComponent<MenuItemProps> = forwardRef(
+export const MenuItem = forwardRef<HTMLLIElement, MenuItemProps>(
   ({ children, href, ...props }, ref) => {
     const Component = (
       <BaseMenuItem ref={ref} {...props}>

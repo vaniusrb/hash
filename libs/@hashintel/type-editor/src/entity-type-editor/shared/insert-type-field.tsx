@@ -1,19 +1,11 @@
 import { Box, useForkRef } from "@mui/material";
-import { bindTrigger, PopupState } from "material-ui-popup-state/hooks";
-import {
-  Dispatch,
-  Ref,
-  RefObject,
-  SetStateAction,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import type { PopupState } from "material-ui-popup-state/hooks";
+import { bindTrigger } from "material-ui-popup-state/hooks";
+import type { Dispatch, Ref, RefObject, SetStateAction } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
-import {
-  TypeSelector,
-  TypeSelectorType,
-} from "./insert-property-field/type-selector";
+import type { TypeSelectorType } from "./insert-property-field/type-selector";
+import { TypeSelector } from "./insert-property-field/type-selector";
 import { withHandler } from "./with-handler";
 
 export type InsertTypeFieldProps<T extends TypeSelectorType> = {
@@ -116,18 +108,20 @@ export const InsertTypeField = <T extends TypeSelectorType>({
             options={options}
             dropdownProps={{
               query: searchText,
-              createButtonProps: createModalPopupState
-                ? {
-                    ...withHandler(bindTrigger(createModalPopupState), () => {
-                      ourInputRef.current?.focus();
-                    }),
-                    onMouseDown: (evt) => {
-                      evt.preventDefault();
-                      evt.stopPropagation();
-                    },
-                  }
-                : null,
-              variant,
+              creationProps: {
+                createButtonProps: createModalPopupState
+                  ? {
+                      ...withHandler(bindTrigger(createModalPopupState), () => {
+                        ourInputRef.current?.focus();
+                      }),
+                      onMouseDown: (evt) => {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                      },
+                    }
+                  : null,
+                variant,
+              },
             }}
             variant={variant}
           />

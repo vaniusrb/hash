@@ -7,8 +7,8 @@ import {
   SITE_SOCIAL_COVER_IMAGE_URL,
 } from "../../../config";
 import { parseNameFromFileName } from "../../../util/client-mdx-util";
-import { Page } from "../../../util/mdx-util";
-import { BlogPost } from "../[...blog-slug].page";
+import type { Page } from "../../../util/mdx-util";
+import type { BlogPost } from "../[...blog-slug].page";
 import { blogAtomPath, blogRssPath } from "./feed-paths";
 
 export const generateFeeds = async (posts: Page<BlogPost>[]) => {
@@ -43,7 +43,7 @@ export const generateFeeds = async (posts: Page<BlogPost>[]) => {
       author: post.data.authors.map((author) => ({
         name: author.name,
       })),
-      date: new Date(post.data.date),
+      date: new Date(post.data.dateFirstPublished),
       image: `${FRONTEND_URL}/${post.data.postPhoto}`,
     });
   }

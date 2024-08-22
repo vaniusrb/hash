@@ -1,12 +1,10 @@
 use graph::subgraph::identifier::{DataTypeVertexId, EntityTypeVertexId, PropertyTypeVertexId};
 use graph_types::{
     knowledge::entity::Entity,
-    ontology::{
-        DataTypeWithMetadata, EntityTypeWithMetadata, OntologyTypeVersion, PropertyTypeWithMetadata,
-    },
+    ontology::{DataTypeWithMetadata, EntityTypeWithMetadata, PropertyTypeWithMetadata},
 };
 use serde::Serialize;
-use type_system::url::BaseUrl;
+use type_system::url::{BaseUrl, OntologyTypeVersion};
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, ToSchema)]
@@ -38,7 +36,7 @@ impl OntologyTypeVertexId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(tag = "kind", content = "inner")]
 #[serde(rename_all = "camelCase")]
 #[expect(clippy::enum_variant_names)]
@@ -69,7 +67,7 @@ impl From<EntityTypeWithMetadata> for OntologyVertex {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, PartialEq, Serialize, ToSchema)]
 #[serde(tag = "kind", content = "inner")]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum KnowledgeGraphVertex {
@@ -77,7 +75,7 @@ pub(crate) enum KnowledgeGraphVertex {
     Entity(Entity),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]
 #[expect(dead_code, reason = "This is used in the generated OpenAPI spec")]

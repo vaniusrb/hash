@@ -1,5 +1,4 @@
-import { DataType } from "@blockprotocol/graph";
-import { VersionedUrl } from "@blockprotocol/type-system/slim";
+import type { DataType, VersionedUrl } from "@blockprotocol/type-system/slim";
 import {
   faList,
   faListCheck,
@@ -11,6 +10,9 @@ import {
   faAtRegular,
   faBracketsCurly,
   faBracketsSquare,
+  faCalendarClockRegular,
+  faCalendarRegular,
+  faClockRegular,
   faCube,
   faCubes,
   faEmptySet,
@@ -21,13 +23,8 @@ import {
   faText,
 } from "@hashintel/design-system";
 import { theme } from "@hashintel/design-system/theme";
-import {
-  createContext,
-  PropsWithChildren,
-  useCallback,
-  useContext,
-  useMemo,
-} from "react";
+import type { PropsWithChildren } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
 const chipColors = {
   blue: {
@@ -65,6 +62,18 @@ const expectedValuesDisplayMap = {
   },
   identifier: {
     icon: faInputPipeRegular,
+    colors: chipColors.blue,
+  },
+  time: {
+    icon: faClockRegular,
+    colors: chipColors.blue,
+  },
+  date: {
+    icon: faCalendarRegular,
+    colors: chipColors.blue,
+  },
+  datetime: {
+    icon: faCalendarClockRegular,
     colors: chipColors.blue,
   },
   number: {
@@ -220,13 +229,23 @@ export const DataTypesOptionsContextProvider = ({
           };
         }
 
-        const displayType = measurementTypeTitles.includes(dataType.title)
-          ? "measurement"
-          : identifierTypeTitles.includes(dataType.title)
-            ? "identifier"
-            : dataType.title === "Email"
-              ? "email"
-              : (dataType.type as keyof typeof expectedValuesDisplayMap);
+        let displayType =
+          dataType.type as keyof typeof expectedValuesDisplayMap;
+        if (measurementTypeTitles.includes(dataType.title)) {
+          displayType = "measurement";
+        } else if (identifierTypeTitles.includes(dataType.title)) {
+          displayType = "identifier";
+        } else if ("format" in dataType) {
+          if (dataType.format === "date-time") {
+            displayType = "datetime";
+          } else if (dataType.format === "date") {
+            displayType = "date";
+          } else if (dataType.format === "time") {
+            displayType = "time";
+          } else if (dataType.format === "email") {
+            displayType = "email";
+          }
+        }
 
         return {
           title: dataType.title,

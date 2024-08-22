@@ -1,26 +1,29 @@
-import { EntityPropertyValue } from "@blockprotocol/graph";
-import { simplifyProperties } from "@local/hash-isomorphic-utils/simplify-properties";
-import {
-  Entity,
-  EntityRootType,
-  EntityTypeWithMetadata,
-  extractEntityUuidFromEntityId,
-  Subgraph,
-} from "@local/hash-subgraph";
+import type { Entity } from "@local/hash-graph-sdk/entity";
+import type { EntityMetadata, Property } from "@local/hash-graph-types/entity";
+import type { EntityTypeWithMetadata } from "@local/hash-graph-types/ontology";
+import type { EntityRootType, Subgraph } from "@local/hash-subgraph";
+import { extractEntityUuidFromEntityId } from "@local/hash-subgraph";
 import {
   getEntityTypeAndParentsById,
   getRoots,
 } from "@local/hash-subgraph/stdlib";
 
+import { simplifyProperties } from "./simplify-properties.js";
+
 const getLabelPropertyValue = (
-  entityToLabel: Entity,
+  entityToLabel: {
+    properties: Entity["properties"];
+    metadata: Pick<EntityMetadata, "recordId" | "entityTypeId">;
+  },
   entityType: EntityTypeWithMetadata,
 ) => {
   if (entityType.metadata.labelProperty) {
     const label = entityToLabel.properties[entityType.metadata.labelProperty];
 
     if (label) {
-      return label.toString();
+      return label && typeof label === "object"
+        ? JSON.stringify(label)
+        : label.toString();
     }
   }
 };
@@ -30,7 +33,10 @@ const getFallbackLabel = ({
   entity,
 }: {
   entityType?: EntityTypeWithMetadata;
-  entity: Entity;
+  entity: {
+    properties: Entity["properties"];
+    metadata: Pick<EntityMetadata, "recordId" | "entityTypeId">;
+  };
 }) => {
   // fallback to the entity type and a few characters of the entityUuid
   const entityId = entity.metadata.recordId.entityId;
@@ -43,19 +49,45 @@ const getFallbackLabel = ({
   )}`;
 };
 
+export function generateEntityLabel(
+  entitySubgraph: Subgraph<EntityRootType>,
+  entity?: {
+    properties: Entity["properties"];
+    metadata: Pick<EntityMetadata, "recordId" | "entityTypeId">;
+  },
+): string;
+export function generateEntityLabel(
+  entitySubgraph: Subgraph | null,
+  entity: {
+    properties: Entity["properties"];
+    metadata: Pick<EntityMetadata, "recordId" | "entityTypeId">;
+  },
+): string;
 /**
  * Generate a display label for an entity
  * Prefers the BP-specified labelProperty if it exists.
  * @see https://blockprotocol.org/docs/spec/graph-service-specification#json-schema-extensions
+ *
+ * If 'entity' is not provided, the Subgraph must be entity-rooted, and the first root is taken as the entity.
+ * Otherwise, the subgraph need only contain the types for the entity.
  */
-export const generateEntityLabel = (
-  entitySubgraph: Subgraph<EntityRootType> | null,
-  entity?: Entity,
-): string => {
+export function generateEntityLabel(
+  entitySubgraph: Subgraph | null,
+  entity?: {
+    properties: Entity["properties"];
+    metadata: Pick<EntityMetadata, "recordId" | "entityTypeId">;
+  },
+): string {
   if (!entitySubgraph && !entity) {
     throw new Error(`One of entitySubgraph or entity must be provided`);
   }
-  const entityToLabel: Entity = entity ?? getRoots(entitySubgraph!)[0]!;
+  const entityToLabel = entity ?? getRoots(entitySubgraph!)[0]!;
+
+  if (!("properties" in entityToLabel)) {
+    throw new Error(
+      `Either one of 'entity' or an entity rooted subgraph must be provided`,
+    );
+  }
 
   let entityType: EntityTypeWithMetadata | undefined;
   if (entitySubgraph) {
@@ -92,11 +124,10 @@ export const generateEntityLabel = (
       }
 
       entityTypesToCheck.push(
-        ...(entityTypeAndAncestors ?? []).filter(
-          (type) =>
-            typeToCheck.schema.allOf?.find(
-              ({ $ref }) => $ref === type.schema.$id,
-            ),
+        ...(entityTypeAndAncestors ?? []).filter((type) =>
+          typeToCheck.schema.allOf?.find(
+            ({ $ref }) => $ref === type.schema.$id,
+          ),
         ),
       );
     }
@@ -104,7 +135,7 @@ export const generateEntityLabel = (
 
   const simplifiedProperties = simplifyProperties(
     entityToLabel.properties,
-  ) as Record<string, EntityPropertyValue>;
+  ) as Record<string, Property>;
 
   // fallback to some likely display name properties
   const options = [
@@ -123,7 +154,7 @@ export const generateEntityLabel = (
       simplifiedProperties[option] &&
       typeof simplifiedProperties[option] === "string"
     ) {
-      return simplifiedProperties[option] as string;
+      return simplifiedProperties[option];
     }
   }
 
@@ -151,4 +182,4 @@ export const generateEntityLabel = (
   }
 
   return getFallbackLabel({ entityType, entity: entityToLabel });
-};
+}
