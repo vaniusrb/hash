@@ -5,6 +5,8 @@
 ##  - .dockerignore
 #########################
 
+**/.lh
+
 # Logs
 **/logs
 **/*.log
