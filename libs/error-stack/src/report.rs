@@ -14,6 +14,8 @@ use std::process::ExitCode;
 #[cfg(feature = "std")]
 use std::sync::Mutex;
 
+#[cfg(feature = "serde")]
+use serde::{de::DeserializeOwned, Serialize};
 #[cfg(feature = "spantrace")]
 use tracing_error::{SpanTrace, SpanTraceStatus};
 
@@ -693,10 +695,69 @@ impl<C: PartialEq> PartialEq for Report<C> {
     }
 }
 
+//#[cfg(feature = "serde")]
+//use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
 #[cfg(feature = "std")]
 #[derive(Clone)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CloneReport<C> {
     inner: Arc<Mutex<Report<C>>>,
+}
+
+#[cfg(feature = "serde")]
+impl<C> CloneReport<C>
+where
+    C: Clone + Context + Serialize + DeserializeOwned,
+{
+    pub fn inner(&self) -> &Mutex<Report<C>> {
+        &self.inner
+    }
+}
+
+impl<C> From<C> for CloneReport<C>
+where
+    C: Context,
+{
+    #[track_caller]
+    #[inline]
+    fn from(context: C) -> Self {
+        Self::from(Report::new(context))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<C> serde::Serialize for CloneReport<C>
+where
+    C: Clone + Context + serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let report = self
+            .inner
+            .lock()
+            .map_err(|_| serde::ser::Error::custom("mutex lock failed"))?;
+        report.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, C> serde::Deserialize<'de> for CloneReport<C>
+where
+    C: Clone + Context + serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let inner = C::deserialize(deserializer)?;
+        let report = Report::new(inner);
+        Ok(Self {
+            inner: Arc::new(Mutex::new(report)),
+        })
+    }
 }
 
 #[cfg(feature = "std")]
